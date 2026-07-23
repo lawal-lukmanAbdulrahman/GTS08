@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-page: #F6F8F6;
+    --color-card: #FFFFFF;
+    --color-card-alt: #FBFDFB;
+    --color-line: #E3E9E4;
+    --color-txt: #1A211B;
+    --color-txt-2: #5C6A5E;
+    --color-txt-3: #8A968C;
+    --color-mint: #EAF5EE;
+    --color-green-soft: #DCEFE3;
+    --color-ink: #20261F;
+    --color-hero-from: #F0F7F2;
+    --color-hero-to: #F6F8F6;
+    --color-chrome-dot-1: #E9B0A8;
+    --color-chrome-dot-2: #EFD9A7;
+    --color-chrome-dot-3: #B9DDC4;
+    --color-green: #2E9E5B;
+    --color-green-hover: #23824A;
+    --color-red: #D75A4A;
+    --color-amber: #E8A23D;
+    --color-bar-walkin: #CFE7D7;
+    --color-badge-out-bg: #FBEEDC;
+    --color-badge-out-text: #B0721F;
+    --color-badge-done-bg: #EAECEA;
+    --color-badge-done-text: #5C6A5E;
+  }
+
+  .dark {
+    --color-page: #111614;
+    --color-card: #1A201B;
+    --color-card-alt: #1E2520;
+    --color-line: #2A312A;
+    --color-txt: #E8EDE9;
+    --color-txt-2: #A3B0A5;
+    --color-txt-3: #6B7A6E;
+    --color-mint: #1A2A1F;
+    --color-green-soft: #1E3328;
+    --color-ink: #0D110E;
+    --color-hero-from: #141A16;
+    --color-hero-to: #111614;
+    --color-chrome-dot-1: #6B3F39;
+    --color-chrome-dot-2: #6B5C3A;
+    --color-chrome-dot-3: #3A6B4A;
+    --color-green: #2E9E5B;
+    --color-green-hover: #23824A;
+    --color-red: #D75A4A;
+    --color-amber: #E8A23D;
+    --color-bar-walkin: #1E3328;
+    --color-badge-out-bg: #3A2E1A;
+    --color-badge-out-text: #D4A44A;
+    --color-badge-done-bg: #252825;
+    --color-badge-done-text: #A3B0A5;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    * {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+
+  body {
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  :focus-visible {
+    outline: 2px solid #2e9e5b;
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+}

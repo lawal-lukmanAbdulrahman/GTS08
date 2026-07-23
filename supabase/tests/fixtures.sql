@@ -1,0 +1,2 @@
+-- Shared test fixtures for RLS tests
+-- Create test users, products, orders here

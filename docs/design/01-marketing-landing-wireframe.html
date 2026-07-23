@@ -1,0 +1,546 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GTS — Your entire store. One system.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   GTS MARKETING LANDING — DESIGN TOKENS
+   Palette:  green   #2E9E5B (primary) / #23824A (hover)
+             ink     #20261F (dark cards, footer)
+             mint    #EAF5EE (tint) / page #F6F8F6
+             text    #1A211B primary / #5C6A5E secondary
+             accent  #E2622B (annual tag only — GTS orange nod)
+   Type:     Bricolage Grotesque (display) / DM Sans (body)
+             IBM Plex Mono (₦ figures, order numbers, SKUs)
+   ============================================================ */
+:root{
+  --green:#2E9E5B; --green-h:#23824A; --green-soft:#DCEFE3;
+  --ink:#20261F; --ink-2:#2A312A;
+  --mint:#EAF5EE; --page:#F6F8F6; --card:#FFFFFF;
+  --txt:#1A211B; --txt-2:#5C6A5E; --txt-3:#8A968C;
+  --line:#E3E9E4; --amber:#E8A23D; --orange:#E2622B; --red:#D75A4A;
+  --r-lg:22px; --r-md:14px; --r-sm:9px;
+  --disp:"Bricolage Grotesque",system-ui,sans-serif;
+  --body:"DM Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  --shadow:0 18px 50px -18px rgba(32,38,31,.22);
+  --shadow-sm:0 6px 20px -8px rgba(32,38,31,.14);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{font-family:var(--body);color:var(--txt);background:var(--page);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:0 28px}
+h1,h2,h3{font-family:var(--disp);line-height:1.12;letter-spacing:-.02em}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--green);outline-offset:3px;border-radius:4px}
+.mono{font-family:var(--mono)}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--txt-3)}
+.btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--body);font-weight:600;font-size:15px;padding:13px 24px;border-radius:999px;border:1px solid transparent;cursor:pointer;transition:transform .15s,background .15s,border-color .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn-green{background:var(--green);color:#fff}.btn-green:hover{background:var(--green-h)}
+.btn-ink{background:var(--ink);color:#fff}.btn-ink:hover{background:#000}
+.btn-ghost{background:#fff;color:var(--txt);border-color:var(--line)}.btn-ghost:hover{border-color:var(--txt-3)}
+.btn-outline-w{background:transparent;color:#fff;border-color:rgba(255,255,255,.35)}.btn-outline-w:hover{border-color:#fff}
+.pill{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:6px 14px;border-radius:999px}
+
+/* ---------- NAV ---------- */
+nav{position:sticky;top:0;z-index:50;background:rgba(246,248,246,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.nav-in{display:flex;align-items:center;justify-content:space-between;height:68px}
+.logo{display:flex;align-items:center;gap:10px;font-family:var(--disp);font-weight:800;font-size:21px;letter-spacing:-.02em}
+.logo-mark{width:32px;height:32px;border-radius:9px;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:800}
+.logo-mark span{color:var(--green)}
+.nav-links{display:flex;gap:30px;font-size:15px;font-weight:500;color:var(--txt-2)}
+.nav-links a:hover{color:var(--txt)}
+.nav-cta{display:flex;gap:10px;align-items:center}
+.nav-cta .btn{padding:10px 20px;font-size:14px}
+@media(max-width:820px){.nav-links{display:none}}
+
+/* ---------- HERO ---------- */
+.hero{position:relative;padding:78px 0 0;text-align:center;overflow:hidden;
+  background:linear-gradient(180deg,#F0F7F2 0%,var(--page) 62%)}
+.hero::before{content:"";position:absolute;inset:-40% -20% auto;height:120%;
+  background:radial-gradient(48% 42% at 50% 18%,rgba(46,158,91,.14),transparent 70%);pointer-events:none}
+.hero .wrap{position:relative}
+.hero .pill{background:#fff;border:1px solid var(--line);color:var(--txt-2)}
+.hero .pill b{background:var(--green);color:#fff;font-size:11px;padding:3px 9px;border-radius:999px}
+.hero h1{font-size:clamp(38px,5.4vw,60px);font-weight:800;margin:22px auto 18px;max-width:760px}
+.hero h1 em{font-style:normal;color:var(--green)}
+.hero p.lede{max-width:560px;margin:0 auto 30px;color:var(--txt-2);font-size:17px}
+.hero-ctas{display:flex;gap:12px;justify-content:center;margin-bottom:64px}
+
+/* ---------- DASHBOARD MOCKUP ---------- */
+.shot{max-width:940px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:var(--r-lg) var(--r-lg) 0 0;box-shadow:var(--shadow);overflow:hidden;text-align:left}
+.chrome{display:flex;gap:6px;padding:12px 16px;border-bottom:1px solid var(--line);background:#FBFDFB}
+.chrome i{width:10px;height:10px;border-radius:50%;background:var(--line)}
+.chrome i:first-child{background:#E9B0A8}.chrome i:nth-child(2){background:#EFD9A7}.chrome i:nth-child(3){background:#B9DDC4}
+.dash{display:grid;grid-template-columns:170px 1fr;min-height:430px}
+.side{background:#FBFDFB;border-right:1px solid var(--line);padding:16px 12px;font-size:11.5px}
+.side .logo{font-size:14px;gap:7px;margin:2px 6px 18px}
+.side .logo-mark{width:22px;height:22px;font-size:9px;border-radius:6px}
+.snav{display:flex;flex-direction:column;gap:2px}
+.snav a{padding:8px 10px;border-radius:8px;color:var(--txt-2);font-weight:500}
+.snav a.on{background:var(--green-soft);color:var(--green-h);font-weight:700}
+.main{padding:16px 18px}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.topbar h3{font-size:15px}
+.search{font-size:10.5px;color:var(--txt-3);background:var(--page);border:1px solid var(--line);border-radius:999px;padding:6px 40px 6px 12px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:var(--r-md);padding:11px 12px}
+.kpi .l{font-size:10px;color:var(--txt-2);font-weight:600;margin-bottom:5px;display:flex;justify-content:space-between}
+.kpi .v{font-family:var(--mono);font-size:14.5px;font-weight:600;letter-spacing:-.02em}
+.kpi .d{font-size:9.5px;font-weight:700;margin-top:4px}
+.up{color:var(--green)}.down{color:var(--red)}.warn .v{color:var(--amber)}
+.panes{display:grid;grid-template-columns:1.5fr 1fr;gap:10px}
+.pane{background:#fff;border:1px solid var(--line);border-radius:var(--r-md);padding:12px}
+.pane .l{font-size:11px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.legend{display:flex;gap:10px;font-size:9px;color:var(--txt-2)}
+.legend i{width:8px;height:8px;border-radius:3px;display:inline-block;margin-right:4px;vertical-align:-1px}
+.bars{display:flex;align-items:flex-end;gap:7px;height:120px;padding-top:6px}
+.bg{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:3px;align-items:center}
+.bg b{width:100%;max-width:16px;border-radius:4px 4px 2px 2px;background:var(--green)}
+.bg u{width:100%;max-width:16px;border-radius:2px;background:#CFE7D7;text-decoration:none}
+.bg s{font-size:8px;color:var(--txt-3);text-decoration:none;margin-top:4px}
+.donut{width:96px;height:96px;border-radius:50%;margin:6px auto 10px;
+  background:conic-gradient(var(--green) 0 68%, #CFE7D7 68% 100%);position:relative}
+.donut::after{content:"68%";position:absolute;inset:18px;background:#fff;border-radius:50%;display:grid;place-items:center;font-family:var(--mono);font-size:13px;font-weight:600}
+.split{display:flex;justify-content:space-around;font-size:9.5px;color:var(--txt-2)}
+.split b{display:block;font-family:var(--mono);font-size:11px;color:var(--txt)}
+.orders{margin-top:10px}
+.orow{display:grid;grid-template-columns:1.25fr 1.4fr .9fr .8fr;gap:8px;align-items:center;font-size:10px;padding:7px 4px;border-top:1px solid var(--line)}
+.orow.head{font-weight:700;color:var(--txt-3);border-top:none;font-size:9px;text-transform:uppercase;letter-spacing:.06em}
+.status{font-size:8.5px;font-weight:700;padding:3px 8px;border-radius:999px;justify-self:start}
+.st-paid{background:var(--green-soft);color:var(--green-h)}
+.st-out{background:#FBEEDC;color:#B0721F}
+.st-done{background:#EAECEA;color:var(--txt-2)}
+@media(max-width:820px){.dash{grid-template-columns:1fr}.side{display:none}.kpis{grid-template-columns:repeat(2,1fr)}.panes{grid-template-columns:1fr}}
+
+/* ---------- TRUSTED ---------- */
+.trusted{padding:44px 0 10px;text-align:center}
+.trusted p{font-size:13px;color:var(--txt-3);margin-bottom:20px}
+.brands{display:flex;justify-content:center;gap:44px;flex-wrap:wrap;filter:grayscale(1);opacity:.55}
+.brands span{font-family:var(--disp);font-weight:700;font-size:17px}
+
+/* ---------- STATS ---------- */
+.stats{padding:64px 0}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:var(--r-md);padding:26px 24px;box-shadow:var(--shadow-sm)}
+.stat b{font-family:var(--disp);font-size:34px;font-weight:800;letter-spacing:-.03em;display:block}
+.stat b em{font-style:normal;color:var(--green)}
+.stat span{font-size:13.5px;color:var(--txt-2)}
+@media(max-width:820px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
+
+/* ---------- FEATURE ROWS ---------- */
+.section{padding:74px 0}
+.sec-head{max-width:620px;margin-bottom:46px}
+.sec-head.center{margin:0 auto 46px;text-align:center}
+.sec-head h2{font-size:clamp(28px,3.6vw,40px);font-weight:800;margin:12px 0 14px}
+.sec-head p{color:var(--txt-2)}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
+.fcard{background:var(--mint);border-radius:var(--r-lg);padding:34px;position:relative}
+.mini{background:#fff;border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-sm);padding:16px}
+.mini .l{font-size:12px;font-weight:700;margin-bottom:10px}
+.tilt{transform:rotate(-2.5deg)}
+.float{position:absolute;background:#fff;border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);padding:12px 14px;font-size:12px}
+.float b{display:block;font-size:12.5px}
+.float .mono{font-size:11px}
+.flist{display:flex;flex-direction:column}
+.fitem{padding:22px 0 22px 26px;border-left:2px solid var(--line);position:relative}
+.fitem.on{border-left-color:var(--green)}
+.fitem h3{font-size:19px;margin-bottom:8px}
+.fitem p{font-size:14.5px;color:var(--txt-2);max-width:400px}
+@media(max-width:820px){.frow{grid-template-columns:1fr;gap:34px}}
+
+/* ---------- DARK SHOWCASE ---------- */
+.showcase{background:var(--ink);color:#fff;border-radius:28px;padding:58px 54px;display:grid;grid-template-columns:1.05fr 1fr;gap:50px;align-items:center;overflow:hidden;position:relative}
+.showcase::after{content:"";position:absolute;right:-15%;top:-30%;width:60%;height:160%;background:radial-gradient(closest-side,rgba(46,158,91,.28),transparent)}
+.showcase h2{font-size:clamp(26px,3.2vw,36px);font-weight:800;margin:12px 0 16px}
+.showcase p{color:#B9C4BA;font-size:15.5px;max-width:440px}
+.showcase .eyebrow{color:#7BAF8C}
+.check{display:flex;flex-direction:column;gap:12px;margin-top:24px;font-size:14.5px}
+.check span{display:flex;gap:10px;align-items:center}
+.check i{width:18px;height:18px;border-radius:50%;background:var(--green);display:inline-grid;place-items:center;font-style:normal;font-size:10px;font-weight:800}
+.pos-mock{position:relative;z-index:1;background:#fff;color:var(--txt);border-radius:var(--r-lg);box-shadow:var(--shadow);padding:16px;font-size:11px}
+.pos-mock .l{font-size:12px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between}
+.pos-mock .l span{color:var(--txt-3);font-weight:500}
+.prow{display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-top:1px solid var(--line)}
+.prow small{color:var(--txt-3);display:block;font-size:9.5px}
+.pos-total{display:flex;justify-content:space-between;font-weight:700;padding:12px 2px 4px;border-top:2px solid var(--ink);margin-top:4px}
+.pos-btn{margin-top:12px;background:var(--green);color:#fff;text-align:center;font-weight:700;font-size:12px;border-radius:10px;padding:11px}
+@media(max-width:820px){.showcase{grid-template-columns:1fr;padding:40px 26px}}
+
+/* ---------- FEATURE GRID ---------- */
+.grid6{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.g6{background:#fff;border:1px solid var(--line);border-radius:var(--r-md);padding:26px 24px;transition:transform .18s,box-shadow .18s}
+.g6:hover{transform:translateY(-3px);box-shadow:var(--shadow-sm)}
+.g6 .ic{width:40px;height:40px;border-radius:11px;background:var(--green-soft);color:var(--green-h);display:grid;place-items:center;font-size:17px;margin-bottom:16px}
+.g6 h3{font-size:17px;margin-bottom:8px}
+.g6 p{font-size:14px;color:var(--txt-2)}
+@media(max-width:820px){.grid6{grid-template-columns:1fr}}
+
+/* ---------- PRICING ---------- */
+.pricing{background:linear-gradient(180deg,var(--page),#EFF5F0)}
+.toggle{display:inline-flex;background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px;margin-top:22px}
+.toggle button{border:none;background:none;font-family:var(--body);font-weight:600;font-size:14px;padding:9px 22px;border-radius:999px;cursor:pointer;color:var(--txt-2);display:flex;gap:8px;align-items:center}
+.toggle button.on{background:var(--ink);color:#fff}
+.toggle .tag{font-size:11px;font-weight:700;color:var(--orange)}
+.toggle button.on .tag{color:#F5A97C}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:44px;align-items:stretch}
+.plan{background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);padding:30px 28px;display:flex;flex-direction:column}
+.plan h3{font-size:21px;display:flex;align-items:center;gap:10px}
+.plan .pop{background:var(--green);color:#fff;font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:999px}
+.price{font-family:var(--disp);margin:16px 0 8px}
+.price b{font-size:38px;font-weight:800;letter-spacing:-.03em}
+.price small{font-family:var(--body);color:var(--txt-3);font-weight:500;font-size:14px}
+.plan .desc{font-size:13.5px;color:var(--txt-2);min-height:44px}
+.plan .btn{justify-content:center;margin:18px 0 22px}
+.feat{border-top:1px solid var(--line);padding-top:20px;display:flex;flex-direction:column;gap:11px;font-size:14px}
+.feat span{display:flex;gap:10px}
+.feat i{color:var(--green);font-style:normal;font-weight:800}
+.plan.dark{background:var(--ink);color:#fff;border-color:var(--ink);transform:scale(1.03);box-shadow:var(--shadow)}
+.plan.dark .desc{color:#B9C4BA}.plan.dark .price small{color:#8E9B90}
+.plan.dark .feat{border-top-color:#3A423A}
+@media(max-width:820px){.plans{grid-template-columns:1fr}.plan.dark{transform:none}}
+
+/* ---------- FAQ ---------- */
+.faq-grid{display:grid;grid-template-columns:1fr 1.35fr;gap:60px;align-items:start}
+.faq-left h2{font-size:clamp(28px,3.4vw,38px);font-weight:800;margin:12px 0 26px}
+.consult{background:var(--green);color:#fff;border-radius:var(--r-md);padding:24px;max-width:300px}
+.consult b{display:block;font-size:16px;margin-bottom:6px}
+.consult p{font-size:13.5px;color:#DFF2E6;margin-bottom:16px}
+.consult .btn{background:transparent;border-color:rgba(255,255,255,.5);color:#fff;font-size:13.5px;padding:10px 18px}
+details{border-bottom:1px solid var(--line)}
+summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px 2px;font-weight:600;font-size:16.5px}
+summary::-webkit-details-marker{display:none}
+summary i{font-style:normal;font-size:19px;color:var(--txt-3);transition:transform .2s}
+details[open] summary i{transform:rotate(45deg);color:var(--green)}
+details p{padding:0 40px 20px 2px;color:var(--txt-2);font-size:15px}
+@media(max-width:820px){.faq-grid{grid-template-columns:1fr;gap:34px}}
+
+/* ---------- CTA + FOOTER ---------- */
+.cta-band{background:var(--mint);border-radius:28px;text-align:center;padding:64px 30px}
+.cta-band h2{font-size:clamp(26px,3.4vw,38px);font-weight:800;margin-bottom:14px}
+.cta-band p{color:var(--txt-2);margin-bottom:28px}
+footer{background:var(--ink);color:#AEB9AF;margin-top:84px;position:relative;overflow:hidden}
+.foot-in{display:grid;grid-template-columns:1.6fr 1fr 1fr 1.4fr;gap:40px;padding:66px 0 40px;position:relative;z-index:1}
+footer h4{font-family:var(--body);color:#fff;font-size:14px;margin-bottom:16px}
+.flinks{display:flex;flex-direction:column;gap:10px;font-size:14px}
+.flinks a:hover{color:#fff}
+footer .logo{color:#fff}
+footer .about{font-size:14px;max-width:260px;margin-top:14px}
+.sub{display:flex;gap:8px;margin-top:6px}
+.sub input{flex:1;background:var(--ink-2);border:1px solid #3A423A;border-radius:999px;padding:11px 16px;color:#fff;font-family:var(--body);font-size:14px}
+.sub input::placeholder{color:#7E8A80}
+.sub .btn{padding:11px 20px;font-size:14px}
+.foot-base{border-top:1px solid #333B33;padding:22px 0 90px;font-size:13px;display:flex;justify-content:space-between;position:relative;z-index:1}
+.watermark{position:absolute;bottom:-9vw;left:50%;transform:translateX(-50%);font-family:var(--disp);font-weight:800;font-size:26vw;letter-spacing:-.04em;color:rgba(255,255,255,.045);line-height:1;pointer-events:none;user-select:none}
+@media(max-width:820px){.foot-in{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav><div class="wrap nav-in">
+  <a class="logo" href="#"><span class="logo-mark">G<span>.</span></span>GTS</a>
+  <div class="nav-links">
+    <a href="#product">Product</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
+  </div>
+  <div class="nav-cta">
+    <a class="btn btn-ghost" href="#">Log in</a>
+    <a class="btn btn-ink" href="#">Get started</a>
+  </div>
+</div></nav>
+
+<!-- HERO -->
+<header class="hero" id="product"><div class="wrap">
+  <span class="pill"><b>New</b> One system for your shop floor and your website</span>
+  <h1>Your entire store.<br><em>One system.</em></h1>
+  <p class="lede">GTS runs your online storefront, in-store POS, inventory, and analytics on a single shared backend — so a sale on the shop floor and a sale on your website never disagree.</p>
+  <div class="hero-ctas">
+    <a class="btn btn-green" href="#">Get started</a>
+    <a class="btn btn-ghost" href="#">Book a demo</a>
+  </div>
+
+  <!-- Admin dashboard mockup -->
+  <div class="shot">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="dash">
+      <aside class="side">
+        <div class="logo"><span class="logo-mark">G<span>.</span></span>GTS Admin</div>
+        <div class="snav">
+          <a class="on" href="#">▦ Dashboard</a><a href="#">▤ Orders</a><a href="#">◨ Products</a>
+          <a href="#">▥ Inventory</a><a href="#">◫ Customers</a><a href="#">⚙ Settings</a>
+        </div>
+      </aside>
+      <div class="main">
+        <div class="topbar"><h3>Welcome back, Adaeze</h3><span class="search">Search orders, products…</span></div>
+        <div class="kpis">
+          <div class="kpi"><div class="l">Total Revenue <span>7d</span></div><div class="v">₦4,920,500</div><div class="d up">▲ 12.5% vs last week</div></div>
+          <div class="kpi"><div class="l">Orders <span>7d</span></div><div class="v">138</div><div class="d up">▲ 8.1% · 96 online</div></div>
+          <div class="kpi"><div class="l">Walk-in Sales <span>7d</span></div><div class="v">₦1,310,000</div><div class="d up">▲ 4.2% · 42 sales</div></div>
+          <div class="kpi warn"><div class="l">Low Stock</div><div class="v">3 variants</div><div class="d down">Restock needed</div></div>
+        </div>
+        <div class="panes">
+          <div class="pane">
+            <div class="l">Sales — Online vs Walk-in <span class="legend"><span><i style="background:var(--green)"></i>Online</span><span><i style="background:#CFE7D7"></i>Walk-in</span></span></div>
+            <div class="bars">
+              <div class="bg"><b style="height:44%"></b><u style="height:18%"></u><s>Mon</s></div>
+              <div class="bg"><b style="height:58%"></b><u style="height:22%"></u><s>Tue</s></div>
+              <div class="bg"><b style="height:36%"></b><u style="height:30%"></u><s>Wed</s></div>
+              <div class="bg"><b style="height:70%"></b><u style="height:24%"></u><s>Thu</s></div>
+              <div class="bg"><b style="height:52%"></b><u style="height:40%"></u><s>Fri</s></div>
+              <div class="bg"><b style="height:86%"></b><u style="height:52%"></u><s>Sat</s></div>
+              <div class="bg"><b style="height:64%"></b><u style="height:34%"></u><s>Sun</s></div>
+            </div>
+          </div>
+          <div class="pane">
+            <div class="l">Channel Split</div>
+            <div class="donut"></div>
+            <div class="split"><span>Online<b>₦3.61M</b></span><span>Walk-in<b>₦1.31M</b></span></div>
+          </div>
+        </div>
+        <div class="pane orders">
+          <div class="l">Recent Orders</div>
+          <div class="orow head"><span>Order</span><span>Item</span><span>Total</span><span>Status</span></div>
+          <div class="orow"><span class="mono">GTS-202607-000142</span><span>Oxford Shirt — L / Black ×1</span><span class="mono">₦15,000</span><span class="status st-paid">Paid</span></div>
+          <div class="orow"><span class="mono">GTS-202607-000141</span><span>Chinos — 34 / Navy ×2</span><span class="mono">₦39,000</span><span class="status st-out">Out for delivery</span></div>
+          <div class="orow"><span class="mono">GTS-202607-000140</span><span>Kaftan Set — M / White ×1</span><span class="mono">₦28,500</span><span class="status st-done">Completed · POS</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></header>
+
+<!-- TRUSTED -->
+<section class="trusted"><div class="wrap">
+  <p>Built for retail brands selling in-store and online</p>
+  <div class="brands"><span>Adire&Co</span><span>ILÉ Studio</span><span>NorthLoom</span><span>Kola District</span><span>Bespoke.NG</span></div>
+</div></section>
+
+<!-- STATS -->
+<section class="stats"><div class="wrap stats-grid">
+  <div class="stat"><b>2 <em>→</em> 1</b><span>Sales channels, one shared inventory</span></div>
+  <div class="stat"><b><em>0</em></b><span>Oversells — stock is reserved the moment checkout starts</span></div>
+  <div class="stat"><b>&lt; 1s</b><span>Stock sync between shop floor and website</span></div>
+  <div class="stat"><b>24/7</b><span>Order tracking for every customer, no account needed</span></div>
+</div></section>
+
+<!-- FEATURE ROW 1 : Inventory -->
+<section class="section" id="features"><div class="wrap frow">
+  <div class="fcard">
+    <div class="mini tilt">
+      <div class="l">Inventory — Live</div>
+      <div class="orow head" style="grid-template-columns:1.6fr .7fr .9fr"><span>Variant</span><span>Avail.</span><span>Status</span></div>
+      <div class="orow" style="grid-template-columns:1.6fr .7fr .9fr"><span>Oxford Shirt · L/Black</span><span class="mono">23</span><span class="status st-paid">In stock</span></div>
+      <div class="orow" style="grid-template-columns:1.6fr .7fr .9fr"><span>Oxford Shirt · S/Black</span><span class="mono">3</span><span class="status st-out">Low stock</span></div>
+      <div class="orow" style="grid-template-columns:1.6fr .7fr .9fr"><span>Chinos · 32/Navy</span><span class="mono">0</span><span class="status st-done">Out of stock</span></div>
+    </div>
+    <div class="float" style="right:6px;bottom:-18px"><b>⚠ Low stock alert</b><span class="mono">GTS-OXF-S-BLK · 3 left</span></div>
+  </div>
+  <div class="flist">
+    <div class="fitem on"><h3>Real-time inventory</h3><p>Every sale — online or at the till — moves the same stock count instantly. Reservations hold items during checkout so two customers can never buy the last unit.</p></div>
+    <div class="fitem"><h3>Full audit trail</h3><p>Every restock, sale, void, and adjustment is logged with who did it and why. Nothing disappears quietly.</p></div>
+    <div class="fitem"><h3>Low-stock alerts</h3><p>Get notified per variant before you run out — set your own threshold for each product.</p></div>
+  </div>
+</div></section>
+
+<!-- DARK SHOWCASE : POS -->
+<section class="section"><div class="wrap showcase">
+  <div>
+    <span class="eyebrow">In-store POS</span>
+    <h2>A till your cashiers learn in five minutes.</h2>
+    <p>Search by name or SKU, build the cart, confirm cash or terminal payment, print the receipt. Same-day voids restore stock automatically — with a full audit log.</p>
+    <div class="check">
+      <span><i>✓</i> Works on any tablet — no special hardware</span>
+      <span><i>✓</i> Promo codes and audited manual discounts</span>
+      <span><i>✓</i> Every sale lands in the same analytics as online</span>
+    </div>
+  </div>
+  <div class="pos-mock">
+    <div class="l">Walk-in Sale <span>Cashier · Emeka</span></div>
+    <div class="prow"><span>Oxford Shirt<small>Size L · Black · ×1</small></span><span class="mono">₦15,000</span></div>
+    <div class="prow"><span>Kaftan Set<small>Size M · White · ×1</small></span><span class="mono">₦28,500</span></div>
+    <div class="prow"><span>Promo — GTS10<small>10% off</small></span><span class="mono" style="color:var(--green)">−₦4,350</span></div>
+    <div class="pos-total"><span>Total</span><span class="mono">₦39,150</span></div>
+    <div class="pos-btn">Confirm Payment — Card Terminal</div>
+  </div>
+</div></section>
+
+<!-- FEATURE ROW 2 : Storefront -->
+<section class="section"><div class="wrap frow">
+  <div class="flist">
+    <div class="fitem on"><h3>A storefront built to convert</h3><p>Guest checkout by default, Paystack payments (card, transfer, USSD), real scarcity signals only — no fake timers. Your customers buy in three taps.</p></div>
+    <div class="fitem"><h3>Order tracking, no login</h3><p>Every customer tracks their order with just the order number and email — from payment to delivered, with courier tracking when you add it.</p></div>
+    <div class="fitem"><h3>You run the homepage</h3><p>Hero banners, promos, and announcements are managed from the admin — no developer needed to launch a sale.</p></div>
+  </div>
+  <div class="fcard">
+    <div class="mini" style="max-width:320px;margin:0 auto">
+      <div class="l">gts.ng/track</div>
+      <p style="font-size:11px;color:var(--txt-2);margin-bottom:10px">Order <span class="mono">GTS-202607-000141</span></p>
+      <div class="orow" style="grid-template-columns:auto 1fr;border-top:none"><span class="status st-paid">✓</span><span>Order placed · Jul 15, 2:14 PM</span></div>
+      <div class="orow" style="grid-template-columns:auto 1fr"><span class="status st-paid">✓</span><span>Payment confirmed · Paystack</span></div>
+      <div class="orow" style="grid-template-columns:auto 1fr"><span class="status st-paid">✓</span><span>Processing · packed</span></div>
+      <div class="orow" style="grid-template-columns:auto 1fr"><span class="status st-out">●</span><span><b>Out for delivery</b> · GIG Logistics</span></div>
+      <div class="orow" style="grid-template-columns:auto 1fr"><span class="status st-done">○</span><span style="color:var(--txt-3)">Delivered</span></div>
+    </div>
+    <div class="float" style="left:-6px;top:20px"><b>Paystack</b><span style="color:var(--txt-2)">Payment verified ✓</span></div>
+  </div>
+</div></section>
+
+<!-- FEATURE GRID -->
+<section class="section"><div class="wrap">
+  <div class="sec-head center">
+    <span class="eyebrow">Everything included</span>
+    <h2>Everything your store runs on</h2>
+    <p>One login for you. One system of record for the whole business.</p>
+  </div>
+  <div class="grid6">
+    <div class="g6"><div class="ic">🛍</div><h3>Online storefront</h3><p>Fast, SEO-ready catalog with variants, search, reviews, and wishlists.</p></div>
+    <div class="g6"><div class="ic">🏪</div><h3>In-store POS</h3><p>Tablet-first till with SKU search, discounts, receipts, and same-day voids.</p></div>
+    <div class="g6"><div class="ic">▥</div><h3>Inventory</h3><p>One stock count for both channels, with reservations and a full movement log.</p></div>
+    <div class="g6"><div class="ic">%</div><h3>Promotions</h3><p>Promo codes with limits, caps, and email-capture offers that grow your list.</p></div>
+    <div class="g6"><div class="ic">◫</div><h3>Customers & staff</h3><p>Customer accounts and history; staff invited with exactly the access they need.</p></div>
+    <div class="g6"><div class="ic">✉</div><h3>Email campaigns</h3><p>Send offers to all customers, recent buyers, or subscribers — right from admin.</p></div>
+  </div>
+</div></section>
+
+<!-- PRICING -->
+<section class="section pricing" id="pricing"><div class="wrap">
+  <div class="sec-head center">
+    <span class="eyebrow">Pricing</span>
+    <h2>Plans for every store</h2>
+    <p>Pick the plan that fits where your business is today.</p>
+    <div class="toggle" role="group" aria-label="Billing period">
+      <button class="on" data-period="monthly">Monthly</button>
+      <button data-period="annual">Annual <span class="tag">−24%</span></button>
+    </div>
+  </div>
+  <div class="plans">
+    <div class="plan">
+      <h3>Basic</h3>
+      <div class="price"><b class="amt" data-m="₦24,500" data-a="₦18,600">₦24,500</b> <small>/month</small></div>
+      <p class="desc">For a single shop getting its first online storefront.</p>
+      <a class="btn btn-ghost" href="#">Get started</a>
+      <div class="feat">
+        <span><i>✓</i> Online storefront + catalog</span>
+        <span><i>✓</i> Paystack payments</span>
+        <span><i>✓</i> Core inventory tracking</span>
+        <span><i>✓</i> Order tracking page</span>
+        <span><i>✓</i> Email receipts</span>
+      </div>
+    </div>
+    <div class="plan dark">
+      <h3>Standard <span class="pop">Popular</span></h3>
+      <div class="price"><b class="amt" data-m="₦39,500" data-a="₦30,000">₦39,500</b> <small>/month</small></div>
+      <p class="desc">For stores selling in-store and online, every day.</p>
+      <a class="btn btn-green" href="#">Get started</a>
+      <div class="feat">
+        <span><i>✓</i> Everything in Basic</span>
+        <span><i>✓</i> In-store POS with voids</span>
+        <span><i>✓</i> Low-stock alerts + audit trail</span>
+        <span><i>✓</i> Promo codes & discounts</span>
+        <span><i>✓</i> Sales analytics by channel</span>
+      </div>
+    </div>
+    <div class="plan">
+      <h3>Premium</h3>
+      <div class="price"><b class="amt" data-m="₦79,000" data-a="₦60,000">₦79,000</b> <small>/month</small></div>
+      <p class="desc">For growing brands with a team and a mailing list.</p>
+      <a class="btn btn-ghost" href="#">Get started</a>
+      <div class="feat">
+        <span><i>✓</i> Everything in Standard</span>
+        <span><i>✓</i> Staff roles & permissions</span>
+        <span><i>✓</i> Email campaigns</span>
+        <span><i>✓</i> Support ticket inbox</span>
+        <span><i>✓</i> Priority support</span>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<!-- FAQ -->
+<section class="section" id="faq"><div class="wrap faq-grid">
+  <div class="faq-left">
+    <span class="eyebrow">FAQ</span>
+    <h2>Let's answer the questions store owners ask us</h2>
+    <div class="consult">
+      <b>Schedule a consultation</b>
+      <p>Get a personal walkthrough of GTS with your own products.</p>
+      <a class="btn" href="#">Book a demo →</a>
+    </div>
+  </div>
+  <div>
+    <details open>
+      <summary>Does GTS work for both my physical shop and my online store? <i>+</i></summary>
+      <p>Yes — that's the whole point. Your website and your in-store till share one inventory and one order list. A sale on either side updates stock everywhere instantly.</p>
+    </details>
+    <details>
+      <summary>What happens if someone buys online while my cashier sells the last unit? <i>+</i></summary>
+      <p>It can't happen. Online checkout reserves the stock the moment a customer starts paying, and in-store sales check live availability. If it's gone, it's gone — nobody gets charged for stock you don't have.</p>
+    </details>
+    <details>
+      <summary>Which payment methods do my customers get? <i>+</i></summary>
+      <p>Online payments run on Paystack — card, bank transfer, and USSD. In-store, your cashiers record cash or card-terminal payments directly at the till.</p>
+    </details>
+    <details>
+      <summary>Do my cashiers need special hardware? <i>+</i></summary>
+      <p>No. The POS runs in the browser on any tablet or laptop. Receipts print from the standard browser print dialog, and SKU search is barcode-scanner ready.</p>
+    </details>
+    <details>
+      <summary>Can I change my homepage and run promos without a developer? <i>+</i></summary>
+      <p>Yes. Hero banners, announcements, deals, and promo codes are all managed from your admin dashboard. Launch a sale in minutes, not tickets.</p>
+    </details>
+  </div>
+</div></section>
+
+<!-- CTA -->
+<section class="section"><div class="wrap">
+  <div class="cta-band">
+    <h2>Run your whole store from one place.</h2>
+    <p>Storefront, POS, inventory, and analytics — finally in agreement.</p>
+    <a class="btn btn-green" href="#">Get started</a>
+  </div>
+</div></section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap foot-in">
+    <div>
+      <a class="logo" href="#"><span class="logo-mark">G<span>.</span></span>GTS</a>
+      <p class="about">The retail operating system for stores that sell in-store and online — one inventory, one truth.</p>
+    </div>
+    <div><h4>Product</h4><div class="flinks"><a href="#product">Overview</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a></div></div>
+    <div><h4>Resources</h4><div class="flinks"><a href="#">Help center</a><a href="#">Tutorials</a><a href="#">Blog</a><a href="#">Contact</a></div></div>
+    <div>
+      <h4>Stay up to date</h4>
+      <div class="sub"><input type="email" placeholder="Enter your email" aria-label="Email address"><a class="btn btn-green" href="#">Subscribe</a></div>
+    </div>
+  </div>
+  <div class="wrap foot-base"><span>© 2026 GTS. All rights reserved.</span><span>Privacy · Terms</span></div>
+  <div class="watermark" aria-hidden="true">GTS</div>
+</footer>
+
+<script>
+// Pricing toggle — swaps monthly/annual amounts
+document.querySelectorAll('.toggle button').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('.toggle button').forEach(function(b){b.classList.remove('on')});
+    btn.classList.add('on');
+    var key = btn.dataset.period === 'annual' ? 'a' : 'm';
+    document.querySelectorAll('.amt').forEach(function(el){ el.textContent = el.dataset[key]; });
+  });
+});
+// Accordion — only one open at a time
+document.querySelectorAll('#faq details').forEach(function(d){
+  d.addEventListener('toggle', function(){
+    if(d.open) document.querySelectorAll('#faq details').forEach(function(o){ if(o!==d) o.open=false; });
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+-- GTS seed data
+-- All money values are in kobo (integer)
+-- Run with: supabase db reset

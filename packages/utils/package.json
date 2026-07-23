@@ -1,0 +1,16 @@
+{
+  "name": "@gts/utils",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./money": "./src/money.ts",
+    "./date": "./src/date.ts",
+    "./slug": "./src/slug.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

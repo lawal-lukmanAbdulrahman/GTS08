@@ -1,0 +1,38 @@
+{
+  "extends": "@gts/config/tsconfig.base",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./app/*"
+      ],
+      "@gts/database/*": [
+        "../../packages/database/src/*"
+      ],
+      "@gts/types": [
+        "../../packages/types/src"
+      ],
+      "@gts/utils/*": [
+        "../../packages/utils/src/*"
+      ],
+      "@gts/ui": [
+        "../../packages/ui/src"
+      ]
+    },
+    "allowJs": true,
+    "noEmit": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

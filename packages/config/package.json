@@ -1,0 +1,21 @@
+{
+  "name": "@gts/config",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    "./tsconfig.base": "./tsconfig.base.json",
+    "./eslint": "./eslint.js",
+    "./tailwind": "./tailwind.config.ts",
+    "./vitest": "./vitest.config.ts"
+  },
+  "devDependencies": {
+    "@next/eslint-plugin-next": "^15.1.0",
+    "eslint": "^9.0.0",
+    "typescript-eslint": "^8.0.0",
+    "tailwindcss": "^3.4.0",
+    "vitest": "^3.0.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "jsdom": "^25.0.0"
+  }
+}

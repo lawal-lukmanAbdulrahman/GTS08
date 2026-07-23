@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Turbo
+.turbo/
+
+# Next.js
+.next/
+out/
+
+# Build
+dist/
+build/
+
+# Coverage
+coverage/
+
+# Playwright
+playwright-report/
+test-results/
+
+# Supabase
+supabase/.temp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+.claude/
+CLAUDE.md/
