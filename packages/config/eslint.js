@@ -31,6 +31,7 @@ export function createConfig({ next = false } = {}) {
         "coverage/**",
         "*.config.js",
         "*.config.ts",
+        "next-env.d.ts",
       ],
     }
   );
