@@ -77,7 +77,7 @@ export default function LandingPage() {
       </section>
 
       <FeatureGrid />
-      <Pricing />
+      {process.env.NEXT_PUBLIC_SHOW_PRICING !== "false" && <Pricing />}
       <FAQ />
       <CTABand />
     </>
