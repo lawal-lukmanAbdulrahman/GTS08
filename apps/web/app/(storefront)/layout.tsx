@@ -148,6 +148,8 @@ function Footer() {
   );
 }
 
+import { Header } from "./_components/landing/header";
+
 export default function StorefrontLayout({
   children,
 }: {
@@ -155,12 +157,10 @@ export default function StorefrontLayout({
 }) {
   return (
     <ThemeProvider>
-      <Nav />
-      <ThemeToggle />
       <ErrorBoundary>
+        <Header />
         {children}
       </ErrorBoundary>
-      <Footer />
     </ThemeProvider>
   );
 }

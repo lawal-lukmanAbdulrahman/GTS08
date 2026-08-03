@@ -1,3 +1,38 @@
+@import url('https://fonts.cdnfonts.com/css/athelas');
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,300,400&display=swap');
+
+@font-face {
+  font-family: 'Athelas';
+  src: url('https://fonts.cdnfonts.com/s/15456/Athelas-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Athelas';
+  src: url('https://fonts.cdnfonts.com/s/15456/Athelas-Italic.woff') format('woff');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Athelas';
+  src: url('https://fonts.cdnfonts.com/s/15456/Athelas-Bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Moara';
+  src: local('Moara'), local('Moara Bold'), local('Moara-Bold'), local('Bricolage Grotesque'), local('Impact');
+  font-weight: 700 800 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -59,6 +94,16 @@
 
   html {
     scroll-behavior: smooth;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar,
+  *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -82,4 +127,93 @@
     outline-offset: 3px;
     border-radius: 4px;
   }
+}
+
+@keyframes continuousMarquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee-infinite {
+  display: flex;
+  width: max-content;
+  animation: continuousMarquee 22s linear infinite;
+}
+
+.animate-marquee-infinite:hover {
+  animation-play-state: paused;
+}
+
+@keyframes continuousMarqueeReverse {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+.animate-marquee-reverse {
+  display: flex;
+  width: max-content;
+  animation: continuousMarqueeReverse 22s linear infinite;
+}
+
+.animate-marquee-reverse:hover {
+  animation-play-state: paused;
+}
+
+/* Sleek Custom Scrollbar for Mega Menu Panels */
+.gts-scrollbar {
+  scrollbar-width: thin !important;
+  scrollbar-color: #D1D5DB transparent !important;
+}
+
+.gts-scrollbar::-webkit-scrollbar {
+  display: block !important;
+  width: 6px !important;
+  height: 6px !important;
+}
+
+.gts-scrollbar::-webkit-scrollbar-track {
+  background: transparent !important;
+  border-radius: 9999px !important;
+}
+
+.gts-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #D1D5DB !important;
+  border-radius: 9999px !important;
+}
+
+.gts-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #9CA3AF !important;
+}
+
+/* Product Detail Right Panel — visible thin scrollbar */
+.product-panel-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #c0bdb7 #F2F0EA;
+}
+
+.product-panel-scroll::-webkit-scrollbar {
+  display: block !important;
+  width: 5px !important;
+}
+
+.product-panel-scroll::-webkit-scrollbar-track {
+  background: #F2F0EA !important;
+  border-radius: 9999px !important;
+}
+
+.product-panel-scroll::-webkit-scrollbar-thumb {
+  background-color: #c0bdb7 !important;
+  border-radius: 9999px !important;
+}
+
+.product-panel-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #010101 !important;
 }

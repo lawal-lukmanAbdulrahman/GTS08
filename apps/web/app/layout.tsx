@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, DM_Sans, IBM_Plex_Mono } from "next/font/google";
+import { Bricolage_Grotesque, DM_Sans, IBM_Plex_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
 
 const display = Bricolage_Grotesque({
@@ -21,13 +21,20 @@ const mono = IBM_Plex_Mono({
   display: "swap",
 });
 
+const serif = Playfair_Display({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  variable: "--font-serif",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: {
-    default: "GTS — Your entire store. One system.",
-    template: "%s | GTS",
+    default: "Aura — Aura V1 Pro Vacuum",
+    template: "%s | Aura",
   },
   description:
-    "GTS gives your brand its own online storefront and in-store POS, running on a single shared backend — so a sale on the shop floor and a sale on your website never disagree.",
+    "The Aura V1 Pro vacuum combines whisper-quiet suction with intelligent surface detection. Experience effortless cleaning designed for modern living.",
 };
 
 export default function RootLayout({
@@ -38,7 +45,8 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${display.variable} ${body.variable} ${mono.variable}`}
+      suppressHydrationWarning
+      className={`${display.variable} ${body.variable} ${mono.variable} ${serif.variable}`}
     >
       <body className="font-body text-txt bg-page dark:bg-[#111614] dark:text-[#E8EDE9] transition-colors duration-300">{children}</body>
     </html>
