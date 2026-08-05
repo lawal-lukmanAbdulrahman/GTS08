@@ -4,68 +4,11 @@ import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { ProductCard } from "../ui/product-card";
 
-interface CrazyFindProduct {
-  id: string;
-  badge?: string;
-  title: string;
-  price: string;
-  originalPrice?: string;
-  rating: number;
-  reviews: string;
-  image: string;
-}
+import { REAL_PRODUCTS } from "../../_data/products";
 
-const CRAZY_FINDS: CrazyFindProduct[] = [
-  {
-    id: "cf-1",
-    badge: "HOT",
-    title: "Crispy Air Fryer Pro",
-    price: "₦85,000",
-    originalPrice: "₦120,000",
-    rating: 4.9,
-    reviews: "3.4k",
-    image: "/products/airfryer.png",
-  },
-  {
-    id: "cf-2",
-    badge: "20% OFF",
-    title: "Smart Four-Door Fridge",
-    price: "₦750,000",
-    originalPrice: "₦940,000",
-    rating: 4.8,
-    reviews: "1.1k",
-    image: "/products/four_fridge.png",
-  },
-  {
-    id: "cf-3",
-    title: "Breezy Linen Summer Shirt",
-    price: "₦28,000",
-    originalPrice: "₦45,000",
-    rating: 4.7,
-    reviews: "920",
-    image: "/products/linen.png",
-  },
-  {
-    id: "cf-4",
-    badge: "LIMITED",
-    title: "Spider-Man 2 PS5 Console",
-    price: "₦320,000",
-    originalPrice: "₦380,000",
-    rating: 5.0,
-    reviews: "2.7k",
-    image: "/products/spiderman_ps5.png",
-  },
-  {
-    id: "cf-5",
-    badge: "NEW",
-    title: "Google Pixel 10 Pro Phone",
-    price: "₦620,000",
-    originalPrice: "₦720,000",
-    rating: 4.9,
-    reviews: "1.8k",
-    image: "/products/pixel_10.png",
-  },
-];
+const CRAZY_FINDS = REAL_PRODUCTS.filter((p) =>
+  ["DEAL", "SALE", "HOT", "50% OFF", "LIMITED"].includes(p.badge || "")
+);
 
 export function CrazyFinds() {
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
@@ -108,7 +51,7 @@ export function CrazyFinds() {
         </div>
 
         <Link
-          href="/shop"
+          href="/search"
           className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
         >
           <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">
@@ -160,7 +103,7 @@ export function CrazyFinds() {
               image={product.image}
               isWishlisted={wishlisted[product.id]}
               onToggleWishlist={toggleWishlist}
-              className="w-[230px] sm:w-[250px] md:w-[270px] shrink-0"
+              className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0"
             />
           ))}
         </div>

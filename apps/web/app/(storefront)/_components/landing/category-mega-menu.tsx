@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { BRAND_REGISTRY } from "../../_data/products";
 
 export interface CategoryItem {
   id: string;
@@ -16,6 +17,36 @@ export interface CategoryItem {
   brands?: { name: string; href: string }[];
 }
 
+// ─── Category name → search category mapping ──────────────────────────────────
+// Each mega-menu category maps to one of the product `category` values.
+// The top-level click navigates to /search?category=X
+// Each subcategory item navigates to /search?category=X&q=Y (pre-fills both filter + search)
+const CAT = {
+  appliances: "Appliances",
+  phonesTablets: "Phones & Tablets",
+  electronics: "Electronics",
+  fashion: "Fashion",
+  gaming: "Gaming",
+  healthBeauty: "Health & Beauty",
+  homeOffice: "Home & Office",
+  supermarket: "Supermarket",
+  computing: "Computing",
+  baby: "Baby Products",
+} as const;
+
+function searchHref(category: string, q?: string) {
+  const base = `/search?category=${encodeURIComponent(category)}`;
+  return q ? `${base}&q=${encodeURIComponent(q)}` : base;
+}
+
+/** Brand link — pre-checks the brand sidebar filter + shows Brand: X chip */
+function brandHref(category: string | null, brand: string) {
+  if (category) {
+    return `/search?category=${encodeURIComponent(category)}&brand=${encodeURIComponent(brand)}`;
+  }
+  return `/search?brand=${encodeURIComponent(brand)}`;
+}
+
 export const MEGA_CATEGORIES: CategoryItem[] = [
   {
     id: "appliances",
@@ -25,56 +56,56 @@ export const MEGA_CATEGORIES: CategoryItem[] = [
       {
         title: "SMALL APPLIANCES",
         items: [
-          { label: "Blenders", href: "/categories/appliances/blenders" },
-          { label: "Deep Fryers", href: "/categories/appliances/deep-fryers" },
-          { label: "Juicers", href: "/categories/appliances/juicers" },
-          { label: "Air Fryers", href: "/categories/appliances/air-fryers" },
-          { label: "Rice Cookers", href: "/categories/appliances/rice-cookers" },
-          { label: "Toasters & Ovens", href: "/categories/appliances/toasters-ovens" },
-          { label: "Microwaves", href: "/categories/appliances/microwaves" },
-          { label: "Bundles", href: "/categories/appliances/bundles" },
-          { label: "Vacuum Cleaners", href: "/categories/appliances/vacuum-cleaners" },
-          { label: "Kettles", href: "/categories/appliances/kettles" },
-          { label: "Yam Pounders", href: "/categories/appliances/yam-pounders" },
-          { label: "Irons", href: "/categories/appliances/irons" },
-          { label: "Electric Cookware", href: "/categories/appliances/cookware" },
-          { label: "Electric Drink Mixers", href: "/categories/appliances/mixers" },
-          { label: "Food Processors", href: "/categories/appliances/food-processors" },
-          { label: "Coffee Makers", href: "/categories/appliances/coffee-makers" },
-          { label: "Electric Pressure Cookers", href: "/categories/appliances/pressure-cookers" },
+          { label: "Blenders", href: searchHref(CAT.appliances, "Blenders") },
+          { label: "Deep Fryers", href: searchHref(CAT.appliances, "Deep Fryers") },
+          { label: "Juicers", href: searchHref(CAT.appliances, "Juicers") },
+          { label: "Air Fryers", href: searchHref(CAT.appliances, "Air Fryers") },
+          { label: "Rice Cookers", href: searchHref(CAT.appliances, "Rice Cookers") },
+          { label: "Toasters & Ovens", href: searchHref(CAT.appliances, "Toasters & Ovens") },
+          { label: "Microwaves", href: searchHref(CAT.appliances, "Microwaves") },
+          { label: "Bundles", href: searchHref(CAT.appliances, "Bundles") },
+          { label: "Vacuum Cleaners", href: searchHref(CAT.appliances, "Vacuum Cleaners") },
+          { label: "Kettles", href: searchHref(CAT.appliances, "Kettles") },
+          { label: "Yam Pounders", href: searchHref(CAT.appliances, "Yam Pounders") },
+          { label: "Irons", href: searchHref(CAT.appliances, "Irons") },
+          { label: "Electric Cookware", href: searchHref(CAT.appliances, "Electric Cookware") },
+          { label: "Electric Drink Mixers", href: searchHref(CAT.appliances, "Electric Drink Mixers") },
+          { label: "Food Processors", href: searchHref(CAT.appliances, "Food Processors") },
+          { label: "Coffee Makers", href: searchHref(CAT.appliances, "Coffee Makers") },
+          { label: "Electric Pressure Cookers", href: searchHref(CAT.appliances, "Electric Pressure Cookers") },
         ],
       },
       {
         title: "LARGE APPLIANCES",
         items: [
-          { label: "Washing Machines", href: "/categories/appliances/washers" },
-          { label: "Fridges", href: "/categories/appliances/fridges" },
-          { label: "Freezers", href: "/categories/appliances/freezers" },
-          { label: "Air Conditioners", href: "/categories/appliances/ac" },
-          { label: "Heaters", href: "/categories/appliances/heaters" },
-          { label: "Fans", href: "/categories/appliances/fans" },
-          { label: "Air Purifiers", href: "/categories/appliances/purifiers" },
-          { label: "Water Dispensers", href: "/categories/appliances/water-dispensers" },
-          { label: "Generators & Inverters", href: "/categories/appliances/generators" },
+          { label: "Washing Machines", href: searchHref(CAT.appliances, "Washing Machines") },
+          { label: "Fridges", href: searchHref(CAT.appliances, "Fridges") },
+          { label: "Freezers", href: searchHref(CAT.appliances, "Freezers") },
+          { label: "Air Conditioners", href: searchHref(CAT.appliances, "Air Conditioners") },
+          { label: "Heaters", href: searchHref(CAT.appliances, "Heaters") },
+          { label: "Fans", href: searchHref(CAT.appliances, "Fans") },
+          { label: "Air Purifiers", href: searchHref(CAT.appliances, "Air Purifiers") },
+          { label: "Water Dispensers", href: searchHref(CAT.appliances, "Water Dispensers") },
+          { label: "Generators & Inverters", href: searchHref(CAT.appliances, "Generators & Inverters") },
         ],
       },
       {
         title: "HOME APPLIANCES",
         items: [
-          { label: "Air Quality Control", href: "/categories/appliances/air-quality" },
-          { label: "Cleaning Equipment", href: "/categories/appliances/cleaning" },
-          { label: "Sewing Machines", href: "/categories/appliances/sewing" },
-          { label: "Water Heaters", href: "/categories/appliances/water-heaters" },
+          { label: "Air Quality Control", href: searchHref(CAT.appliances, "Air Quality Control") },
+          { label: "Cleaning Equipment", href: searchHref(CAT.appliances, "Cleaning Equipment") },
+          { label: "Sewing Machines", href: searchHref(CAT.appliances, "Sewing Machines") },
+          { label: "Water Heaters", href: searchHref(CAT.appliances, "Water Heaters") },
         ],
       },
     ],
     brands: [
-      { name: "Nexus", href: "/brands/nexus" },
-      { name: "Hisense", href: "/brands/hisense" },
-      { name: "Polystar", href: "/brands/polystar" },
-      { name: "TCL", href: "/brands/tcl" },
-      { name: "LG", href: "/brands/lg" },
-      { name: "Samsung", href: "/brands/samsung" },
+      { name: "Nexus", href: brandHref(CAT.appliances, "Nexus") },
+      { name: "Hisense", href: brandHref(CAT.appliances, "Hisense") },
+      { name: "Polystar", href: brandHref(CAT.appliances, "Polystar") },
+      { name: "TCL", href: brandHref(CAT.appliances, "TCL") },
+      { name: "LG", href: brandHref(CAT.appliances, "LG") },
+      { name: "Samsung", href: brandHref(CAT.appliances, "Samsung") },
     ],
   },
   {
@@ -84,21 +115,17 @@ export const MEGA_CATEGORIES: CategoryItem[] = [
     groups: [
       {
         title: "FEATURED STORES",
-        items: [
-          { label: "Apple Store", href: "/official/apple" },
-          { label: "Samsung Store", href: "/official/samsung" },
-          { label: "Google Pixel Store", href: "/official/google" },
-          { label: "Nike Store", href: "/official/nike" },
-          { label: "Sony Store", href: "/official/sony" },
-          { label: "LG Official", href: "/official/lg" },
-        ],
+        // Derives from BRAND_REGISTRY — all brands with category: null are Official / cross-category
+        items: BRAND_REGISTRY
+          .filter((b) => b.category === null)
+          .map((b) => ({ label: `${b.label} Store`, href: brandHref(null, b.key) })),
       },
       {
         title: "EXCLUSIVE DEALS",
         items: [
-          { label: "Flash Sales", href: "/official/flash-sales" },
-          { label: "Brand Week Offers", href: "/official/brand-week" },
-          { label: "Manufacturer Warranty Products", href: "/official/warranty" },
+          { label: "Flash Sales", href: "/search?tag=flash-sale" },
+          { label: "Brand Week Offers", href: "/search?tag=brand-week" },
+          { label: "Manufacturer Warranty Products", href: "/search?tag=warranty" },
         ],
       },
     ],
@@ -111,41 +138,41 @@ export const MEGA_CATEGORIES: CategoryItem[] = [
       {
         title: "MOBILE PHONES",
         items: [
-          { label: "Smartphones", href: "/categories/phones/smartphones" },
-          { label: "iOS Phones", href: "/categories/phones/ios" },
-          { label: "Android Phones", href: "/categories/phones/android" },
-          { label: "Basic Phones", href: "/categories/phones/basic" },
-          { label: "Refurbished Phones", href: "/categories/phones/refurbished" },
+          { label: "Smartphones", href: searchHref(CAT.phonesTablets, "Smartphones") },
+          { label: "iOS Phones", href: searchHref(CAT.phonesTablets, "iOS Phones") },
+          { label: "Android Phones", href: searchHref(CAT.phonesTablets, "Android Phones") },
+          { label: "Basic Phones", href: searchHref(CAT.phonesTablets, "Basic Phones") },
+          { label: "Refurbished Phones", href: searchHref(CAT.phonesTablets, "Refurbished Phones") },
         ],
       },
       {
         title: "TABLETS",
         items: [
-          { label: "iPads", href: "/categories/tablets/ipads" },
-          { label: "Android Tablets", href: "/categories/tablets/android" },
-          { label: "Educational Tablets", href: "/categories/tablets/kids" },
-          { label: "Graphics Tablets", href: "/categories/tablets/graphics" },
+          { label: "iPads", href: searchHref(CAT.phonesTablets, "iPads") },
+          { label: "Android Tablets", href: searchHref(CAT.phonesTablets, "Android Tablets") },
+          { label: "Educational Tablets", href: searchHref(CAT.phonesTablets, "Educational Tablets") },
+          { label: "Graphics Tablets", href: searchHref(CAT.phonesTablets, "Graphics Tablets") },
         ],
       },
       {
         title: "ACCESSORIES",
         items: [
-          { label: "Cases & Covers", href: "/categories/phone-accessories/cases" },
-          { label: "Screen Protectors", href: "/categories/phone-accessories/screens" },
-          { label: "Power Banks", href: "/categories/phone-accessories/powerbanks" },
-          { label: "Chargers & Cables", href: "/categories/phone-accessories/chargers" },
-          { label: "Earphones & Headsets", href: "/categories/phone-accessories/earphones" },
-          { label: "Smartwatches & Bands", href: "/categories/phone-accessories/smartwatches" },
+          { label: "Cases & Covers", href: searchHref(CAT.phonesTablets, "Cases & Covers") },
+          { label: "Screen Protectors", href: searchHref(CAT.phonesTablets, "Screen Protectors") },
+          { label: "Power Banks", href: searchHref(CAT.phonesTablets, "Power Banks") },
+          { label: "Chargers & Cables", href: searchHref(CAT.phonesTablets, "Chargers & Cables") },
+          { label: "Earphones & Headsets", href: searchHref(CAT.phonesTablets, "Earphones & Headsets") },
+          { label: "Smartwatches & Bands", href: searchHref(CAT.phonesTablets, "Smartwatches & Bands") },
         ],
       },
     ],
     brands: [
-      { name: "Apple", href: "/brands/apple" },
-      { name: "Samsung", href: "/brands/samsung" },
-      { name: "Google Pixel", href: "/brands/google" },
-      { name: "Xiaomi", href: "/brands/xiaomi" },
-      { name: "Infinix", href: "/brands/infinix" },
-      { name: "Tecno", href: "/brands/tecno" },
+      { name: "Apple", href: brandHref(CAT.phonesTablets, "Apple") },
+      { name: "Samsung", href: brandHref(CAT.phonesTablets, "Samsung") },
+      { name: "Google Pixel", href: brandHref(CAT.phonesTablets, "Google") },
+      { name: "Xiaomi", href: brandHref(CAT.phonesTablets, "Xiaomi") },
+      { name: "Infinix", href: brandHref(CAT.phonesTablets, "Infinix") },
+      { name: "Tecno", href: brandHref(CAT.phonesTablets, "Tecno") },
     ],
   },
   {
@@ -156,36 +183,36 @@ export const MEGA_CATEGORIES: CategoryItem[] = [
       {
         title: "SKINCARE",
         items: [
-          { label: "Face Cleansers", href: "/categories/beauty/cleansers" },
-          { label: "Moisturizers & Creams", href: "/categories/beauty/moisturizers" },
-          { label: "Sunscreen & SPF", href: "/categories/beauty/sunscreen" },
-          { label: "Serums & Oils", href: "/categories/beauty/serums" },
-          { label: "Face Masks", href: "/categories/beauty/masks" },
+          { label: "Face Cleansers", href: searchHref(CAT.healthBeauty, "Face Cleansers") },
+          { label: "Moisturizers & Creams", href: searchHref(CAT.healthBeauty, "Moisturizers & Creams") },
+          { label: "Sunscreen & SPF", href: searchHref(CAT.healthBeauty, "Sunscreen & SPF") },
+          { label: "Serums & Oils", href: searchHref(CAT.healthBeauty, "Serums & Oils") },
+          { label: "Face Masks", href: searchHref(CAT.healthBeauty, "Face Masks") },
         ],
       },
       {
         title: "FRAGRANCES",
         items: [
-          { label: "Men's Perfumes", href: "/categories/beauty/mens-fragrance" },
-          { label: "Women's Perfumes", href: "/categories/beauty/womens-fragrance" },
-          { label: "Body Mists & Sprays", href: "/categories/beauty/mists" },
-          { label: "Deodorants", href: "/categories/beauty/deodorants" },
+          { label: "Men's Perfumes", href: searchHref(CAT.healthBeauty, "Men's Perfumes") },
+          { label: "Women's Perfumes", href: searchHref(CAT.healthBeauty, "Women's Perfumes") },
+          { label: "Body Mists & Sprays", href: searchHref(CAT.healthBeauty, "Body Mists & Sprays") },
+          { label: "Deodorants", href: searchHref(CAT.healthBeauty, "Deodorants") },
         ],
       },
       {
         title: "HAIR CARE",
         items: [
-          { label: "Shampoos & Conditioners", href: "/categories/beauty/shampoos" },
-          { label: "Styling Tools & Irons", href: "/categories/beauty/hair-tools" },
-          { label: "Wigs & Extensions", href: "/categories/beauty/wigs" },
+          { label: "Shampoos & Conditioners", href: searchHref(CAT.healthBeauty, "Shampoos & Conditioners") },
+          { label: "Styling Tools & Irons", href: searchHref(CAT.healthBeauty, "Styling Tools & Irons") },
+          { label: "Wigs & Extensions", href: searchHref(CAT.healthBeauty, "Wigs & Extensions") },
         ],
       },
     ],
     brands: [
-      { name: "Nivea", href: "/brands/nivea" },
-      { name: "CeraVe", href: "/brands/cerave" },
-      { name: "Maybelline", href: "/brands/maybelline" },
-      { name: "Fenty Beauty", href: "/brands/fenty" },
+      { name: "Nivea", href: brandHref(CAT.healthBeauty, "Nivea") },
+      { name: "CeraVe", href: brandHref(CAT.healthBeauty, "CeraVe") },
+      { name: "Maybelline", href: brandHref(CAT.healthBeauty, "Maybelline") },
+      { name: "Fenty Beauty", href: brandHref(CAT.healthBeauty, "Fenty Beauty") },
     ],
   },
   {
@@ -196,33 +223,33 @@ export const MEGA_CATEGORIES: CategoryItem[] = [
       {
         title: "FURNITURE",
         items: [
-          { label: "Office Chairs", href: "/categories/home-office/chairs" },
-          { label: "Executive Desks", href: "/categories/home-office/desks" },
-          { label: "Living Room Sofas", href: "/categories/home-office/sofas" },
-          { label: "Bed Frames & Tables", href: "/categories/home-office/bedroom" },
+          { label: "Office Chairs", href: searchHref(CAT.homeOffice, "Office Chairs") },
+          { label: "Executive Desks", href: searchHref(CAT.homeOffice, "Executive Desks") },
+          { label: "Living Room Sofas", href: searchHref(CAT.homeOffice, "Living Room Sofas") },
+          { label: "Bed Frames & Tables", href: searchHref(CAT.homeOffice, "Bed Frames & Tables") },
         ],
       },
       {
         title: "BEDDING & BATH",
         items: [
-          { label: "Bed Sheets & Pillowcases", href: "/categories/home-office/sheets" },
-          { label: "Duvets & Comforters", href: "/categories/home-office/duvets" },
-          { label: "Bath Towels", href: "/categories/home-office/towels" },
+          { label: "Bed Sheets & Pillowcases", href: searchHref(CAT.homeOffice, "Bed Sheets & Pillowcases") },
+          { label: "Duvets & Comforters", href: searchHref(CAT.homeOffice, "Duvets & Comforters") },
+          { label: "Bath Towels", href: searchHref(CAT.homeOffice, "Bath Towels") },
         ],
       },
       {
         title: "DECOR & LIGHTING",
         items: [
-          { label: "Table Lamps & Bulbs", href: "/categories/home-office/lamps" },
-          { label: "Wall Art & Clocks", href: "/categories/home-office/wall-art" },
-          { label: "Rugs & Carpets", href: "/categories/home-office/rugs" },
+          { label: "Table Lamps & Bulbs", href: searchHref(CAT.homeOffice, "Table Lamps & Bulbs") },
+          { label: "Wall Art & Clocks", href: searchHref(CAT.homeOffice, "Wall Art & Clocks") },
+          { label: "Rugs & Carpets", href: searchHref(CAT.homeOffice, "Rugs & Carpets") },
         ],
       },
     ],
     brands: [
-      { name: "IKEA", href: "/brands/ikea" },
-      { name: "Bedmate", href: "/brands/bedmate" },
-      { name: "Century", href: "/brands/century" },
+      { name: "IKEA", href: brandHref(CAT.homeOffice, "IKEA") },
+      { name: "Bedmate", href: brandHref(CAT.homeOffice, "Bedmate") },
+      { name: "Century", href: brandHref(CAT.homeOffice, "Century") },
     ],
   },
   {
@@ -233,27 +260,27 @@ export const MEGA_CATEGORIES: CategoryItem[] = [
       {
         title: "TELEVISION & VIDEO",
         items: [
-          { label: "Smart TVs", href: "/categories/electronics/smart-tvs" },
-          { label: "OLED & QLED TVs", href: "/categories/electronics/oled" },
-          { label: "4K UHD TVs", href: "/categories/electronics/4k-tvs" },
-          { label: "Projectors & Screens", href: "/categories/electronics/projectors" },
+          { label: "Smart TVs", href: searchHref(CAT.electronics, "Smart TVs") },
+          { label: "OLED & QLED TVs", href: searchHref(CAT.electronics, "OLED & QLED TVs") },
+          { label: "4K UHD TVs", href: searchHref(CAT.electronics, "4K UHD TVs") },
+          { label: "Projectors & Screens", href: searchHref(CAT.electronics, "Projectors & Screens") },
         ],
       },
       {
         title: "AUDIO & SOUND",
         items: [
-          { label: "Soundbars & Subwoofers", href: "/categories/electronics/soundbars" },
-          { label: "Home Theatre Systems", href: "/categories/electronics/home-theatre" },
-          { label: "Bluetooth Speakers", href: "/categories/electronics/bluetooth-speakers" },
+          { label: "Soundbars & Subwoofers", href: searchHref(CAT.electronics, "Soundbars & Subwoofers") },
+          { label: "Home Theatre Systems", href: searchHref(CAT.electronics, "Home Theatre Systems") },
+          { label: "Bluetooth Speakers", href: searchHref(CAT.electronics, "Bluetooth Speakers") },
         ],
       },
     ],
     brands: [
-      { name: "Sony", href: "/brands/sony" },
-      { name: "Samsung", href: "/brands/samsung" },
-      { name: "Hisense", href: "/brands/hisense" },
-      { name: "LG", href: "/brands/lg" },
-      { name: "JBL", href: "/brands/jbl" },
+      { name: "Sony", href: brandHref(CAT.electronics, "Sony") },
+      { name: "Samsung", href: brandHref(CAT.electronics, "Samsung") },
+      { name: "Hisense", href: brandHref(CAT.electronics, "Hisense") },
+      { name: "LG", href: brandHref(CAT.electronics, "LG") },
+      { name: "JBL", href: brandHref(CAT.electronics, "JBL") },
     ],
   },
   {
@@ -264,26 +291,26 @@ export const MEGA_CATEGORIES: CategoryItem[] = [
       {
         title: "WOMEN'S FASHION",
         items: [
-          { label: "Dresses", href: "/categories/fashion/dresses" },
-          { label: "Tops & Blouses", href: "/categories/fashion/tops" },
-          { label: "Footwear & Heels", href: "/categories/fashion/heels" },
-          { label: "Handbags & Clutches", href: "/categories/fashion/bags" },
+          { label: "Dresses", href: searchHref(CAT.fashion, "Dresses") },
+          { label: "Tops & Blouses", href: searchHref(CAT.fashion, "Tops & Blouses") },
+          { label: "Footwear & Heels", href: searchHref(CAT.fashion, "Footwear & Heels") },
+          { label: "Handbags & Clutches", href: searchHref(CAT.fashion, "Handbags & Clutches") },
         ],
       },
       {
         title: "MEN'S FASHION",
         items: [
-          { label: "Casual T-Shirts", href: "/categories/fashion/tshirts" },
-          { label: "Formal Shirts", href: "/categories/fashion/shirts" },
-          { label: "Jeans & Trousers", href: "/categories/fashion/jeans" },
-          { label: "Sneakers & Boots", href: "/categories/fashion/sneakers" },
+          { label: "Casual T-Shirts", href: searchHref(CAT.fashion, "Casual T-Shirts") },
+          { label: "Formal Shirts", href: searchHref(CAT.fashion, "Formal Shirts") },
+          { label: "Jeans & Trousers", href: searchHref(CAT.fashion, "Jeans & Trousers") },
+          { label: "Sneakers & Boots", href: searchHref(CAT.fashion, "Sneakers & Boots") },
         ],
       },
     ],
     brands: [
-      { name: "Nike", href: "/brands/nike" },
-      { name: "Adidas", href: "/brands/adidas" },
-      { name: "Zara", href: "/brands/zara" },
+      { name: "Nike", href: brandHref(CAT.fashion, "Nike") },
+      { name: "Adidas", href: brandHref(CAT.fashion, "Adidas") },
+      { name: "Zara", href: brandHref(CAT.fashion, "Zara") },
     ],
   },
   {
@@ -294,17 +321,17 @@ export const MEGA_CATEGORIES: CategoryItem[] = [
       {
         title: "BEVERAGES",
         items: [
-          { label: "Juices & Drinks", href: "/categories/groceries/juices" },
-          { label: "Coffee & Tea", href: "/categories/groceries/coffee" },
-          { label: "Energy & Soft Drinks", href: "/categories/groceries/soft-drinks" },
+          { label: "Juices & Drinks", href: searchHref(CAT.supermarket, "Juices & Drinks") },
+          { label: "Coffee & Tea", href: searchHref(CAT.supermarket, "Coffee & Tea") },
+          { label: "Energy & Soft Drinks", href: searchHref(CAT.supermarket, "Energy & Soft Drinks") },
         ],
       },
       {
         title: "FOOD STAPLES",
         items: [
-          { label: "Rice & Grains", href: "/categories/groceries/rice" },
-          { label: "Pasta & Noodles", href: "/categories/groceries/pasta" },
-          { label: "Cooking Oils", href: "/categories/groceries/oils" },
+          { label: "Rice & Grains", href: searchHref(CAT.supermarket, "Rice & Grains") },
+          { label: "Pasta & Noodles", href: searchHref(CAT.supermarket, "Pasta & Noodles") },
+          { label: "Cooking Oils", href: searchHref(CAT.supermarket, "Cooking Oils") },
         ],
       },
     ],
@@ -317,28 +344,28 @@ export const MEGA_CATEGORIES: CategoryItem[] = [
       {
         title: "LAPTOPS",
         items: [
-          { label: "Gaming Laptops", href: "/categories/computing/gaming-laptops" },
-          { label: "MacBooks", href: "/categories/computing/macbooks" },
-          { label: "Ultrabooks & Slims", href: "/categories/computing/ultrabooks" },
-          { label: "Business Laptops", href: "/categories/computing/business" },
+          { label: "Gaming Laptops", href: searchHref(CAT.computing, "Gaming Laptops") },
+          { label: "MacBooks", href: searchHref(CAT.computing, "MacBooks") },
+          { label: "Ultrabooks & Slims", href: searchHref(CAT.computing, "Ultrabooks & Slims") },
+          { label: "Business Laptops", href: searchHref(CAT.computing, "Business Laptops") },
         ],
       },
       {
         title: "PERIPHERALS & STORAGE",
         items: [
-          { label: "Monitors & Screens", href: "/categories/computing/monitors" },
-          { label: "External Hard Drives", href: "/categories/computing/hard-drives" },
-          { label: "SSDs & Flash Drives", href: "/categories/computing/ssds" },
-          { label: "Keyboards & Mice", href: "/categories/computing/keyboards" },
+          { label: "Monitors & Screens", href: searchHref(CAT.computing, "Monitors & Screens") },
+          { label: "External Hard Drives", href: searchHref(CAT.computing, "External Hard Drives") },
+          { label: "SSDs & Flash Drives", href: searchHref(CAT.computing, "SSDs & Flash Drives") },
+          { label: "Keyboards & Mice", href: searchHref(CAT.computing, "Keyboards & Mice") },
         ],
       },
     ],
     brands: [
-      { name: "HP", href: "/brands/hp" },
-      { name: "Dell", href: "/brands/dell" },
-      { name: "Lenovo", href: "/brands/lenovo" },
-      { name: "Apple", href: "/brands/apple" },
-      { name: "Asus", href: "/brands/asus" },
+      { name: "HP", href: brandHref(CAT.computing, "HP") },
+      { name: "Dell", href: brandHref(CAT.computing, "Dell") },
+      { name: "Lenovo", href: brandHref(CAT.computing, "Lenovo") },
+      { name: "Apple", href: brandHref(CAT.computing, "Apple") },
+      { name: "Asus", href: brandHref(CAT.computing, "Asus") },
     ],
   },
   {
@@ -349,17 +376,17 @@ export const MEGA_CATEGORIES: CategoryItem[] = [
       {
         title: "DIAPERING & FEEDING",
         items: [
-          { label: "Diapers & Wipes", href: "/categories/baby/diapers" },
-          { label: "Baby Bottles", href: "/categories/baby/bottles" },
-          { label: "High Chairs", href: "/categories/baby/high-chairs" },
+          { label: "Diapers & Wipes", href: searchHref(CAT.baby, "Diapers & Wipes") },
+          { label: "Baby Bottles", href: searchHref(CAT.baby, "Baby Bottles") },
+          { label: "High Chairs", href: searchHref(CAT.baby, "High Chairs") },
         ],
       },
       {
         title: "BABY GEAR",
         items: [
-          { label: "Strollers & Prams", href: "/categories/baby/strollers" },
-          { label: "Car Seats", href: "/categories/baby/car-seats" },
-          { label: "Walkers", href: "/categories/baby/walkers" },
+          { label: "Strollers & Prams", href: searchHref(CAT.baby, "Strollers & Prams") },
+          { label: "Car Seats", href: searchHref(CAT.baby, "Car Seats") },
+          { label: "Walkers", href: searchHref(CAT.baby, "Walkers") },
         ],
       },
     ],
@@ -372,25 +399,25 @@ export const MEGA_CATEGORIES: CategoryItem[] = [
       {
         title: "CONSOLES & GEAR",
         items: [
-          { label: "PlayStation 5", href: "/categories/gaming/ps5" },
-          { label: "Xbox Series X/S", href: "/categories/gaming/xbox" },
-          { label: "Nintendo Switch", href: "/categories/gaming/switch" },
+          { label: "PlayStation 5", href: searchHref(CAT.gaming, "PlayStation 5") },
+          { label: "Xbox Series X/S", href: searchHref(CAT.gaming, "Xbox Series X/S") },
+          { label: "Nintendo Switch", href: searchHref(CAT.gaming, "Nintendo Switch") },
         ],
       },
       {
         title: "ACCESSORIES",
         items: [
-          { label: "Wireless Controllers", href: "/categories/gaming/controllers" },
-          { label: "Gaming Headsets", href: "/categories/gaming/headsets" },
-          { label: "Gaming Chairs", href: "/categories/gaming/chairs" },
+          { label: "Wireless Controllers", href: searchHref(CAT.gaming, "Wireless Controllers") },
+          { label: "Gaming Headsets", href: searchHref(CAT.gaming, "Gaming Headsets") },
+          { label: "Gaming Chairs", href: searchHref(CAT.gaming, "Gaming Chairs") },
         ],
       },
     ],
     brands: [
-      { name: "PlayStation", href: "/brands/playstation" },
-      { name: "Xbox", href: "/brands/xbox" },
-      { name: "Nintendo", href: "/brands/nintendo" },
-      { name: "Razer", href: "/brands/razer" },
+      { name: "PlayStation", href: brandHref(CAT.gaming, "PlayStation") },
+      { name: "Xbox", href: brandHref(CAT.gaming, "Xbox") },
+      { name: "Nintendo", href: brandHref(CAT.gaming, "Nintendo") },
+      { name: "Razer", href: brandHref(CAT.gaming, "Razer") },
     ],
   },
   {
@@ -401,9 +428,9 @@ export const MEGA_CATEGORIES: CategoryItem[] = [
       {
         title: "AUTOMOTIVE & SPORTS",
         items: [
-          { label: "Car Care & Polish", href: "/categories/auto/car-care" },
-          { label: "Auto Electronics", href: "/categories/auto/electronics" },
-          { label: "Fitness Equipment", href: "/categories/sports/fitness" },
+          { label: "Car Care & Polish", href: "/search?q=car+care" },
+          { label: "Auto Electronics", href: "/search?q=auto+electronics" },
+          { label: "Fitness Equipment", href: "/search?q=fitness" },
         ],
       },
     ],
@@ -639,6 +666,20 @@ export function CategoryMegaMenu() {
                     transition={{ duration: 0.18 }}
                     className="grid grid-cols-3 gap-6"
                   >
+                    {/* Top Row: Category Title & Direct Link */}
+                    <div className="col-span-3 flex items-center justify-between border-b border-gray-100 pb-2 mb-1">
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-widest font-sans">
+                        {activeCategory.name}
+                      </span>
+                      <Link
+                        href={`/search?category=${encodeURIComponent(activeCategory.name)}`}
+                        onClick={() => setIsOpen(false)}
+                        className="text-xs font-bold text-[#D97706] hover:text-[#B45309] flex items-center gap-1 transition-colors font-sans"
+                      >
+                        All {activeCategory.name} products →
+                      </Link>
+                    </div>
+
                     {/* Columns 1 & 2: Subcategory Groups */}
                     <div className="col-span-2 grid grid-cols-2 gap-6">
                       {activeCategory.groups.map((group, idx) => (

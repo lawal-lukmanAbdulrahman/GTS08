@@ -5,147 +5,10 @@ import Link from "next/link";
 import { useState, use, useRef, useEffect } from "react";
 import { Footer } from "../../_components/landing/footer";
 import { ProductCard } from "../../_components/ui/product-card";
-
-interface ProductData {
-  id: string;
-  brand: string;
-  sku: string;
-  title: string;
-  price: string;
-  originalPrice?: string;
-  rating: number;
-  reviewsCount: number;
-  description: string;
-  category: string;
-  subCategory: string;
-  images: {
-    color: string;
-    label: string;
-    main: string;
-    thumbnails: string[];
-  }[];
-  sizes: string[];
-}
-
-const PRODUCTS_DATABASE: Record<string, ProductData> = {
-  "air-jordan-1": {
-    id: "air-jordan-1",
-    brand: "Air Jordan",
-    sku: "AJ1-OG-2026",
-    title: "Air Jordan 1 Retro High OG",
-    price: "₦450,000",
-    originalPrice: "₦520,000",
-    rating: 4.9,
-    reviewsCount: 42,
-    description:
-      "Crafted with premium full-grain leather, classic Air cushioning, and timeless heritage design. The Air Jordan 1 Retro High OG combines legendary street culture with unmatched modern comfort.",
-    category: "Clothes and shoes",
-    subCategory: "Shoes",
-    images: [
-      {
-        color: "blue",
-        label: "University Blue",
-        main: "/products/hero/air_jordan_retro_1_blue.png",
-        thumbnails: [
-          "/products/hero/air_jordan_retro_1_blue.png",
-          "/products/hero/air_jordan_retro_1_brown.png",
-          "/products/hero/air_jordan_retro_1_green.png",
-          "/products/denim_jacket.png",
-        ],
-      },
-      {
-        color: "brown",
-        label: "Mocha Brown",
-        main: "/products/hero/air_jordan_retro_1_brown.png",
-        thumbnails: [
-          "/products/hero/air_jordan_retro_1_brown.png",
-          "/products/hero/air_jordan_retro_1_blue.png",
-          "/products/hero/air_jordan_retro_1_green.png",
-          "/products/denim_jacket.png",
-        ],
-      },
-      {
-        color: "green",
-        label: "Pine Green",
-        main: "/products/hero/air_jordan_retro_1_green.png",
-        thumbnails: [
-          "/products/hero/air_jordan_retro_1_green.png",
-          "/products/hero/air_jordan_retro_1_blue.png",
-          "/products/hero/air_jordan_retro_1_brown.png",
-          "/products/denim_jacket.png",
-        ],
-      },
-    ],
-    sizes: ["40.5", "41", "42", "43", "43.5", "44", "44.5", "45", "46"],
-  },
-  "pixel-10": {
-    id: "pixel-10",
-    brand: "Google",
-    sku: "G-PX10-PRO",
-    title: "Google Pixel 10 Pro 5G",
-    price: "₦1,250,000",
-    originalPrice: "₦1,400,000",
-    rating: 4.8,
-    reviewsCount: 89,
-    description:
-      "Next-generation AI computational photography, pro-level triple camera system, and ultra-smooth OLED display powered by the Tensor G5 chip.",
-    category: "Electronics",
-    subCategory: "Phones & Tablets",
-    images: [
-      {
-        color: "metal",
-        label: "Titanium Metal",
-        main: "/products/hero/pixel_10_metal.png",
-        thumbnails: [
-          "/products/hero/pixel_10_metal.png",
-          "/products/hero/pixel_10_green.png",
-          "/products/hero/pixel_10_purple.png",
-          "/products/hero/pixel_10_red.png",
-        ],
-      },
-      {
-        color: "green",
-        label: "Hazel Green",
-        main: "/products/hero/pixel_10_green.png",
-        thumbnails: [
-          "/products/hero/pixel_10_green.png",
-          "/products/hero/pixel_10_metal.png",
-          "/products/hero/pixel_10_purple.png",
-          "/products/hero/pixel_10_red.png",
-        ],
-      },
-    ],
-    sizes: ["128GB", "256GB", "512GB", "1TB"],
-  },
-  "samsung-fridge": {
-    id: "samsung-fridge",
-    brand: "Samsung",
-    sku: "SS-BS-4D-2026",
-    title: "Samsung Bespoke 4-Door French Door Refrigerator",
-    price: "₦2,450,000",
-    originalPrice: "₦2,800,000",
-    rating: 5.0,
-    reviewsCount: 64,
-    description:
-      "Customizable color door panels, Beverage Center with AutoFill Pitcher, and Dual Auto Ice Maker for ultimate modern kitchen luxury.",
-    category: "Home Appliances",
-    subCategory: "Refrigerators",
-    images: [
-      {
-        color: "black",
-        label: "Matte Black",
-        main: "/products/hero/samsung_fridge_black.png",
-        thumbnails: [
-          "/products/hero/samsung_fridge_black.png",
-          "/products/hero/samsung_fridge_grey.png",
-          "/products/hero/samsung_fridge_white.png",
-          "/products/hero/samsung_fridge_bronze.png",
-        ],
-      },
-    ],
-    sizes: ["24 cu. ft.", "29 cu. ft."],
-  },
-};
+import { getProductById, REAL_PRODUCTS } from "../../_data/products";
+import { useCart } from "../../_components/cart-context";
+import { useWishlist } from "../../_components/wishlist-context";
+import { ProductZoomLightbox } from "../../_components/ui/product-zoom-lightbox";
 
 export default function ProductDetailPage({
   params,
@@ -153,19 +16,30 @@ export default function ProductDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = use(params);
-  const product = PRODUCTS_DATABASE[slug] || PRODUCTS_DATABASE["air-jordan-1"]!;
+  const product = getProductById(slug) || REAL_PRODUCTS[0]!;
+  const { addToCart } = useCart();
+  const { isInWishlist, toggleWishlist } = useWishlist();
 
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedSize, setSelectedSize] = useState(product.sizes[1] || product.sizes[0]);
-  const [isWishlisted, setIsWishlisted] = useState(false);
+  const [quantity, setQuantity] = useState(1);
   const [addedToCart, setAddedToCart] = useState(false);
+  const [isZoomOpen, setIsZoomOpen] = useState(false);
+
+  const isWishlisted = isInWishlist(product.id);
+
+  const handleToggleWishlist = () => {
+    toggleWishlist(product.id);
+  };
 
   const activeColor = product.images[selectedColorIndex] || product.images[0]!;
   const activeMainImage =
     activeColor.thumbnails[selectedImageIndex] || activeColor.main;
+  const hasTransparentBg = product.hasTransparentBg !== false;
 
   const handleAddToCart = () => {
+    addToCart(product, selectedSize, activeColor.label, quantity);
     setAddedToCart(true);
     setTimeout(() => setAddedToCart(false), 2000);
   };
@@ -177,46 +51,62 @@ export default function ProductDetailPage({
       <div className="w-full px-5 md:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-start">
 
-          {/* ── LEFT: Sticky panel — breadcrumb + image + thumbnails, never scrolls ── */}
-          <div
-            className="lg:col-span-7 flex flex-col gap-4 lg:sticky pb-3"
-            style={{ top: "100px", height: "calc(100vh - 100px)" }}
-          >
+          {/* ── LEFT: Sticky panel on desktop (breadcrumb + image + thumbnails) ── */}
+          <div className="lg:col-span-7 flex flex-col gap-3 sm:gap-4 lg:sticky lg:top-[100px] lg:h-[calc(100vh-100px)] pb-3">
             {/* Breadcrumb — pinned here so it sticks with the image */}
-            <nav aria-label="Breadcrumb" className="text-xs sm:text-sm text-gray-500 font-medium flex items-center gap-2 flex-wrap shrink-0 pt-2">
+            <nav aria-label="Breadcrumb" className="text-xs sm:text-sm text-gray-500 font-medium flex items-center gap-2 flex-wrap shrink-0 pt-2 font-sans">
               <Link href="/" className="hover:text-[#010101] transition-colors">Home</Link>
               <span>›</span>
-              <Link href="/shop" className="hover:text-[#010101] transition-colors">{product.category}</Link>
+              <Link href={`/search?category=${encodeURIComponent(product.category)}`} className="hover:text-[#010101] transition-colors">
+                {product.category}
+              </Link>
               <span>›</span>
-              <span className="text-gray-400">{product.subCategory}</span>
+              <Link href={`/search?category=${encodeURIComponent(product.category)}&q=${encodeURIComponent(product.subCategory)}`} className="hover:text-[#010101] transition-colors text-gray-500">
+                {product.subCategory}
+              </Link>
               <span>›</span>
-              <span className="text-[#010101] font-semibold">{product.brand}</span>
+              <Link href={`/search?brand=${encodeURIComponent(product.brand)}`} className="text-[#010101] font-bold hover:underline transition-all">
+                {product.brand}
+              </Link>
             </nav>
 
-            {/* Main Showcase Image Box — fills remaining height */}
+            {/* Main Showcase Image Box — compact half-height on mobile so details peek out below */}
             <div
-              className="flex-1 min-h-0 rounded-[24px] sm:rounded-[32px] overflow-hidden relative border border-gray-200/80 shadow-2xs group transition-all"
-              style={{ background: "radial-gradient(ellipse at center, #ECEAE6 0%, #DDDAD4 100%)" }}
+              onClick={() => setIsZoomOpen(true)}
+              className={`w-full h-[290px] sm:h-[380px] lg:h-auto lg:flex-1 lg:min-h-0 rounded-[24px] sm:rounded-[32px] overflow-hidden relative border border-gray-200/80 shadow-2xs group transition-all cursor-zoom-in shrink-0 lg:shrink ${
+                hasTransparentBg ? "" : "bg-[#F2F0EA]"
+              }`}
+              style={
+                hasTransparentBg
+                  ? { background: "radial-gradient(ellipse at center, #ECEAE6 0%, #DDDAD4 100%)" }
+                  : undefined
+              }
             >
               <Image
                 src={activeMainImage}
                 alt={product.title}
                 fill
-                className="object-contain p-10 sm:p-14 group-hover:scale-105 transition-transform duration-300 drop-shadow-xl"
+                className={`group-hover:scale-105 transition-transform duration-300 drop-shadow-xl ${
+                  hasTransparentBg
+                    ? "object-contain p-6 sm:p-12"
+                    : "object-cover p-0"
+                }`}
                 sizes="(max-width: 1024px) 100vw, 58vw"
                 priority
               />
             </div>
 
             {/* Thumbnail Row — always pinned at bottom, no clip on selected */}
-            <div className="flex items-center gap-3 overflow-x-auto shrink-0" style={{ scrollbarWidth: "none" }}>
+            <div className="flex items-center gap-2.5 sm:gap-3 overflow-x-auto shrink-0 py-0.5" style={{ scrollbarWidth: "none" }}>
               {activeColor.thumbnails.map((thumb, idx) => {
                 const isSelected = selectedImageIndex === idx;
                 return (
                   <button
                     key={idx}
                     onClick={() => setSelectedImageIndex(idx)}
-                    className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border flex items-center justify-center p-2.5 shrink-0 transition-all overflow-hidden ${
+                    className={`w-16 h-16 sm:w-24 sm:h-24 rounded-2xl border flex items-center justify-center shrink-0 transition-all overflow-hidden relative ${
+                      hasTransparentBg ? "p-1.5" : "p-0"
+                    } ${
                       isSelected
                         ? "border-2 border-[#010101] bg-[#ECEAE6] shadow-md"
                         : "border-gray-200 bg-[#F9F8F5] hover:bg-[#F2F0EA]"
@@ -225,16 +115,15 @@ export default function ProductDetailPage({
                     <Image
                       src={thumb}
                       alt={`Thumbnail ${idx + 1}`}
-                      width={80}
-                      height={80}
-                      className="w-full h-full object-contain"
+                      fill
+                      className={hasTransparentBg ? "object-contain p-1.5" : "object-cover p-0"}
                     />
                   </button>
                 );
               })}
 
               {/* +4 More Placeholder */}
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border border-gray-200 bg-[#F9F8F5] flex items-center justify-center text-xs font-bold text-gray-500 shrink-0 cursor-pointer hover:bg-gray-100 transition-colors">
+              <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-2xl border border-gray-200 bg-[#F9F8F5] flex items-center justify-center text-xs font-bold text-gray-500 shrink-0 cursor-pointer hover:bg-gray-100 transition-colors">
                 +4 more
               </div>
             </div>
@@ -356,11 +245,39 @@ export default function ProductDetailPage({
               </div>
             </div>
 
-            {/* ── Add to Cart & Wishlist ── */}
-            <div className="pt-2 flex items-center gap-3">
+            {/* ── Add to Cart & Wishlist with Quantity Stepper ── */}
+            <div className="pt-2 flex items-center gap-2.5 sm:gap-3">
+              {/* Quantity Stepper */}
+              <div className="flex items-center gap-3 sm:gap-4 bg-[#F9F8F5] border border-gray-200 rounded-full px-4 py-2.5 shrink-0">
+                <button
+                  aria-label="Decrease quantity"
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  className="text-[#010101] hover:text-[#EDCF5D] flex items-center justify-center transition-all active:scale-90 p-1"
+                >
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+                  </svg>
+                </button>
+
+                <span className="text-sm sm:text-base font-black text-[#010101] min-w-[20px] text-center tabular-nums font-sans">
+                  {quantity}
+                </span>
+
+                <button
+                  aria-label="Increase quantity"
+                  onClick={() => setQuantity((q) => q + 1)}
+                  className="text-[#010101] hover:text-[#EDCF5D] flex items-center justify-center transition-all active:scale-90 p-1"
+                >
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Add to Cart Button */}
               <button
                 onClick={handleAddToCart}
-                className="flex-1 bg-[#010101] hover:bg-black text-white font-bold py-3.5 sm:py-4 px-6 rounded-full shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2.5 text-xs sm:text-sm"
+                className="flex-1 bg-[#010101] hover:bg-black text-white font-bold py-3 sm:py-3.5 px-5 rounded-full shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs sm:text-sm font-sans"
               >
                 <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
@@ -370,8 +287,8 @@ export default function ProductDetailPage({
 
               <button
                 aria-label="Add to wishlist"
-                onClick={() => setIsWishlisted((prev) => !prev)}
-                className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full border flex items-center justify-center transition-all shrink-0 ${
+                onClick={handleToggleWishlist}
+                className={`w-11 h-11 sm:w-13 sm:h-13 rounded-full border flex items-center justify-center transition-all shrink-0 ${
                   isWishlisted
                     ? "bg-[#EDCF5D] border-[#EDCF5D] text-[#010101] shadow-xs"
                     : "bg-[#F9F8F5] border-gray-200 text-[#010101] hover:bg-gray-100"
@@ -390,7 +307,7 @@ export default function ProductDetailPage({
             </div>
 
             {/* ── Delivery Info ── */}
-            <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 font-medium pb-6">
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 font-medium pb-2 sm:pb-6">
               <svg className="w-4 h-4 text-[#010101] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
               </svg>
@@ -406,7 +323,89 @@ export default function ProductDetailPage({
       {/* ── Similar Finds Section: Landing page style carousel ── */}
       <SimilarFinds />
 
+      {/* ── Product Full-Screen Pan & Zoom Lightbox ── */}
+      <ProductZoomLightbox
+        isOpen={isZoomOpen}
+        onClose={() => setIsZoomOpen(false)}
+        images={activeColor.thumbnails}
+        initialIndex={selectedImageIndex}
+        productTitle={product.title}
+        hasTransparentBg={hasTransparentBg}
+      />
+
       <Footer />
+    </div>
+  );
+}
+
+// ─── Reviews Custom Sort Dropdown ─────────────────────────────────────────────
+function ReviewsSortDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("touchstart", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [open]);
+
+  const options = ["Newest", "Highest Rating", "Lowest Rating"];
+
+  return (
+    <div ref={dropdownRef} className="relative inline-block text-left font-sans">
+      <button
+        type="button"
+        onClick={() => setOpen((p) => !p)}
+        className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#010101] bg-[#F2F0EA] hover:bg-[#EDCF5D] px-4 py-2 rounded-full transition-colors cursor-pointer select-none"
+      >
+        <span>{value}</span>
+        <svg
+          className={`w-3.5 h-3.5 text-[#010101] transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          strokeWidth={2.5}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1.5 z-30 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden min-w-[175px] animate-in fade-in duration-150 py-1">
+          {options.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => {
+                onChange(opt);
+                setOpen(false);
+              }}
+              className={`w-full text-left px-4 py-2.5 text-xs sm:text-sm font-semibold transition-colors font-sans flex items-center justify-between cursor-pointer ${
+                value === opt
+                  ? "bg-[#EDCF5D] text-[#010101]"
+                  : "text-[#010101] hover:bg-[#F2F0EA]"
+              }`}
+            >
+              <span>{opt}</span>
+              {value === opt && (
+                <svg className="w-3.5 h-3.5 text-[#010101]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -498,9 +497,9 @@ function ProductTabs({ rating, reviewsCount }: { rating: number; reviewsCount: n
   };
 
   return (
-    <section className="w-full px-5 md:px-8 pt-5 sm:pt-5 pb-4 mt-8 sm:mt-8">
+    <section className="w-full px-5 md:px-8 pt-2 sm:pt-5 pb-4 mt-2 sm:mt-8">
       {/* ── Tabs Bar — no dividers ── */}
-      <div className="flex items-center gap-8 mb-6">
+      <div className="flex items-center gap-8 mb-3 sm:mb-6">
         {(["details", "reviews", "discussion"] as const).map((tab) => {
           const label = tab.charAt(0).toUpperCase() + tab.slice(1);
           const isActive = activeTab === tab;
@@ -525,24 +524,9 @@ function ProductTabs({ rating, reviewsCount }: { rating: number; reviewsCount: n
           {/* Tab Content: Reviews */}
           {activeTab === "reviews" && (
             <div className="space-y-6">
-              {/* Custom Pill Dropdown */}
+              {/* Custom GTS Pill Dropdown */}
               <div className="flex items-center justify-between">
-                <div className="relative inline-block text-left">
-                  <select
-                    value={sortOption}
-                    onChange={(e) => setSortOption(e.target.value)}
-                    className="appearance-none bg-white border border-gray-300 rounded-full px-4 py-1.5 pr-8 text-xs sm:text-sm font-medium text-gray-800 focus:outline-none focus:border-gray-500 cursor-pointer shadow-2xs"
-                  >
-                    <option value="Newest">Newest</option>
-                    <option value="Highest Rating">Highest Rating</option>
-                    <option value="Lowest Rating">Lowest Rating</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-gray-700">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                    </svg>
-                  </div>
-                </div>
+                <ReviewsSortDropdown value={sortOption} onChange={setSortOption} />
               </div>
 
               {/* User Reviews List */}
@@ -713,7 +697,7 @@ function ProductTabs({ rating, reviewsCount }: { rating: number; reviewsCount: n
 
             {/* Outlined Pill Button */}
             <Link
-              href="/shop"
+              href="/search"
               className="self-start px-4 py-1.5 rounded-xl border border-gray-800/50 text-[#010101] text-xs font-semibold hover:bg-black/5 transition-colors"
             >
               View more
@@ -728,7 +712,7 @@ function ProductTabs({ rating, reviewsCount }: { rating: number; reviewsCount: n
 // ─── Similar Finds Component ─────────────────────────────────────────────────
 const SIMILAR_PRODUCTS = [
   {
-    id: "na-1",
+    id: "denim-jacket",
     badge: "50% OFF",
     title: "Urban Classic Denim Jacket",
     price: "₦32,400",
@@ -738,7 +722,7 @@ const SIMILAR_PRODUCTS = [
     image: "/products/denim_jacket.png",
   },
   {
-    id: "na-2",
+    id: "oxford-shirt",
     badge: "50% OFF",
     title: "Classic Oxford Shirt",
     price: "₦32,400",
@@ -748,7 +732,7 @@ const SIMILAR_PRODUCTS = [
     image: "/products/oxford_shirt.png",
   },
   {
-    id: "na-3",
+    id: "hoodie",
     badge: "50% OFF",
     title: "Premium Streetwear Hoodie",
     price: "₦32,400",
@@ -758,7 +742,7 @@ const SIMILAR_PRODUCTS = [
     image: "/products/hoodie.png",
   },
   {
-    id: "na-4",
+    id: "linen-coat",
     badge: "50% OFF",
     title: "Urban Tailored Linen Coat",
     price: "₦32,400",
@@ -768,24 +752,24 @@ const SIMILAR_PRODUCTS = [
     image: "/products/linen_coat.png",
   },
   {
-    id: "aj-blue",
-    badge: "POPULAR",
-    title: "Air Jordan 1 Retro High OG - University Blue",
-    price: "₦450,000",
-    originalPrice: "₦520,000",
+    id: "pixel-10-pro",
+    badge: "HOT",
+    title: "Google Pixel 10 Pro 5G",
+    price: "₦1,350,000",
+    originalPrice: "₦1,450,000",
     rating: 4.9,
-    reviews: "3.2k",
-    image: "/products/hero/air_jordan_blue.png",
+    reviews: "940",
+    image: "/products/pixel_10.png",
   },
   {
-    id: "aj-brown",
-    badge: "POPULAR",
-    title: "Air Jordan 1 Retro High OG - Dark Mocha",
-    price: "₦450,000",
-    originalPrice: "₦520,000",
-    rating: 4.8,
-    reviews: "1.8k",
-    image: "/products/hero/air_jordan_brown.png",
+    id: "ps5-spiderman",
+    badge: "LIMITED",
+    title: "PlayStation 5 Console Spider-Man Edition",
+    price: "₦850,000",
+    originalPrice: "₦950,000",
+    rating: 4.9,
+    reviews: "2.1k",
+    image: "/products/spiderman_ps5.png",
   },
 ];
 
@@ -838,7 +822,7 @@ function SimilarFinds() {
         </div>
 
         <Link
-          href="/shop"
+          href="/search"
           className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
         >
           <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">

@@ -22,7 +22,7 @@ function Logo() {
 
 function Nav() {
   return (
-    <nav className="sticky top-0 z-40 bg-page/85 dark:bg-[#111614]/85 backdrop-blur-[12px] border-b border-line dark:border-[#2A312A] transition-colors">
+    <nav className="sticky top-0 z-40 bg-page/85 dark:bg-[#DDDAD4]/85 backdrop-blur-[12px] border-b border-line dark:border-[#2A312A] transition-colors">
       <div className="max-w-[1120px] mx-auto px-7 flex items-center justify-between h-[68px]">
         <Logo />
         <div className="hidden md:flex gap-[30px] text-[15px] font-medium text-txt-2 dark:text-[#A3B0A5]">
@@ -149,6 +149,10 @@ function Footer() {
 }
 
 import { Header } from "./_components/landing/header";
+import { CartProvider } from "./_components/cart-context";
+import { WishlistProvider } from "./_components/wishlist-context";
+import { AuthModalProvider } from "./_components/auth-modal-context";
+import { AuthModal } from "./_components/auth-modal";
 
 export default function StorefrontLayout({
   children,
@@ -158,8 +162,18 @@ export default function StorefrontLayout({
   return (
     <ThemeProvider>
       <ErrorBoundary>
-        <Header />
-        {children}
+        <AuthModalProvider>
+          <WishlistProvider>
+            <CartProvider>
+              {/* ── Max-width shell: centers the entire storefront at extreme zoom-out ── */}
+              <div className="relative mx-auto w-full max-w-[1600px] min-h-screen bg-white shadow-[0_0_0_1px_#e0ddd6]">
+                <Header />
+                {children}
+                <AuthModal />
+              </div>
+            </CartProvider>
+          </WishlistProvider>
+        </AuthModalProvider>
       </ErrorBoundary>
     </ThemeProvider>
   );

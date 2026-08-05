@@ -10,7 +10,7 @@ import { Footer } from "./_components/landing/footer";
 
 export default function LandingPage() {
   return (
-    <main className="bg-white min-h-screen">
+    <main className="bg-white min-h-screen filter-card-scroll">
       <Hero />
       <Bestsellers />
       <Categories />

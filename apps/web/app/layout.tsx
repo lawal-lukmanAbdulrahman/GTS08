@@ -48,7 +48,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${display.variable} ${body.variable} ${mono.variable} ${serif.variable}`}
     >
-      <body className="font-body text-txt bg-page dark:bg-[#111614] dark:text-[#E8EDE9] transition-colors duration-300">{children}</body>
+      <body className="font-body text-txt bg-page dark:bg-[#DDDAD4] dark:text-[#E8EDE9] transition-colors duration-300">{children}</body>
     </html>
   );
 }

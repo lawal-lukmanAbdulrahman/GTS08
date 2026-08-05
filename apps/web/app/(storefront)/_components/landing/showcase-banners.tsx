@@ -21,7 +21,7 @@ const SHOWCASE_CARDS: ShowcaseCard[] = [
     title: "Street-Ready Styles",
     subtitle: "Stay sharp with bold, urban fashion essentials.",
     image: "/products/fashion_section.jpg",
-    href: "/categories/fashion",
+    href: "/search?category=Fashion",
   },
   {
     id: "2",
@@ -31,7 +31,7 @@ const SHOWCASE_CARDS: ShowcaseCard[] = [
     title: "Everyday Classics",
     subtitle: "Timeless designs for your daily lifestyle.",
     image: "/products/home_and_office_section.jpg",
-    href: "/categories/home-office",
+    href: "/search?category=Home%20%26%20Office",
   },
   {
     id: "3",
@@ -39,7 +39,7 @@ const SHOWCASE_CARDS: ShowcaseCard[] = [
     title: "Fresh Kicks Only",
     subtitle: "Elevate your collection with top tier drops.",
     image: "/products/health_and_beauty_section.jpg",
-    href: "/categories/health-beauty",
+    href: "/search?category=Health%20%26%20Beauty",
   },
   {
     id: "4",
@@ -49,7 +49,7 @@ const SHOWCASE_CARDS: ShowcaseCard[] = [
     title: "Tailored to Impress",
     subtitle: "Precision crafted gear engineered to perform.",
     image: "/products/computing_section.jpg",
-    href: "/categories/computing",
+    href: "/search?category=Computing",
   },
 ];
 

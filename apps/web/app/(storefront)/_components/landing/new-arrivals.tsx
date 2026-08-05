@@ -4,60 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { ProductCard } from "../ui/product-card";
+import { REAL_PRODUCTS } from "../../_data/products";
 
-interface Product {
-  id: string;
-  badge?: string;
-  title: string;
-  price: string;
-  originalPrice?: string;
-  rating: number;
-  reviews: string;
-  image: string;
-}
-
-const PRODUCTS: Product[] = [
-  {
-    id: "na-1",
-    badge: "50% OFF",
-    title: "Urban Classic Denim Jacket",
-    price: "₦32,400",
-    originalPrice: "₦64,800",
-    rating: 4.8,
-    reviews: "1.2k",
-    image: "/products/denim_jacket.png",
-  },
-  {
-    id: "na-2",
-    badge: "50% OFF",
-    title: "Classic Oxford Shirt",
-    price: "₦32,400",
-    originalPrice: "₦64,800",
-    rating: 4.9,
-    reviews: "850",
-    image: "/products/oxford_shirt.png",
-  },
-  {
-    id: "na-3",
-    badge: "50% OFF",
-    title: "Premium Streetwear Hoodie",
-    price: "₦32,400",
-    originalPrice: "₦64,800",
-    rating: 4.7,
-    reviews: "2.1k",
-    image: "/products/hoodie.png",
-  },
-  {
-    id: "na-4",
-    badge: "50% OFF",
-    title: "Urban Tailored Linen Coat",
-    price: "₦32,400",
-    originalPrice: "₦64,800",
-    rating: 4.9,
-    reviews: "1.5k",
-    image: "/products/linen_coat.png",
-  },
-];
+// 6 products for a 3×2 grid — Fashion first, then fill with others
+const FASHION = REAL_PRODUCTS.filter((p) => p.category === "Fashion");
+const OTHERS  = REAL_PRODUCTS.filter((p) => p.category !== "Fashion");
+const PRODUCTS = [...FASHION, ...OTHERS].slice(0, 6);
 
 function SparkleStar() {
   return (
@@ -72,20 +24,19 @@ function SparkleStar() {
 
 export function NewArrivals() {
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
-
-  const toggleWishlist = (id: string) => {
+  const toggleWishlist = (id: string) =>
     setWishlisted((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
 
   return (
-    <section className="w-full px-3 md:px-4 pt-1 sm:pt-2 md:pt-3 pb-3 sm:pb-10 md:pb-12">
-      {/* ── Crossed Banner Strips Marquee Wrapper (New Arrivals Full Bleed Edge-to-Edge) ── */}
-      <div className="relative -mx-3 md:-mx-4 w-[calc(100%+1.5rem)] md:w-[calc(100%+2rem)] overflow-hidden my-6 sm:my-10 py-12 sm:py-16 flex items-center justify-center select-none bg-white">
-        {/* Strip 1: Angled Upwards (-rotate-3), Sliding Left */}
+    <section className="w-full pt-1 sm:pt-2 md:pt-3 pb-3 sm:pb-10 md:pb-12">
+
+      {/* ── Crossed Banner Strips Marquee — full bleed ── */}
+      <div className="relative w-full overflow-hidden my-6 sm:my-10 py-12 sm:py-16 flex items-center justify-center select-none bg-white">
+        {/* Strip 1: angled upward, slides left */}
         <div className="absolute w-[150%] -left-[25%] bg-[#010101] text-white py-3 sm:py-4.5 border-y border-white -rotate-3 sm:-rotate-4 z-10 flex items-center overflow-hidden">
           <div className="animate-marquee-infinite flex items-center whitespace-nowrap text-lg sm:text-2xl md:text-3xl font-extrabold tracking-tight uppercase font-sans">
-            {[1, 2].map((groupKey) => (
-              <div key={groupKey} className="flex items-center">
+            {[1, 2].map((k) => (
+              <div key={k} className="flex items-center">
                 <span className="text-white">NEW ARRIVALS</span>
                 <SparkleStar />
                 <span className="text-white font-serif italic">JUST DROPPED</span>
@@ -98,12 +49,11 @@ export function NewArrivals() {
             ))}
           </div>
         </div>
-
-        {/* Strip 2: Angled Downwards (rotate-3), Sliding Right */}
+        {/* Strip 2: angled downward, slides right */}
         <div className="absolute w-[150%] -left-[25%] bg-[#010101] text-white py-3 sm:py-4.5 border-y border-white rotate-3 sm:rotate-4 z-20 flex items-center overflow-hidden">
           <div className="animate-marquee-reverse flex items-center whitespace-nowrap text-lg sm:text-2xl md:text-3xl font-extrabold tracking-tight uppercase font-sans">
-            {[1, 2].map((groupKey) => (
-              <div key={groupKey} className="flex items-center">
+            {[1, 2].map((k) => (
+              <div key={k} className="flex items-center">
                 <span className="text-[#EDCF5D]">DISCOVER NEW ARRIVALS</span>
                 <SparkleStar />
                 <span className="text-white">EXCLUSIVE DROPS</span>
@@ -117,37 +67,33 @@ export function NewArrivals() {
           </div>
         </div>
       </div>
-      {/* ── Section Header matching Crazy Finds & Bestsellers ── */}
-      <div className="flex justify-between items-end mb-4 sm:mb-5">
-        <div>
-          <h2 className="text-lg sm:text-xl md:text-3xl font-normal text-[#010101] tracking-tight flex items-center gap-2">
-            Fresh Season <span className="text-[#EDCF5D] font-bold">✦</span>
-            <span className="font-serif italic font-bold text-[#010101]">New Arrivals</span>
-          </h2>
-        </div>
 
-        {/* See More Link */}
+      {/* ── Section Header (has its own padding) ── */}
+      <div className="flex justify-between items-end mb-4 sm:mb-5 px-3 md:px-4">
+        <h2 className="text-lg sm:text-xl md:text-3xl font-normal text-[#010101] tracking-tight flex items-center gap-2">
+          Fresh Season <span className="text-[#EDCF5D] font-bold">✦</span>
+          <span className="font-serif italic font-bold text-[#010101]">New Arrivals</span>
+        </h2>
         <Link
-          href="/shop"
+          href="/search"
           className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
         >
-          <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">
-            See more
-          </span>
+          <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">See more</span>
           <span className="group-hover:translate-x-0.5 transition-transform inline-block">→</span>
         </Link>
       </div>
 
-      {/* ── Grid Layout: Compact 2x2 Products (Left) + Promo Banner (Right) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4.5 items-stretch">
-        
-        {/* Left Side: Compact 2x2 Product Grid */}
-        <div className="lg:col-span-6 xl:col-span-6 grid grid-cols-2 gap-3 sm:gap-4">
-          {PRODUCTS.map((product) => {
-            const isWishlisted = wishlisted[product.id];
-            return (
+      {/* ── Full-bleed layout: 3×2 grid + promo banner ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_380px] items-stretch">
+
+        {/* Left: 2 cols on mobile, 3 cols on sm+ product grid — zero outer padding */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 border-t border-b border-gray-100 divide-x divide-y divide-gray-100">
+          {PRODUCTS.map((product) => (
+            <div
+              key={product.id}
+              className="flex items-center justify-center py-4 sm:py-5 px-1.5 sm:px-3 bg-white hover:bg-[#FAFAF8] transition-colors"
+            >
               <ProductCard
-                key={product.id}
                 id={product.id}
                 title={product.title}
                 price={product.price}
@@ -156,44 +102,35 @@ export function NewArrivals() {
                 rating={product.rating}
                 reviews={product.reviews}
                 image={product.image}
-                isWishlisted={isWishlisted}
+                isWishlisted={wishlisted[product.id]}
                 onToggleWishlist={toggleWishlist}
-                className="w-full max-w-[230px] sm:max-w-[250px] md:max-w-[270px] justify-self-center"
+                className="w-full max-w-[165px] sm:max-w-[190px]"
               />
-            );
-          })}
+            </div>
+          ))}
         </div>
 
-        {/* Right Side: Compact Promo Banner */}
-        <div className="lg:col-span-6 xl:col-span-6 min-h-[300px] sm:min-h-[340px] lg:min-h-full rounded-[14px] overflow-hidden relative group/banner flex flex-col justify-end p-5 sm:p-7 border border-gray-200/60 shadow-xs">
-          {/* Background Image */}
+        {/* Right: promo banner — hidden on mobile, shown lg+ */}
+        <div className="hidden lg:flex relative group/banner flex-col justify-end p-6 sm:p-8 border-l border-t border-b border-gray-100 overflow-hidden">
           <Image
             src="/banner_img.jpg"
             alt="Enjoy 50% Off Promo"
             fill
             className="object-cover object-center group-hover/banner:scale-105 transition-transform duration-700"
-            sizes="(max-width: 1024px) 100vw, 40vw"
+            sizes="380px"
           />
-
-          {/* Dark Overlay Gradient */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent z-10 pointer-events-none" />
-
-          {/* Banner Content */}
-          <div className="relative z-20 text-center flex flex-col items-center max-w-xs sm:max-w-sm mx-auto">
+          <div className="relative z-20 text-center flex flex-col items-center">
             <h3 className="text-xl sm:text-2xl md:text-3xl font-serif leading-tight mb-2 tracking-tight text-white">
               Enjoy 50% Off Your First{" "}
-              <span className="font-serif italic font-bold text-white">
-                GTS Order
-              </span>
+              <span className="font-serif italic font-bold">GTS Order</span>
             </h3>
-
-            <p className="text-xs text-gray-200/90 font-light leading-relaxed mb-4">
-              Join GTS today and unlock exclusive member savings on curated modern fashion designed to elevate your everyday look.
+            <p className="text-xs text-gray-200/90 font-light leading-relaxed mb-4 max-w-[220px]">
+              Join GTS today and unlock exclusive member savings on curated modern fashion.
             </p>
-
             <Link
-              href="/shop"
-              className="inline-block px-6 py-2 rounded-full border border-white/70 text-white hover:bg-white hover:text-black transition-all text-xs font-medium backdrop-blur-xs tracking-wide shadow-xs"
+              href="/search"
+              className="inline-block px-6 py-2 rounded-full border border-white/70 text-white hover:bg-white hover:text-black transition-all text-xs font-medium tracking-wide"
             >
               Shop Collection
             </Link>

@@ -5,100 +5,11 @@ import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { ProductCard } from "../ui/product-card";
 
-interface Product {
-  id: string;
-  badge?: string;
-  title: string;
-  price: string;
-  originalPrice?: string;
-  rating: number;
-  reviews: string;
-  category: string;
-  image: string;
-}
+import { REAL_PRODUCTS } from "../../_data/products";
 
-const PRODUCTS: Product[] = [
-  {
-    id: "1",
-    badge: "15% OFF",
-    title: "Night Serum for Sensitive Skin",
-    price: "₦9,490",
-    originalPrice: "₦12,880",
-    rating: 4.8,
-    reviews: "1k Review",
-    category: "Serum",
-    image: "/products/blender-removebg-preview.png",
-  },
-  {
-    id: "2",
-    title: "Acne Cream Green Tea Extract",
-    price: "₦10,980",
-    rating: 4.9,
-    reviews: "2k Review",
-    category: "Moisturizer",
-    image: "/products/pot-removebg-preview.png",
-  },
-  {
-    id: "3",
-    badge: "15% OFF",
-    title: "Hair Shampoo Treatment",
-    price: "₦19,860",
-    originalPrice: "₦15,480",
-    rating: 5.0,
-    reviews: "1k Review",
-    category: "Shampoo",
-    image: "/products/juicer-removebg-preview.png",
-  },
-  {
-    id: "4",
-    title: "Face Serum for Normal Skin",
-    price: "₦12,970",
-    rating: 4.9,
-    reviews: "2k Review",
-    category: "Serum",
-    image: "/products/microwave-removebg-preview.png",
-  },
-  {
-    id: "5",
-    badge: "20% OFF",
-    title: "Hydrating Sunscreen Lotion SPF 50",
-    price: "₦14,500",
-    originalPrice: "₦18,000",
-    rating: 4.7,
-    reviews: "850 Review",
-    category: "Sunscreen",
-    image: "/products/standing_fan-removebg-preview.png",
-  },
-  {
-    id: "6",
-    title: "Eco Herbal Cleansing Soap Bar",
-    price: "₦8,250",
-    rating: 4.9,
-    reviews: "3k Review",
-    category: "Soap",
-    image: "/products/toasters-removebg-preview.png",
-  },
-  {
-    id: "7",
-    badge: "15% OFF",
-    title: "Revitalizing Collagen Eye Mask Set",
-    price: "$22.00",
-    originalPrice: "$26.00",
-    rating: 4.8,
-    reviews: "1.2k Review",
-    category: "Eye Mask",
-    image: "/products/tv-removebg-preview.png",
-  },
-  {
-    id: "8",
-    title: "Nourishing Organic Lip Balm",
-    price: "$6.99",
-    rating: 4.9,
-    reviews: "4k Review",
-    category: "Lip Balm",
-    image: "/products/blender-removebg-preview (1).png",
-  },
-];
+const PRODUCTS = REAL_PRODUCTS.filter((p) =>
+  ["POPULAR", "BESTSELLER", "HOT", "PREMIUM", "LUXURY"].includes(p.badge || "")
+);
 
 export function Bestsellers() {
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
@@ -155,7 +66,7 @@ export function Bestsellers() {
         </div>
 
         <Link
-          href="/shop"
+          href="/search"
           className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
         >
           <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">
@@ -208,7 +119,7 @@ export function Bestsellers() {
                 image={product.image}
                 isWishlisted={isWishlisted}
                 onToggleWishlist={toggleWishlist}
-                className="w-[230px] sm:w-[250px] md:w-[270px] shrink-0"
+                className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0"
               />
             );
           })}

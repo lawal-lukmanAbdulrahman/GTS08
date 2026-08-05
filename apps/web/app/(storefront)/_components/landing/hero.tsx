@@ -96,7 +96,7 @@ const HERO_PRODUCTS: HeroProduct[] = [
   },
   {
     id: "nexus-washer",
-    slug: "nexus-washer",
+    slug: "nexus-washing-machine",
     headline: "Nexus V8 Pro\nSmart Washer",
     tagline: "Eco Inverter Direct Drive with AI Fabric Care",
     price: "₦480,000",

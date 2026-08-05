@@ -20,7 +20,7 @@ const CATEGORIES: CategoryCard[] = [
     titleMain: "Home &",
     titleItalic: "Office",
     image: "/products/home_and_office_section.jpg",
-    href: "/categories/home-office",
+    href: "/search?category=Home%20%26%20Office",
   },
   {
     id: "2",
@@ -28,7 +28,7 @@ const CATEGORIES: CategoryCard[] = [
     titleMain: "Smart",
     titleItalic: "Appliances",
     image: "/products/appliance_section.webp",
-    href: "/categories/appliances",
+    href: "/search?category=Appliances",
   },
   {
     id: "3",
@@ -36,7 +36,7 @@ const CATEGORIES: CategoryCard[] = [
     titleMain: "Computing",
     titleItalic: "Gear",
     image: "/products/computing_section.jpg",
-    href: "/categories/computing",
+    href: "/search?category=Computing",
   },
   {
     id: "4",
@@ -44,31 +44,31 @@ const CATEGORIES: CategoryCard[] = [
     titleMain: "Gaming",
     titleItalic: "Zone",
     image: "/products/gaming_section.jpg",
-    href: "/categories/gaming",
+    href: "/search?category=Gaming",
   },
   {
     id: "5",
     subtitle: "Explore",
     titleMain: "Phones &",
-    titleItalic: "Tech",
+    titleItalic: "Tablets",
     image: "/products/phones_section.jpg",
-    href: "/categories/phones",
+    href: "/search?category=Phones%20%26%20Tablets",
   },
   {
     id: "6",
     subtitle: "Explore",
-    titleMain: "Fashion &",
-    titleItalic: "Style",
-    image: "/products/fashion_section.jpg",
-    href: "/categories/fashion",
+    titleMain: "Health &",
+    titleItalic: "Beauty",
+    image: "/products/health_and_beauty_section.jpg",
+    href: "/search?category=Health%20%26%20Beauty",
   },
   {
     id: "7",
     subtitle: "Explore",
-    titleMain: "Health &",
-    titleItalic: "Beauty",
-    image: "/products/health_and_beauty_section.jpg",
-    href: "/categories/health-beauty",
+    titleMain: "Fashion &",
+    titleItalic: "Apparel",
+    image: "/products/fashion_section.jpg",
+    href: "/search?category=Fashion",
   },
   {
     id: "8",
@@ -76,7 +76,7 @@ const CATEGORIES: CategoryCard[] = [
     titleMain: "Baby",
     titleItalic: "Essentials",
     image: "/products/baby_products_section.jpg",
-    href: "/categories/baby",
+    href: "/search?category=Baby%20Products",
   },
   {
     id: "9",
@@ -84,7 +84,7 @@ const CATEGORIES: CategoryCard[] = [
     titleMain: "Fresh",
     titleItalic: "Groceries",
     image: "/products/groceries_section.jpg",
-    href: "/categories/groceries",
+    href: "/search?category=Supermarket",
   },
 ];
 
@@ -139,7 +139,7 @@ export function Categories() {
         </div>
 
         <Link
-          href="/shop"
+          href="/search"
           className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
         >
           <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">

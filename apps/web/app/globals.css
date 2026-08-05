@@ -66,7 +66,7 @@
   }
 
   .dark {
-    --color-page: #111614;
+    --color-page: #DDDAD4;
     --color-card: #1A201B;
     --color-card-alt: #1E2520;
     --color-line: #2A312A;
@@ -120,6 +120,10 @@
   body {
     -webkit-font-smoothing: antialiased;
     transition: background-color 0.3s ease, color 0.3s ease;
+    /* Neutral gutter color shown at extreme zoom-out / ultrawide viewports */
+    background-color: #DEDAD4;
+    /* Prevent horizontal scroll at the page level */
+    overflow-x: hidden;
   }
 
   :focus-visible {
@@ -217,3 +221,64 @@
 .product-panel-scroll::-webkit-scrollbar-thumb:hover {
   background-color: #010101 !important;
 }
+
+/* Horizontal scrollbar for Search Modal last viewed items */
+.search-card-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f3f4f6;
+}
+
+.search-card-scroll::-webkit-scrollbar {
+  display: block !important;
+  height: 5px !important;
+}
+
+.search-card-scroll::-webkit-scrollbar-track {
+  background: #f3f4f6 !important;
+  border-radius: 9999px !important;
+}
+
+.search-card-scroll::-webkit-scrollbar-thumb {
+  background-color: #d1d5db !important;
+  border-radius: 9999px !important;
+}
+
+.search-card-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #010101 !important;
+}
+
+/* Left scrollbar for Filter Card */
+.filter-card-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #c0bdb7 #f2f0ea;
+}
+
+.filter-card-scroll::-webkit-scrollbar {
+  display: block !important;
+  width: 5px !important;
+}
+
+.filter-card-scroll::-webkit-scrollbar-track {
+  background: #f2f0ea !important;
+  border-radius: 9999px !important;
+}
+
+.filter-card-scroll::-webkit-scrollbar-thumb {
+  background-color: #c0bdb7 !important;
+  border-radius: 9999px !important;
+}
+
+.filter-card-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #010101 !important;
+}
+
+/* Hide scrollbars cleanly */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+}
+
+
