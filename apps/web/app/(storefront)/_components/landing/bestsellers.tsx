@@ -7,8 +7,9 @@ import { ProductCard } from "../ui/product-card";
 
 import { REAL_PRODUCTS } from "../../_data/products";
 
+// Strictly Household, Appliances, Electronics & Home items for Bestsellers section
 const PRODUCTS = REAL_PRODUCTS.filter((p) =>
-  ["POPULAR", "BESTSELLER", "HOT", "PREMIUM", "LUXURY"].includes(p.badge || "")
+  ["Appliances", "Electronics", "Home & Office", "Supermarket"].includes(p.category)
 );
 
 export function Bestsellers() {
@@ -56,94 +57,97 @@ export function Bestsellers() {
 
   return (
     <section className="w-full px-3 md:px-4 pt-3 sm:pt-4 md:pt-5 pb-3 sm:pb-4 md:pb-5">
-      {/* ── Section Header ── */}
-      <div className="flex justify-between items-end mb-5 sm:mb-6">
-        <div>
-          <h2 className="text-lg sm:text-xl md:text-3xl font-normal text-[#010101] tracking-tight flex items-center gap-2">
-            Bestselling <span className="text-[#EDCF5D] font-bold">✦</span>
-            <span className="font-serif italic font-bold text-[#010101]">Products</span>
-          </h2>
+      <div className="max-w-[1240px] mx-auto">
+        {/* ── Section Header ── */}
+        <div className="flex justify-between items-end mb-5 sm:mb-6">
+          <div>
+            <h2 className="text-lg sm:text-xl md:text-3xl font-normal text-[#010101] tracking-tight flex items-center gap-2">
+              Bestselling <span className="text-[#EDCF5D] font-bold">✦</span>
+              <span className="font-serif italic font-bold text-[#010101]">Products</span>
+            </h2>
+          </div>
+
+          <Link
+            href="/search"
+            className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
+          >
+            <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">
+              More products
+            </span>
+            <span className="group-hover:translate-x-0.5 transition-transform inline-block">→</span>
+          </Link>
         </div>
 
-        <Link
-          href="/search"
-          className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
-        >
-          <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">
-            More products
-          </span>
-          <span className="group-hover:translate-x-0.5 transition-transform inline-block">→</span>
-        </Link>
-      </div>
+        {/* ── Cards Carousel Row ── */}
+        <div className="relative group overflow-hidden">
+          {/* Left Fade Overlay */}
+          <div
+            className={`absolute left-0 top-0 bottom-0 w-10 sm:w-14 bg-gradient-to-r from-white/80 via-white/40 to-transparent z-10 pointer-events-none transition-opacity duration-300 ${
+              canScrollLeft ? "opacity-100" : "opacity-0"
+            }`}
+          />
 
-      {/* ── Cards Carousel Row ── */}
-      <div className="relative group overflow-hidden">
-        {/* Left Fade Overlay */}
-        <div
-          className={`absolute left-0 top-0 bottom-0 w-10 sm:w-14 bg-gradient-to-r from-white/80 via-white/40 to-transparent z-10 pointer-events-none transition-opacity duration-300 ${
-            canScrollLeft ? "opacity-100" : "opacity-0"
-          }`}
-        />
+          {/* Left Arrow Button */}
+          <button
+            aria-label="Previous products"
+            onClick={handleScrollLeft}
+            className={`absolute left-3 sm:left-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md ${
+              canScrollLeft ? "opacity-100 flex" : "opacity-0 pointer-events-none hidden"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
 
-        {/* Left Arrow Button */}
-        <button
-          aria-label="Previous products"
-          onClick={handleScrollLeft}
-          className={`absolute left-3 sm:left-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md ${
-            canScrollLeft ? "opacity-100 flex" : "opacity-0 pointer-events-none hidden"
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
+          {/* Scrollable Products Row */}
+          <div
+            ref={scrollContainerRef}
+            className="flex gap-4 sm:gap-5 overflow-x-auto scroll-smooth no-scrollbar py-1"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
+            {PRODUCTS.map((product) => {
+              const isWishlisted = wishlisted[product.id];
+              return (
+                <ProductCard
+                  key={product.id}
+                  id={product.id}
+                  title={product.title}
+                  price={product.price}
+                  originalPrice={product.originalPrice}
+                  badge={product.badge}
+                  rating={product.rating}
+                  reviews={product.reviews}
+                  image={product.image}
+                  hasTransparentBg={product.hasTransparentBg}
+                  isWishlisted={isWishlisted}
+                  onToggleWishlist={toggleWishlist}
+                  className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0"
+                />
+              );
+            })}
+          </div>
 
-        {/* Scrollable Products Row */}
-        <div
-          ref={scrollContainerRef}
-          className="flex gap-4 sm:gap-5 overflow-x-auto scroll-smooth no-scrollbar py-1"
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-        >
-          {PRODUCTS.map((product) => {
-            const isWishlisted = wishlisted[product.id];
-            return (
-              <ProductCard
-                key={product.id}
-                id={product.id}
-                title={product.title}
-                price={product.price}
-                originalPrice={product.originalPrice}
-                badge={product.badge}
-                rating={product.rating}
-                reviews={product.reviews}
-                image={product.image}
-                isWishlisted={isWishlisted}
-                onToggleWishlist={toggleWishlist}
-                className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0"
-              />
-            );
-          })}
+          {/* Right Fade Overlay */}
+          <div
+            className={`absolute right-0 top-0 bottom-0 w-10 sm:w-14 bg-gradient-to-l from-white/80 via-white/40 to-transparent z-10 pointer-events-none transition-opacity duration-300 ${
+              canScrollRight ? "opacity-100" : "opacity-0"
+            }`}
+          />
+
+          {/* Right Arrow Button */}
+          <button
+            aria-label="Next products"
+            onClick={handleScrollRight}
+            className={`absolute right-3 sm:right-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md ${
+              canScrollRight ? "opacity-100 flex" : "opacity-0 pointer-events-none hidden"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
         </div>
-
-        {/* Right Fade Overlay */}
-        <div
-          className={`absolute right-0 top-0 bottom-0 w-10 sm:w-14 bg-gradient-to-l from-white/80 via-white/40 to-transparent z-10 pointer-events-none transition-opacity duration-300 ${
-            canScrollRight ? "opacity-100" : "opacity-0"
-          }`}
-        />
-
-        {/* Right Arrow Button */}
-        <button
-          aria-label="Next products"
-          onClick={handleScrollRight}
-          className={`absolute right-3 sm:right-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md ${
-            canScrollRight ? "opacity-100 flex" : "opacity-0 pointer-events-none hidden"
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
       </div>
     </section>
   );

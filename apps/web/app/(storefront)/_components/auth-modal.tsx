@@ -4,6 +4,10 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthModal } from "./auth-modal-context";
+import { useAuth } from "./auth-context";
+import { authenticateWithPasskey } from "./auth/passkey-client";
+import { checkPasskeySupport } from "./auth/webauthn-utils";
+import { PinInput } from "./auth/pin-input";
 
 // ── 4 Auto-advancing Story Items for GTS (E-Commerce Marketplace) ──
 const STORIES = [
@@ -53,12 +57,56 @@ const slideVariants = {
 
 export function AuthModal() {
   const { isOpen, mode, closeAuthModal, setMode } = useAuthModal();
+  const { signInWithPassword, signInWithOtp, signUp } = useAuth();
 
+  const [authMethod, setAuthMethod] = useState<"password" | "magic_link" | "pin">("password");
+  const [loginPin, setLoginPin] = useState("");
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [passkeySupported, setPasskeySupported] = useState(false);
+
+  useEffect(() => {
+    checkPasskeySupport().then((res) => setPasskeySupported(res.supported));
+  }, []);
+
+  const handlePasskeyLogin = async () => {
+    setPasskeyLoading(true);
+    setStatusMessage(null);
+    try {
+      const support = await checkPasskeySupport();
+      if (!support.supported) {
+        setStatusMessage({
+          text: "Passkeys are not supported on this browser or platform. Please sign in with your email or password.",
+          type: "error",
+        });
+        return;
+      }
+
+      const res = await authenticateWithPasskey();
+      if (res.success) {
+        setStatusMessage({ text: "Passkey sign-in successful! Welcome back.", type: "success" });
+        setTimeout(() => {
+          closeAuthModal();
+          window.location.reload();
+        }, 800);
+      } else {
+        setStatusMessage({ text: res.error || "Passkey verification failed.", type: "error" });
+      }
+    } catch (err: any) {
+      setStatusMessage({ text: err.message || "Failed to authenticate with passkey.", type: "error" });
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
+
   const [storyIndex, setStoryIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const [progress, setProgress] = useState(0);
@@ -69,6 +117,7 @@ export function AuthModal() {
   useEffect(() => {
     if (!isOpen) {
       setProgress(0);
+      setStatusMessage(null);
       return undefined;
     }
 
@@ -133,10 +182,119 @@ export function AuthModal() {
     setProgress(0);
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [shakingField, setShakingField] = useState<"email" | "password" | null>(null);
+
+  const triggerFieldShake = (field: "email" | "password") => {
+    setShakingField(field);
+    setTimeout(() => setShakingField(null), 500);
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert(mode === "login" ? "Successfully logged in to GTS!" : "Account created successfully!");
-    closeAuthModal();
+    setEmailError(null);
+    setPasswordError(null);
+    setStatusMessage(null);
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setEmailError("Please enter your email address.");
+      triggerFieldShake("email");
+      return;
+    }
+
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setEmailError("Invalid email format. Please verify your address.");
+      triggerFieldShake("email");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      if (authMethod === "magic_link") {
+        const res = await signInWithOtp(cleanEmail);
+        if (res.error) {
+          setStatusMessage({ text: res.error, type: "error" });
+        } else {
+          setStatusMessage({
+            text: "Magic login link sent! Check your inbox to sign in instantly.",
+            type: "success",
+          });
+        }
+      } else if (mode === "login" && authMethod === "pin") {
+        if (loginPin.length !== 6 || !/^\d{6}$/.test(loginPin)) {
+          setStatusMessage({ text: "Please enter your complete 6-digit PIN.", type: "error" });
+          setIsSubmitting(false);
+          return;
+        }
+
+        const pinRes = await fetch("/api/v1/auth/pin-login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: cleanEmail, pin: loginPin }),
+        });
+        const pinData = await pinRes.json();
+        if (!pinRes.ok || !pinData.success) {
+          setStatusMessage({ text: pinData.error || "Incorrect PIN. Please try again.", type: "error" });
+        } else {
+          setStatusMessage({ text: "Signed in successfully with PIN!", type: "success" });
+          setTimeout(() => {
+            closeAuthModal();
+            window.location.reload();
+          }, 600);
+        }
+      } else if (mode === "login") {
+        if (!password) {
+          setPasswordError("Please enter your password.");
+          triggerFieldShake("password");
+          setIsSubmitting(false);
+          return;
+        }
+
+        const res = await signInWithPassword(cleanEmail, password);
+        if (res.error) {
+          setStatusMessage({ text: res.error, type: "error" });
+        } else {
+          setStatusMessage({ text: "Signed in successfully!", type: "success" });
+          setTimeout(() => {
+            closeAuthModal();
+          }, 600);
+        }
+      } else {
+        // Signup mode
+        if (!password || password.length < 8) {
+          setPasswordError("Password must be at least 8 characters.");
+          triggerFieldShake("password");
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (password !== confirmPassword) {
+          setPasswordError("Passwords do not match.");
+          triggerFieldShake("password");
+          setIsSubmitting(false);
+          return;
+        }
+
+        const res = await signUp(cleanEmail, password, fullName, phone);
+        if (res.error) {
+          setStatusMessage({ text: res.error, type: "error" });
+        } else {
+          setStatusMessage({
+            text: "Account created successfully! You are now logged in.",
+            type: "success",
+          });
+          setTimeout(() => {
+            closeAuthModal();
+          }, 800);
+        }
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -255,97 +413,225 @@ export function AuthModal() {
                   </motion.button>
                 </div>
 
-                {/* Form Title */}
-                <h2 className="font-sans text-2xl sm:text-3xl font-extrabold text-[#010101] tracking-tight mb-5">
-                  {mode === "login" ? "Welcome Back!" : "Create Your Account!"}
-                </h2>
+                {/* Form Title & Auth Method Selector */}
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <h2 className="font-sans text-xl sm:text-2xl font-extrabold text-[#010101] tracking-tight">
+                    {mode === "login" ? "Welcome Back!" : "Create Your Account!"}
+                  </h2>
+
+                  {/* Method Pill Toggle */}
+                  <div className="flex items-center bg-gray-100 p-0.5 rounded-full text-[11px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setAuthMethod("password")}
+                      className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
+                        authMethod === "password"
+                          ? "bg-white text-[#010101] shadow-xs"
+                          : "text-gray-500 hover:text-gray-800"
+                      }`}
+                    >
+                      Password
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAuthMethod("magic_link")}
+                      className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
+                        authMethod === "magic_link"
+                          ? "bg-[#010101] text-white shadow-xs"
+                          : "text-gray-500 hover:text-gray-800"
+                      }`}
+                    >
+                      Link
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status Notice Banner */}
+                {statusMessage && (
+                  <div
+                    className={`mb-4 px-3.5 py-2.5 rounded-2xl text-xs font-semibold flex items-center gap-2 ${
+                      statusMessage.type === "success"
+                        ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                        : "bg-rose-50 text-rose-800 border border-rose-200"
+                    }`}
+                  >
+                    {statusMessage.type === "success" ? (
+                      <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                      </svg>
+                    )}
+                    <span>{statusMessage.text}</span>
+                  </div>
+                )}
 
                 {/* Interactive Form */}
-                <form onSubmit={handleFormSubmit} className="space-y-3.5">
+                <form onSubmit={handleFormSubmit} className="space-y-3">
+                  {/* Signup Specific: Full Name & Phone */}
+                  {mode === "signup" && authMethod === "password" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1 font-sans">
+                          Full Name
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Micah Okoh"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          className="w-full rounded-full border border-gray-200/90 bg-white px-3.5 py-2.5 text-xs sm:text-sm font-medium text-[#010101] placeholder-gray-400 focus:border-[#010101] focus:ring-1 focus:ring-[#010101] outline-none shadow-2xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1 font-sans">
+                          Phone Number
+                        </label>
+                        <input
+                          type="tel"
+                          placeholder="+234 800 000 0000"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          className="w-full rounded-full border border-gray-200/90 bg-white px-3.5 py-2.5 text-xs sm:text-sm font-medium text-[#010101] placeholder-gray-400 focus:border-[#010101] focus:ring-1 focus:ring-[#010101] outline-none shadow-2xs"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Email Field */}
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 font-sans">
-                      Email
+                      Email Address
                     </label>
                     <input
                       type="email"
-                      required
-                      placeholder="magikapro@mail.com"
+                      placeholder="shopper@example.com"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full rounded-full border border-gray-200/90 bg-white px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium text-[#010101] placeholder-gray-400 focus:border-[#010101] focus:ring-1 focus:ring-[#010101] outline-none transition-all shadow-2xs"
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (emailError) setEmailError(null);
+                      }}
+                      className={`w-full rounded-full border px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium text-[#010101] placeholder-gray-400 outline-none transition-all shadow-2xs ${
+                        emailError
+                          ? "border-red-500 ring-2 ring-red-500/20 bg-red-50/20"
+                          : "border-gray-200/90 bg-white focus:border-[#010101] focus:ring-1 focus:ring-[#010101]"
+                      }`}
                     />
+                    {emailError && (
+                      <p className="text-red-600 text-[11px] font-semibold mt-1 px-2 flex items-center gap-1 font-sans">
+                        <svg className="w-3.5 h-3.5 shrink-0 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                        </svg>
+                        <span>{emailError}</span>
+                      </p>
+                    )}
                   </div>
 
-                  {/* Password Field */}
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1 font-sans">
-                      Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        required
-                        placeholder="Type your password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full rounded-full border border-gray-200/90 bg-white px-4 py-2.5 sm:py-3 pr-10 text-xs sm:text-sm font-medium text-[#010101] placeholder-gray-400 focus:border-[#010101] focus:ring-1 focus:ring-[#010101] outline-none transition-all shadow-2xs"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((prev) => !prev)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition-colors p-1"
-                      >
-                        {showPassword ? (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
-                          </svg>
-                        ) : (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12c1.349-3.638 5.02-6.5 9.964-6.5 4.944 0 8.615 2.862 9.964 6.5-1.349 3.638-5.02 6.5-9.964 6.5-4.944 0-8.615-2.862-9.964-6.5z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Forgot Password (Login Mode) */}
-                    {mode === "login" && (
-                      <div className="text-right mt-1">
+                  {/* Password Field (Only shown in Password mode) */}
+                  {authMethod === "password" && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 font-sans">
+                        Password
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Type your password"
+                          value={password}
+                          onChange={(e) => {
+                            setPassword(e.target.value);
+                            if (passwordError) setPasswordError(null);
+                          }}
+                          className={`w-full rounded-full border px-4 py-2.5 sm:py-3 pr-10 text-xs sm:text-sm font-medium text-[#010101] placeholder-gray-400 outline-none transition-all shadow-2xs ${
+                            passwordError
+                              ? "border-red-500 ring-2 ring-red-500/20 bg-red-50/20"
+                              : "border-gray-200/90 bg-white focus:border-[#010101] focus:ring-1 focus:ring-[#010101]"
+                          }`}
+                        />
                         <button
                           type="button"
-                          onClick={() => alert("Password reset link sent to your email!")}
-                          className="text-[11px] font-semibold text-gray-500 hover:text-[#010101] hover:underline transition-colors"
+                          onClick={() => setShowPassword((prev) => !prev)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition-colors p-1"
                         >
-                          Forgot Password?
+                          {showPassword ? (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12c1.349-3.638 5.02-6.5 9.964-6.5 4.944 0 8.615 2.862 9.964 6.5-1.349 3.638-5.02 6.5-9.964 6.5-4.944 0-8.615-2.862-9.964-6.5z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                          )}
                         </button>
                       </div>
-                    )}
+                      {passwordError && (
+                        <p className="text-red-600 text-[11px] font-semibold mt-1 px-2 flex items-center gap-1 font-sans">
+                          <svg className="w-3.5 h-3.5 shrink-0 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                          </svg>
+                          <span>{passwordError}</span>
+                        </p>
+                      )}
 
-                    {/* Password Rules Validation (Signup Mode) */}
-                    {mode === "signup" && (
-                      <div className="mt-2 space-y-0.5">
-                        <span className="text-[10px] sm:text-[11px] font-medium text-gray-500 block">
-                          Password must contains :
-                        </span>
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
-                          <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                          </svg>
-                          <span>Minimum 8 character</span>
+                      {/* Alternate Login Links */}
+                      {mode === "login" && (
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-gray-500 mt-1.5 px-1">
+                          <button
+                            type="button"
+                            onClick={() => setAuthMethod("pin")}
+                            className="hover:text-[#010101] hover:underline transition-colors"
+                          >
+                            Sign in with 6-digit PIN?
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAuthMethod("magic_link")}
+                            className="hover:text-[#010101] hover:underline transition-colors"
+                          >
+                            Sign in with Link?
+                          </button>
                         </div>
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
-                          <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                          </svg>
-                          <span>Must have alphabetic & numeric character</span>
-                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* PIN Field (Only shown in PIN mode) */}
+                  {authMethod === "pin" && (
+                    <div className="space-y-3 pt-1 text-center">
+                      <label className="block text-xs font-bold text-gray-700 font-sans">
+                        Enter your 6-Digit PIN
+                      </label>
+                      <PinInput
+                        value={loginPin}
+                        onChange={setLoginPin}
+                        length={6}
+                        autoFocus
+                        idPrefix="modal-pin"
+                      />
+                      <div className="flex items-center justify-between text-[11px] font-semibold text-gray-500 pt-2 px-1">
+                        <button
+                          type="button"
+                          onClick={() => setAuthMethod("password")}
+                          className="hover:text-[#010101] hover:underline"
+                        >
+                          Sign in with Password?
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAuthMethod("magic_link")}
+                          className="hover:text-[#010101] hover:underline"
+                        >
+                          Sign in with Link?
+                        </button>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
-                  {/* Confirm Password Field (Signup Mode) */}
-                  {mode === "signup" && (
+                  {/* Confirm Password (Signup Mode) */}
+                  {mode === "signup" && authMethod === "password" && (
                     <div>
                       <label className="block text-xs font-bold text-gray-700 mb-1 font-sans">
                         Confirm Password
@@ -353,8 +639,7 @@ export function AuthModal() {
                       <div className="relative">
                         <input
                           type={showConfirmPassword ? "text" : "password"}
-                          required
-                          placeholder="Type your password"
+                          placeholder="Re-enter password"
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           className="w-full rounded-full border border-gray-200/90 bg-white px-4 py-2.5 sm:py-3 pr-10 text-xs sm:text-sm font-medium text-[#010101] placeholder-gray-400 focus:border-[#010101] focus:ring-1 focus:ring-[#010101] outline-none transition-all shadow-2xs"
@@ -379,13 +664,48 @@ export function AuthModal() {
                     </div>
                   )}
 
-                  {/* Primary Action Pill Button */}
+                  {/* Primary Action Button */}
                   <button
                     type="submit"
-                    className="w-full rounded-full bg-[#010101] text-white py-3 sm:py-3.5 font-bold text-xs sm:text-sm hover:bg-[#EDCF5D] hover:text-[#010101] transition-all shadow-md active:scale-[0.98] mt-4 font-sans"
+                    disabled={isSubmitting}
+                    className="w-full rounded-full bg-[#010101] text-white py-3 sm:py-3.5 font-bold text-xs sm:text-sm hover:bg-[#EDCF5D] hover:text-[#010101] transition-all shadow-md active:scale-[0.98] mt-4 font-sans disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    {mode === "login" ? "Login" : "Create account"}
+                    {isSubmitting ? (
+                      <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : authMethod === "magic_link" ? (
+                      "Send  Link"
+                    ) : authMethod === "pin" ? (
+                      "Sign In with PIN"
+                    ) : mode === "login" ? (
+                      "Sign In"
+                    ) : (
+                      "Create Account"
+                    )}
                   </button>
+
+                  {/* Passkey Login Button */}
+                  {mode === "login" && (
+                    <button
+                      type="button"
+                      onClick={handlePasskeyLogin}
+                      disabled={passkeyLoading || isSubmitting}
+                      className="w-full py-2.5 sm:py-3 rounded-full border border-gray-300 hover:border-[#010101] bg-[#FAF9F6] hover:bg-white text-[#010101] font-bold text-xs sm:text-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-2xs active:scale-[0.98] mt-2.5 group"
+                    >
+                      {passkeyLoading ? (
+                        <>
+                          <span className="inline-block w-4 h-4 border-2 border-[#010101] border-t-transparent rounded-full animate-spin" />
+                          <span>Verifying Passkey...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4 text-[#010101] group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                          </svg>
+                          <span>Sign in with Passkey</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </form>
               </div>
 

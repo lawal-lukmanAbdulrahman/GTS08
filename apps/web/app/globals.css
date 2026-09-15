@@ -1,5 +1,6 @@
 @import url('https://fonts.cdnfonts.com/css/athelas');
 @import url('https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,300,400&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=Courier+Prime:wght@400;700&family=Montserrat:wght@400;600;700;900&family=Oswald:wght@500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap");
 
 @font-face {
   font-family: 'Athelas';
@@ -92,7 +93,13 @@
     --color-badge-done-text: #A3B0A5;
   }
 
+  html,
+  body {
+    background-color: #ffffff;
+  }
+
   html {
+    font-size: 90%;
     scroll-behavior: smooth;
     -ms-overflow-style: none;
     scrollbar-width: none;

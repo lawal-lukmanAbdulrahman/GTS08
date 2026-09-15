@@ -572,13 +572,13 @@ export function CategoryMegaMenu() {
       <button
         onClick={toggleMenu}
         aria-expanded={isOpen}
-        className={`flex items-center justify-between min-w-[125px] sm:min-w-[165px] h-9 sm:h-[38px] text-[#010101] text-xs sm:text-sm font-medium pl-4 sm:pl-5 pr-1 rounded-full transition-colors duration-200 group shrink-0 ${
+        className={`flex items-center justify-between min-w-[125px] sm:min-w-[155px] h-9 sm:h-[38px] text-[#010101] text-xs sm:text-sm font-medium pl-4 sm:pl-5 pr-[4px] sm:pr-[5px] rounded-full transition-colors duration-200 group shrink-0 ${
           isOpen ? "bg-[#EDCF5D]" : "bg-[#F2F0EA] hover:bg-[#EDCF5D]"
         }`}
       >
         <span className="font-semibold text-[#010101]">Categories</span>
         <div
-          className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white shadow-2xs flex items-center justify-center text-[#010101] shrink-0 transition-transform duration-300 ${
+          className={`w-7 h-7 sm:w-7 sm:h-7 rounded-full bg-white shadow-2xs flex items-center justify-center text-[#010101] shrink-0 transition-transform duration-300 ${
             isOpen ? "rotate-180" : ""
           }`}
         >

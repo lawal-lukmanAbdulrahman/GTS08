@@ -1,6 +1,7 @@
 {
   "name": "@gts/config",
   "version": "0.0.0",
+  "type": "module",
   "private": true,
   "exports": {
     "./tsconfig.base": "./tsconfig.base.json",

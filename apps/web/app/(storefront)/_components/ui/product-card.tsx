@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useCart } from "../cart-context";
 import { useWishlist } from "../wishlist-context";
 import { REAL_PRODUCTS } from "../../_data/products";
+import { saveRecentlyViewed } from "../landing/search-history";
 
 export interface ProductCardProps {
   id: string;
@@ -46,7 +47,7 @@ export function ProductCard({
   originalPrice,
   badge,
   image,
-  hasTransparentBg = true,
+  hasTransparentBg,
   className = "",
   isWishlisted: externalIsWishlisted,
   onToggleWishlist,
@@ -57,6 +58,15 @@ export function ProductCard({
   const [added, setAdded] = useState(false);
   const { addToCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
+
+  // Resolve transparent background:
+  // 1. If explicit boolean passed, use it.
+  // 2. Otherwise look up in REAL_PRODUCTS.
+  // 3. Fallback to false (no padding, full bleed cover)
+  const isTransparent =
+    typeof hasTransparentBg === "boolean"
+      ? hasTransparentBg
+      : (REAL_PRODUCTS.find((p) => p.id === id)?.hasTransparentBg ?? false);
 
   const isWishlisted =
     externalIsWishlisted !== undefined ? externalIsWishlisted : isInWishlist(id);
@@ -97,7 +107,7 @@ export function ProductCard({
         images: [{ color: "default", label: "Default", main: image, thumbnails: [image] }],
         sizes: ["Standard"],
         tags: [],
-        hasTransparentBg,
+        hasTransparentBg: isTransparent,
       };
 
       addToCart(fullProduct);
@@ -113,16 +123,29 @@ export function ProductCard({
   return (
     <div className={`flex flex-col group/card transition-all duration-300 ${className}`}>
       {/* Clickable Image & Title Area linking to Product Detail Page */}
-      <Link href={`/product/${productSlug}`} className="flex flex-col flex-1">
+      <Link
+        href={`/product/${productSlug}`}
+        onClick={() => {
+          saveRecentlyViewed({
+            id,
+            slug: productSlug,
+            title,
+            price,
+            discountBadge: badge,
+            image,
+          });
+        }}
+        className="flex flex-col flex-1"
+      >
         {/* ── Image Box ── */}
         <div
           className={`relative w-full aspect-[4/4.2] rounded-[14px] overflow-hidden flex items-center justify-center border border-gray-200/80 ${
-            hasTransparentBg ? "p-3.5" : "p-0 bg-[#F2F0EA]"
+            isTransparent ? "p-3 sm:p-3.5" : "p-0"
           }`}
           style={
-            hasTransparentBg
+            isTransparent
               ? { background: "radial-gradient(ellipse at center, #ECEAE6 0%, #DDDAD4 100%)" }
-              : undefined
+              : { background: "#F2F0EA" }
           }
         >
           {/* Top-Right Discount Badge — matching hero section */}
@@ -140,7 +163,7 @@ export function ProductCard({
             <button
               aria-label="Add to wishlist"
               onClick={handleWishlistClick}
-              className="absolute bottom-2.5 right-2.5 z-10 bg-[#010101] text-white p-2 rounded-full shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center"
+              className="absolute bottom-2.5 right-2.5 z-10 bg-[#010101] text-white p-2 rounded-full shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
             >
               <svg
                 className="w-4 h-4 transition-colors"
@@ -164,8 +187,8 @@ export function ProductCard({
             alt={title}
             fill
             className={`transition-transform duration-500 group-hover/card:scale-105 ${
-              hasTransparentBg
-                ? "object-contain object-center p-3.5"
+              isTransparent
+                ? "object-contain object-center"
                 : "object-cover object-center p-0"
             }`}
             sizes="(max-width: 768px) 50vw, 20vw"
@@ -175,9 +198,14 @@ export function ProductCard({
         {/* ── Card Body ── */}
         <div className="pt-2 flex flex-col flex-1 items-center text-center gap-1">
           {/* Title — fixed height so all card prices & buttons align horizontally */}
-          <h3 className="w-full h-8 sm:h-9 flex items-center justify-center text-xs sm:text-sm font-semibold text-[#010101] leading-tight line-clamp-2 text-center group-hover/card:text-[#010101]">
-            {title}
-          </h3>
+          <div className="w-full h-8 sm:h-9 flex items-center justify-center">
+            <h3
+              title={title}
+              className="w-full text-xs sm:text-sm font-semibold text-[#010101] leading-tight line-clamp-2 text-center group-hover/card:text-[#010101]"
+            >
+              {title}
+            </h3>
+          </div>
 
           {/* Compact Price — refined smaller font */}
           <div className="flex items-baseline justify-center gap-1.5 w-full">

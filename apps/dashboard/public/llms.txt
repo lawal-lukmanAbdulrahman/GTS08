@@ -1,0 +1,3 @@
+# GTS — Unified retail operating system
+# Online storefront, in-store POS, inventory, and admin dashboard
+# for Nigerian men's wear brands.

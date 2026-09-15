@@ -152,7 +152,10 @@ import { Header } from "./_components/landing/header";
 import { CartProvider } from "./_components/cart-context";
 import { WishlistProvider } from "./_components/wishlist-context";
 import { AuthModalProvider } from "./_components/auth-modal-context";
+import { AuthProvider } from "./_components/auth-context";
 import { AuthModal } from "./_components/auth-modal";
+import { CookieConsentBanner } from "./_components/cookie-banner";
+import { BroadcastModal } from "./_components/broadcast-modal";
 
 export default function StorefrontLayout({
   children,
@@ -162,18 +165,25 @@ export default function StorefrontLayout({
   return (
     <ThemeProvider>
       <ErrorBoundary>
-        <AuthModalProvider>
-          <WishlistProvider>
-            <CartProvider>
-              {/* ── Max-width shell: centers the entire storefront at extreme zoom-out ── */}
-              <div className="relative mx-auto w-full max-w-[1600px] min-h-screen bg-white shadow-[0_0_0_1px_#e0ddd6]">
-                <Header />
-                {children}
-                <AuthModal />
-              </div>
-            </CartProvider>
-          </WishlistProvider>
-        </AuthModalProvider>
+        <AuthProvider>
+          <AuthModalProvider>
+            <WishlistProvider>
+              <CartProvider>
+                {/* ── Full-width white background wrapper for zoom-out excess space ── */}
+                <div className="w-full min-h-screen bg-white">
+                  {/* ── Max-width shell: centers the entire storefront at extreme zoom-out ── */}
+                  <div className="relative mx-auto w-full max-w-[1600px] min-h-screen bg-white">
+                    <Header />
+                    {children}
+                    <AuthModal />
+                    <CookieConsentBanner />
+                    <BroadcastModal />
+                  </div>
+                </div>
+              </CartProvider>
+            </WishlistProvider>
+          </AuthModalProvider>
+        </AuthProvider>
       </ErrorBoundary>
     </ThemeProvider>
   );

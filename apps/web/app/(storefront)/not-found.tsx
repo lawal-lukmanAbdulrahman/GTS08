@@ -111,6 +111,7 @@ export default function NotFound() {
                   rating={product.rating}
                   reviews={product.reviews}
                   image={product.image}
+                  hasTransparentBg={product.hasTransparentBg}
                   className="w-full"
                 />
               ))}

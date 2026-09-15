@@ -376,7 +376,7 @@ export default function CartPage() {
           </div>
         ) : (
           /* ── Empty Cart State ── */
-          <div className="bg-white rounded-3xl p-12 text-center border border-gray-200/80 shadow-sm max-w-lg mx-auto my-12 flex flex-col items-center">
+          <div className="flex flex-col items-center justify-center text-center py-12 sm:py-16 px-4 my-8 max-w-md mx-auto">
             <div className="w-20 h-20 rounded-full bg-[#F2F0EA] flex items-center justify-center mb-5 text-[#010101]">
               <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
@@ -426,6 +426,7 @@ export default function CartPage() {
                 rating={p.rating}
                 reviews={p.reviews}
                 image={p.image}
+                hasTransparentBg={p.hasTransparentBg}
                 className="w-full"
               />
             ))}

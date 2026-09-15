@@ -1,46 +1,175 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useCart } from "../_components/cart-context";
+import { useAuth } from "../_components/auth-context";
+import { useAuthModal } from "../_components/auth-modal-context";
 import { Footer } from "../_components/landing/footer";
+import { idempotentFetch } from "@gts/utils";
 
-// ─── Nigerian States for Region/City dropdowns ────────────────────────────────
-const NIGERIAN_STATES = [
-  "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue",
-  "Borno", "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu",
-  "FCT - Abuja", "Gombe", "Imo", "Jigawa", "Kaduna", "Kano", "Katsina",
-  "Kebbi", "Kogi", "Kwara", "Lagos", "Nasarawa", "Niger", "Ogun", "Ondo",
-  "Osun", "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara",
-];
+import { NIGERIAN_STATES, NIGERIAN_LOCATIONS } from "../_data/nigerian-locations";
 
-const CITIES_BY_STATE: Record<string, string[]> = {
-  "Lagos": ["Ikeja", "Lekki", "Surulere", "Victoria Island", "Yaba", "Alimosho", "Badagry", "Epe"],
-  "FCT - Abuja": ["Garki", "Wuse", "Maitama", "Asokoro", "Gwarinpa", "Kubwa", "Lugbe"],
-  "Rivers": ["Port Harcourt", "Obio-Akpor", "Eleme", "Oyigbo", "Bonny"],
-  "Kano": ["Kano Municipal", "Fagge", "Dala", "Nassarawa", "Gwale"],
-  "Oyo": ["Ibadan North", "Ibadan South-West", "Ogbomosho", "Oyo", "Iseyin"],
-};
+interface PickupStation {
+  id: string;
+  name: string;
+  state: string;
+  city: string;
+  address: string;
+  closeTo: string;
+  phone: string;
+  hours: string;
+  fee: number;
+  feeFormatted: string;
+  googleMapsUrl: string;
+  mapX: number;
+  mapY: number;
+}
 
-const SAVED_ADDRESSES = [
+const GTS_CHECKOUT_PICKUP_STATIONS: PickupStation[] = [
+  // Kwara / Ilorin
   {
-    id: "addr-1",
-    name: "Micah Okoh",
-    phone: "+234 913 511 8669",
-    address: "12 Balogun Street, Victoria Island",
-    city: "Victoria Island",
-    state: "Lagos",
-    isDefault: true,
+    id: "ps_ilorin_airport",
+    name: "GTS Pickup Station Ilorin Airport Rd",
+    state: "Kwara",
+    city: "Ilorin",
+    address: "Suite A, Adebayo Yusuf House, opposite International Airport Ilorin.",
+    closeTo: "Beside Donrich Educational Services",
+    phone: "07055211380",
+    hours: "Mon-Fri 8 AM - 6PM; SAT 9 AM - 5PM",
+    fee: 1100,
+    feeFormatted: "₦ 1,100",
+    googleMapsUrl: "https://maps.google.com/?q=Airport+Road+Ilorin",
+    mapX: 68,
+    mapY: 53,
   },
   {
-    id: "addr-2",
-    name: "Micah Okoh",
-    phone: "+234 913 511 8669",
-    address: "Flat 4B, Royal Apartments, Gwarinpa",
-    city: "Gwarinpa",
-    state: "FCT - Abuja",
-    isDefault: false,
+    id: "ps_alimi_road",
+    name: "GTS Pickup Station Alimi Road",
+    state: "Kwara",
+    city: "Ilorin",
+    address: "Shop 3 opposite SD Oladeji Filling station, Okolowo Ayelabowo, Ilorin, Kwara State.",
+    closeTo: "SD Oladeji Filling station",
+    phone: "08031234567",
+    hours: "8:00am-6:00pm; 9:00am-5:00pm",
+    fee: 1100,
+    feeFormatted: "₦ 1,100",
+    googleMapsUrl: "https://maps.google.com/?q=Alimi+Road+Ilorin",
+    mapX: 74,
+    mapY: 50,
+  },
+  {
+    id: "ps_ilorin_stadium",
+    name: "GTS Pickup Station Ilorin Stadium",
+    state: "Kwara",
+    city: "Ilorin",
+    address: "No. 52, Stadium Road, off Ibrahim Taiwo road, Ilorin, Kwara State",
+    closeTo: "Olumo Building",
+    phone: "08149876543",
+    hours: "Mon-Fri 9:00am - 6:00pm; Sat 9am",
+    fee: 1100,
+    feeFormatted: "₦ 1,100",
+    googleMapsUrl: "https://maps.google.com/?q=Stadium+Road+Ilorin",
+    mapX: 71,
+    mapY: 48,
+  },
+  {
+    id: "ps_ilorin_gambari",
+    name: "GTS Pickup Station Ilorin Gambari Road",
+    state: "Kwara",
+    city: "Ilorin",
+    address: "Balogun Gambari Road, beside Balogun Fulani Microfinance Bank, Ilorin Kwara State",
+    closeTo: "Balogun Fulani Microfinance Bank",
+    phone: "09023456789",
+    hours: "Mon-Fri 8am-6pm; Sat 9am-5pm",
+    fee: 1100,
+    feeFormatted: "₦ 1,100",
+    googleMapsUrl: "https://maps.google.com/?q=Gambari+Road+Ilorin",
+    mapX: 76,
+    mapY: 46,
+  },
+
+  // Lagos
+  {
+    id: "ps_ikeja",
+    name: "GTS Pickup Station Ikeja City Hub",
+    state: "Lagos",
+    city: "Ikeja",
+    address: "14 Medical Road, Computer Village, Ikeja, Lagos",
+    closeTo: "Under Bridge / Ikeja City Mall",
+    phone: "08021112233",
+    hours: "Mon-Fri 8 AM - 7PM; SAT 9 AM - 6PM",
+    fee: 1100,
+    feeFormatted: "₦ 1,100",
+    googleMapsUrl: "https://maps.google.com/?q=Ikeja+Lagos",
+    mapX: 45,
+    mapY: 40,
+  },
+  {
+    id: "ps_vi",
+    name: "GTS Pickup Station Victoria Island",
+    state: "Lagos",
+    city: "Victoria Island",
+    address: "Plot 8 Adeola Odeku Street, Victoria Island, Lagos",
+    closeTo: "Silverbird Galleria",
+    phone: "08032223344",
+    hours: "Mon-Fri 9 AM - 7PM; SAT 10 AM - 5PM",
+    fee: 1100,
+    feeFormatted: "₦ 1,100",
+    googleMapsUrl: "https://maps.google.com/?q=Victoria+Island+Lagos",
+    mapX: 55,
+    mapY: 60,
+  },
+  {
+    id: "ps_lekki",
+    name: "GTS Pickup Station Lekki Phase 1",
+    state: "Lagos",
+    city: "Lekki",
+    address: "Admiralty Way, Opposite Domino's Pizza, Lekki Phase 1, Lagos",
+    closeTo: "Ebeano Supermarket",
+    phone: "08093334455",
+    hours: "Mon-Sat 8:30 AM - 6:30 PM",
+    fee: 1100,
+    feeFormatted: "₦ 1,100",
+    googleMapsUrl: "https://maps.google.com/?q=Lekki+Phase+1+Lagos",
+    mapX: 65,
+    mapY: 58,
+  },
+
+  // Abuja (FCT)
+  {
+    id: "ps_wuse2",
+    name: "GTS Pickup Station Wuse 2",
+    state: "Abuja (FCT)",
+    city: "Wuse 2",
+    address: "12 Aminu Kano Crescent, Wuse 2, Abuja",
+    closeTo: "Banex Plaza",
+    phone: "08055556677",
+    hours: "Mon-Sat 8:30 AM - 6 PM",
+    fee: 1100,
+    feeFormatted: "₦ 1,100",
+    googleMapsUrl: "https://maps.google.com/?q=Wuse+2+Abuja",
+    mapX: 50,
+    mapY: 45,
+  },
+
+  // Rivers / Port Harcourt
+  {
+    id: "ps_phc",
+    name: "GTS Pickup Station Port Harcourt GRA",
+    state: "Rivers",
+    city: "Port Harcourt",
+    address: "23 Aba Road, beside Garrison Junction, Port Harcourt, Rivers State",
+    closeTo: "Garrison Roundabout",
+    phone: "08077778899",
+    hours: "Mon-Sat 8 AM - 6 PM",
+    fee: 1100,
+    feeFormatted: "₦ 1,100",
+    googleMapsUrl: "https://maps.google.com/?q=Port+Harcourt+GRA",
+    mapX: 52,
+    mapY: 50,
   },
 ];
 
@@ -60,14 +189,14 @@ const DELIVERY_OPTIONS = [
   {
     id: "pickup",
     label: "Pickup Station",
-    description: "Collect at a nearby GTS pickup hub",
+    description: "Collect at a nearby GTS pickup hub close to you",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
         <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     ),
-    fee: "₦500",
+    fee: "₦1,100",
     eta: "Same-day to 2 days",
   },
   {
@@ -106,31 +235,9 @@ const PAYMENT_OPTIONS = [
     ),
   },
   {
-    id: "palmpay",
-    label: "PalmPay",
-    description: "To use this option, you must be registered with PalmPay",
-    group: "prepay",
-    iconBadge: (
-      <div className="relative w-11 h-5 flex items-center justify-end">
-        <Image src="/payments/palmpay.png" alt="PalmPay" fill className="object-contain object-right" />
-      </div>
-    ),
-  },
-  {
-    id: "opay",
-    label: "OPay",
-    description: "To use this option, you must be registered with OPay",
-    group: "prepay",
-    iconBadge: (
-      <div className="relative w-11 h-5 flex items-center justify-end">
-        <Image src="/payments/opay.png" alt="OPay" fill className="object-contain object-right" />
-      </div>
-    ),
-  },
-  {
     id: "paystack",
     label: "Pay with Bank Cards – Paystack",
-    description: "You can pay with cards via Paystack",
+    description: "Instant, verified payment processing",
     group: "prepay",
     iconBadge: (
       <div className="relative w-14 h-5 flex items-center justify-end">
@@ -140,7 +247,6 @@ const PAYMENT_OPTIONS = [
   },
 ];
 
-// ─── Floating Label Input ─────────────────────────────────────────────────────
 function FloatingInput({
   id,
   label,
@@ -187,7 +293,6 @@ function FloatingInput({
   );
 }
 
-// ─── Floating Label Select ────────────────────────────────────────────────────
 function FloatingSelect({
   id,
   label,
@@ -199,7 +304,7 @@ function FloatingSelect({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  options: string[];
+  options: readonly string[] | string[];
 }) {
   const isUp = value.length > 0;
   return (
@@ -225,23 +330,22 @@ function FloatingSelect({
       >
         {label}
       </label>
-      <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center">
-        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+      <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </div>
     </div>
   );
 }
 
-// ─── Stepper Dot ─────────────────────────────────────────────────────────────
 function StepDot({ step, current, total }: { step: number; current: number; total: number }) {
-  const done = step < current;
-  const active = step === current;
+  const done = current > step;
+  const active = current === step;
   return (
-    <div className="flex flex-col items-center relative h-full">
+    <div className="flex flex-col items-center relative">
       <div
-        className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm transition-all border-2 shrink-0 z-10 ${
+        className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm transition-all border-2 ${
           done
             ? "bg-[#010101] border-[#010101] text-white shadow-xs"
             : active
@@ -268,20 +372,358 @@ function StepDot({ step, current, total }: { step: number; current: number; tota
   );
 }
 
-// ─── Main Checkout Page ───────────────────────────────────────────────────────
+function PickupStationModal({
+  isOpen,
+  onClose,
+  selectedStationId,
+  onSelectStation,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  selectedStationId: string;
+  onSelectStation: (stationId: string) => void;
+}) {
+  const [activeId, setActiveId] = useState(selectedStationId);
+  const initialStation =
+    GTS_CHECKOUT_PICKUP_STATIONS.find((s) => s.id === selectedStationId) ||
+    GTS_CHECKOUT_PICKUP_STATIONS[0]!;
+  const [filterState, setFilterState] = useState(initialStation.state);
+  const [filterCity, setFilterCity] = useState(initialStation.city);
+
+  useEffect(() => {
+    setActiveId(selectedStationId);
+    const st = GTS_CHECKOUT_PICKUP_STATIONS.find((s) => s.id === selectedStationId);
+    if (st) {
+      setFilterState(st.state);
+      setFilterCity(st.city);
+    }
+  }, [selectedStationId, isOpen]);
+
+  if (!isOpen) return null;
+
+  const states = Array.from(new Set(GTS_CHECKOUT_PICKUP_STATIONS.map((s) => s.state)));
+  const citiesForState = Array.from(
+    new Set(GTS_CHECKOUT_PICKUP_STATIONS.filter((s) => s.state === filterState).map((s) => s.city))
+  );
+
+  const filteredStations = GTS_CHECKOUT_PICKUP_STATIONS.filter(
+    (s) => s.state === filterState && (filterCity ? s.city === filterCity : true)
+  );
+
+  const activeStation =
+    GTS_CHECKOUT_PICKUP_STATIONS.find((s) => s.id === activeId) ||
+    filteredStations[0] ||
+    GTS_CHECKOUT_PICKUP_STATIONS[0]!;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-5 bg-black/60 backdrop-blur-xs font-sans animate-in fade-in duration-200">
+      <div
+        className="bg-white rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-3.5 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="font-bold text-base sm:text-lg text-[#010101]">
+            Select a Pick-up station close to you
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-[#010101] hover:bg-gray-100 transition-colors cursor-pointer"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* State and City Filter Pills */}
+        <div className="px-5 py-2.5 border-b border-gray-100 bg-[#FAF9F6] flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <select
+              value={filterState}
+              onChange={(e) => {
+                const newState = e.target.value;
+                setFilterState(newState);
+                const matching = GTS_CHECKOUT_PICKUP_STATIONS.filter((s) => s.state === newState);
+                if (matching.length > 0) {
+                  setFilterCity(matching[0]!.city);
+                  setActiveId(matching[0]!.id);
+                }
+              }}
+              className="appearance-none bg-[#FFF8F2] border border-[#FDBA74] text-[#C2410C] text-xs font-bold rounded-lg px-3 py-1.5 pr-7 focus:outline-none focus:ring-1 focus:ring-orange-400 cursor-pointer shadow-2xs"
+            >
+              {states.map((st) => (
+                <option key={st} value={st}>{st}</option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#EA580C]">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+
+          <div className="relative">
+            <select
+              value={filterCity}
+              onChange={(e) => {
+                const newCity = e.target.value;
+                setFilterCity(newCity);
+                const matching = GTS_CHECKOUT_PICKUP_STATIONS.filter(
+                  (s) => s.state === filterState && s.city === newCity
+                );
+                if (matching.length > 0) {
+                  setActiveId(matching[0]!.id);
+                }
+              }}
+              className="appearance-none bg-[#FFF8F2] border border-[#FDBA74] text-[#C2410C] text-xs font-bold rounded-lg px-3 py-1.5 pr-7 focus:outline-none focus:ring-1 focus:ring-orange-400 cursor-pointer shadow-2xs"
+            >
+              {citiesForState.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#EA580C]">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Body: Left List & Right Map */}
+        <div className="grid grid-cols-1 md:grid-cols-12 flex-1 min-h-0 overflow-hidden">
+          {/* Left Column: Stations List */}
+          <div className="md:col-span-5 border-r border-gray-200 flex flex-col overflow-y-auto max-h-[35vh] md:max-h-[520px] p-3 space-y-2.5 [scrollbar-width:thin]">
+            {filteredStations.map((station) => {
+              const isSelected = activeId === station.id;
+              return (
+                <div
+                  key={station.id}
+                  onClick={() => setActiveId(station.id)}
+                  className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all ${
+                    isSelected
+                      ? "border-[#EA580C] bg-[#FFF8F2]/60 ring-1 ring-[#EA580C]/40"
+                      : "border-gray-200 hover:border-gray-300 bg-white"
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <div
+                      className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                        isSelected ? "border-[#EA580C]" : "border-gray-300"
+                      }`}
+                    >
+                      {isSelected && <div className="w-2 h-2 rounded-full bg-[#EA580C]" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-1">
+                        <h4 className="font-bold text-xs sm:text-sm text-[#010101] leading-tight">
+                          {station.name}
+                        </h4>
+                        <span className="text-xs font-bold text-[#EA580C] shrink-0">
+                          {station.feeFormatted}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-600 mt-1 leading-snug">
+                        {station.address}
+                      </p>
+                      <p className="text-[11px] text-gray-700 mt-1 flex items-center gap-1.5 font-medium">
+                        <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                        </svg>
+                        <span>Close to: {station.closeTo}</span>
+                      </p>
+                      <p className="text-[10px] text-gray-500 mt-0.5 flex items-center gap-1.5">
+                        <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Opening hours: {station.hours}</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Right Column: Map & Floating Callout Card */}
+          <div className="md:col-span-7 flex flex-col relative bg-[#F5F3EC] min-h-[360px] md:min-h-[520px] overflow-hidden">
+            {/* Styled Interactive Map Canvas */}
+            <div className="absolute inset-0 select-none overflow-hidden">
+              <svg
+                className="w-full h-full object-cover"
+                viewBox="0 0 600 500"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <rect width="600" height="500" fill="#EFEFE6" />
+                <path d="M 0 0 L 250 0 C 230 80, 290 140, 240 220 C 180 300, 150 400, 100 500 L 0 500 Z" fill="#E7EAE0" />
+                <path d="M 450 0 C 420 120, 520 200, 480 340 C 450 440, 520 480, 600 500 L 600 0 Z" fill="#E9EDE4" />
+
+                {/* Rivers */}
+                <path d="M 380 0 C 370 80, 410 130, 390 200 C 360 290, 420 380, 370 500" stroke="#C8DFE8" strokeWidth="14" strokeLinecap="round" fill="none" />
+                <path d="M 390 200 C 330 220, 280 230, 230 260 C 180 290, 150 350, 120 420" stroke="#D3E5EC" strokeWidth="8" strokeLinecap="round" fill="none" />
+
+                {/* Highways & Roads */}
+                <path d="M 0 350 Q 200 300, 360 270 T 600 150" stroke="#FDE047" strokeWidth="5" fill="none" />
+                <path d="M 120 0 Q 240 180, 360 270 T 520 500" stroke="#FB923C" strokeWidth="4.5" fill="none" />
+                <path d="M 360 270 L 390 500" stroke="#F87171" strokeWidth="3.5" fill="none" />
+                <path d="M 280 0 L 290 500" stroke="#CBD5E1" strokeWidth="2.5" fill="none" />
+                <path d="M 0 180 L 600 240" stroke="#CBD5E1" strokeWidth="2" fill="none" />
+                <path d="M 180 120 L 520 380" stroke="#CBD5E1" strokeWidth="2" strokeDasharray="4 2" fill="none" />
+                <path d="M 320 220 Q 370 240, 420 260" stroke="#FFFFFF" strokeWidth="3" fill="none" />
+
+                {/* Geography Labels */}
+                <text x="365" y="255" fill="#4B5563" fontSize="11" fontWeight="bold" fontFamily="sans-serif">Ilorin</text>
+                <text x="210" y="390" fill="#6B7280" fontSize="10" fontWeight="600" fontFamily="sans-serif">Ogbomosho</text>
+                <text x="440" y="370" fill="#6B7280" fontSize="10" fontWeight="600" fontFamily="sans-serif">Ijagbo Offa</text>
+                <text x="450" y="405" fill="#9CA3AF" fontSize="9" fontFamily="sans-serif">Erin Ile</text>
+                <text x="410" y="340" fill="#9CA3AF" fontSize="8" fontFamily="sans-serif">Oyun</text>
+                <text x="480" y="300" fill="#9CA3AF" fontSize="8" fontFamily="sans-serif">Ajasse Ipo</text>
+                <text x="520" y="305" fill="#9CA3AF" fontSize="8" fontFamily="sans-serif">Oro</text>
+                <text x="345" y="270" fill="#9CA3AF" fontSize="8" fontFamily="sans-serif">Asa</text>
+                <text x="300" y="420" fill="#9CA3AF" fontSize="8" fontFamily="sans-serif">Surulere</text>
+              </svg>
+
+              {/* Station Pin Markers */}
+              {filteredStations.map((station) => {
+                const isSelected = activeId === station.id;
+                return (
+                  <div
+                    key={station.id}
+                    onClick={() => setActiveId(station.id)}
+                    style={{ left: `${station.mapX}%`, top: `${station.mapY}%` }}
+                    className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform duration-200 z-10 ${
+                      isSelected ? "scale-115 z-20" : "hover:scale-110"
+                    }`}
+                  >
+                    <div
+                      className={`w-7 h-7 rounded-full flex items-center justify-center shadow-md border-2 border-white transition-all ${
+                        isSelected
+                          ? "bg-[#EA580C] text-white ring-4 ring-orange-200 shadow-lg"
+                          : "bg-white text-[#EA580C] border-[#EA580C]"
+                      }`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                        <path fillRule="evenodd" d="M11.54 22.351l.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742zM12 13.5a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Floating Callout Card pointing down at active station */}
+            {activeStation && (
+              <div className="absolute top-3 left-3 right-3 sm:left-4 sm:right-auto sm:max-w-[340px] bg-white rounded-xl p-3.5 shadow-xl border border-gray-100 z-30 text-left font-sans text-xs space-y-1.5 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-start justify-between gap-1">
+                  <h5 className="font-bold text-xs sm:text-sm text-[#010101] leading-tight">
+                    {activeStation.name}
+                  </h5>
+                  <span className="text-xs font-bold text-[#EA580C] shrink-0">
+                    {activeStation.feeFormatted}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-600 leading-snug">
+                  {activeStation.address}
+                </p>
+                <a
+                  href={activeStation.googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-[11px] font-semibold text-blue-600 hover:underline"
+                >
+                  See on google maps
+                </a>
+                <div className="pt-1.5 border-t border-gray-100 space-y-1.5 text-[11px] text-gray-700">
+                  <p className="font-medium flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                    </svg>
+                    <span>Close to: {activeStation.closeTo}</span>
+                  </p>
+                  <p className="flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                    </svg>
+                    <span>Contact: PUS {activeStation.city} ({activeStation.phone})</span>
+                  </p>
+                  <p className="flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Opening hours: {activeStation.hours}</span>
+                  </p>
+                  <p className="text-gray-500 flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-6 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z" />
+                    </svg>
+                    <span>Payment options: Payment on delivery, Pre-pay Now</span>
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Map Zoom Controls */}
+            <div className="absolute right-3 bottom-20 z-20 flex flex-col gap-1 shadow-md bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <button
+                type="button"
+                className="w-8 h-8 flex items-center justify-center text-gray-700 hover:bg-gray-50 font-bold text-base border-b border-gray-100 cursor-pointer"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className="w-8 h-8 flex items-center justify-center text-gray-700 hover:bg-gray-50 font-bold text-base cursor-pointer"
+              >
+                -
+              </button>
+            </div>
+
+            {/* Bottom Action Button */}
+            <div className="p-3 bg-white border-t border-gray-100 mt-auto z-20">
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectStation(activeId);
+                  onClose();
+                }}
+                className="w-full bg-[#EA580C] hover:bg-[#C2410C] text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-md active:scale-[0.99] cursor-pointer text-center text-sm"
+              >
+                Select pickup station
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CheckoutPage() {
-  const { cartItems } = useCart();
+  const router = useRouter();
+  const { cartItems, clearCart } = useCart();
+  const { user, customer, savedAddresses, claimAccount, addSavedAddress } = useAuth();
+  const { openAuthModal } = useAuthModal();
 
   // ── Stepper state ──
   const [currentStep, setCurrentStep] = useState(1);
-  const TOTAL_STEPS = 4;
+  const TOTAL_STEPS = 3;
 
-  // ── Step 1: Address state ──
-  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(
-    SAVED_ADDRESSES.find((a) => a.isDefault)?.id ?? null
-  );
+  // ── Step 1: Delivery Method state ──
+  const [selectedDelivery, setSelectedDelivery] = useState("door");
+
+  // ── Step 2: Pickup Station / Address state ──
+  const [selectedPickupStationId, setSelectedPickupStationId] = useState("ps_ilorin_airport");
+  const [isPickupModalOpen, setIsPickupModalOpen] = useState(false);
+
+  // Address state (for Door Delivery)
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
-  const [region, setRegion] = useState("");
+  const [email, setEmail] = useState("");
+  const [region, setRegion] = useState("Lagos");
   const [city, setCity] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -290,16 +732,42 @@ export default function CheckoutPage() {
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [landmark, setLandmark] = useState("");
 
-  // ── Step 2: Delivery state ──
-  const [selectedDelivery, setSelectedDelivery] = useState("door");
-
   // ── Step 3: Payment state ──
-  const [selectedPayment, setSelectedPayment] = useState("pod");
+  const [selectedPayment, setSelectedPayment] = useState("paystack");
 
   // ── Promo code ──
   const [promoCode, setPromoCode] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPercent: number } | null>(null);
   const [promoError, setPromoError] = useState("");
+
+  // ── Submission & Order Success State ──
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderConfirmed, setOrderConfirmed] = useState<any | null>(null);
+  const [guestPassword, setGuestPassword] = useState("");
+  const [claimStatus, setClaimStatus] = useState<string | null>(null);
+
+  // Sync user details on load
+  useEffect(() => {
+    if (customer) {
+      if (customer.email) setEmail(customer.email);
+      if (customer.full_name) {
+        const parts = customer.full_name.split(" ");
+        setFirstName(parts[0] || "");
+        setLastName(parts.slice(1).join(" ") || "");
+      }
+      if (customer.phone) setPhone(customer.phone);
+    } else if (user?.email) {
+      setEmail(user.email);
+    }
+
+    if (savedAddresses && savedAddresses.length > 0) {
+      const def = savedAddresses.find((a) => a.is_default) || savedAddresses[0]!;
+      setSelectedAddressId(def.id);
+      setShowNewAddressForm(false);
+    } else {
+      setShowNewAddressForm(true);
+    }
+  }, [customer, user, savedAddresses]);
 
   const handleApplyPromo = (e: React.FormEvent) => {
     e.preventDefault();
@@ -313,33 +781,213 @@ export default function CheckoutPage() {
       setAppliedPromo({ code: clean, discountPercent: 20 });
       setPromoCode("");
     } else {
-      setPromoError("Invalid code. Try GTS10 for 10% off.");
+      setPromoError("Invalid code. Try WELCOME10 for 10% off.");
     }
   };
 
   // ── Order math ──
+  const selectedStation =
+    GTS_CHECKOUT_PICKUP_STATIONS.find((s) => s.id === selectedPickupStationId) ||
+    GTS_CHECKOUT_PICKUP_STATIONS[0]!;
+
   const rawSubtotal = cartItems.reduce((sum, i) => sum + i.product.priceNum * i.quantity, 0);
   const discountAmount = appliedPromo ? Math.round((rawSubtotal * appliedPromo.discountPercent) / 100) : 0;
-  const deliveryFeeNum = selectedDelivery === "express" ? 4500 : selectedDelivery === "pickup" ? 500 : 1500;
+  const deliveryFeeNum =
+    selectedDelivery === "express" ? 4500 : selectedDelivery === "pickup" ? selectedStation.fee : 1500;
   const grandTotal = Math.max(0, rawSubtotal - discountAmount + deliveryFeeNum);
 
-  const cities = region ? (CITIES_BY_STATE[region] ?? []) : [];
+  const cities = region ? (NIGERIAN_LOCATIONS[region] ?? []) : [];
+  const userEmail = customer?.email || user?.email || email;
 
-  const canProceedStep1 =
-    selectedAddressId !== null ||
-    (showNewAddressForm &&
-      region.length > 0 &&
-      city.length > 0 &&
-      firstName.length > 0 &&
-      lastName.length > 0 &&
-      phone.length > 0 &&
-      deliveryAddress.length > 0);
+  // ── Stepper validations ──
+  const canProceedStep1 = Boolean(selectedDelivery);
+
+  const canProceedStep2 =
+    selectedDelivery === "pickup"
+      ? (
+          Boolean(selectedPickupStationId) &&
+          firstName.trim().length > 0 &&
+          lastName.trim().length > 0 &&
+          phone.trim().length >= 7
+        )
+      : (
+          selectedAddressId !== null ||
+          (
+            showNewAddressForm &&
+            region.length > 0 &&
+            city.length > 0 &&
+            firstName.length > 0 &&
+            lastName.length > 0 &&
+            phone.length > 0 &&
+            deliveryAddress.length > 0
+          )
+        );
+
+  const handleProceedFromStep1 = () => {
+    if (!canProceedStep1) return;
+    if (selectedDelivery === "pickup" && !selectedPickupStationId) {
+      setIsPickupModalOpen(true);
+    }
+    setCurrentStep(2);
+  };
+
+  const handleProceedFromStep2 = async () => {
+    if (!canProceedStep2) return;
+
+    if (selectedDelivery !== "pickup" && showNewAddressForm && customer?.id && deliveryAddress.trim()) {
+      try {
+        const res = await addSavedAddress({
+          full_name: `${firstName} ${lastName}`.trim(),
+          phone: phone.trim(),
+          address_line1: deliveryAddress.trim(),
+          address_line2: landmark.trim() || undefined,
+          city: city.trim(),
+          state: region.trim(),
+          is_default: savedAddresses.length === 0,
+        });
+        if (res.data?.id) {
+          setSelectedAddressId(res.data.id);
+          setShowNewAddressForm(false);
+        }
+      } catch (err) {
+        console.error("Auto-save address error:", err);
+      }
+    }
+
+    setCurrentStep(3);
+  };
+
+  // ── Handle Place Order ──
+  const handleConfirmOrder = async () => {
+    if (cartItems.length === 0) return;
+
+    setIsSubmitting(true);
+
+    // Selected address details
+    let chosenAddress: any = {
+      addressLine1: deliveryAddress,
+      addressLine2: landmark,
+      city,
+      state: region,
+      isDefault: false,
+    };
+
+    let chosenFullName = `${firstName} ${lastName}`.trim();
+    let chosenPhone = phone;
+
+    if (selectedDelivery === "pickup") {
+      const station =
+        GTS_CHECKOUT_PICKUP_STATIONS.find((s) => s.id === selectedPickupStationId) ||
+        GTS_CHECKOUT_PICKUP_STATIONS[0]!;
+      chosenAddress = {
+        addressLine1: `${station.name} (${station.address})`,
+        addressLine2: `Close to: ${station.closeTo}`,
+        city: station.city,
+        state: station.state,
+        isDefault: false,
+      };
+      chosenFullName = `${firstName} ${lastName}`.trim();
+      chosenPhone = phone;
+    } else if (selectedAddressId && savedAddresses) {
+      const matched = savedAddresses.find((a) => a.id === selectedAddressId);
+      if (matched) {
+        chosenAddress = {
+          addressLine1: matched.address_line1,
+          addressLine2: matched.address_line2 || "",
+          city: matched.city,
+          state: matched.state,
+          isDefault: matched.is_default,
+        };
+        chosenFullName = matched.full_name;
+        chosenPhone = matched.phone;
+      }
+    }
+
+    const payload = {
+      customer: {
+        email: userEmail,
+        fullName: chosenFullName,
+        phone: chosenPhone,
+      },
+      address: chosenAddress,
+      items: cartItems.map((c) => ({
+        id: c.product.id,
+        title: c.product.title,
+        price: c.product.priceNum,
+        image: c.product.image,
+        size: c.size,
+        color: c.color,
+        quantity: c.quantity,
+        sku: c.product.sku,
+      })),
+      deliveryOption: selectedDelivery,
+      paymentMethod: selectedPayment,
+      promoCode: appliedPromo?.code,
+      discountPercent: appliedPromo?.discountPercent || 0,
+    };
+
+    try {
+      const res = await idempotentFetch("/api/v1/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        clearCart();
+        setOrderConfirmed(data.data);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("gts_order_placed", { detail: data.data }));
+        }
+      } else {
+        alert(data.error || "Failed to process checkout. Please try again.");
+      }
+    } catch {
+      alert("Checkout connection failed. Please check your internet connection.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleClaimAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!guestPassword || guestPassword.length < 8) {
+      setClaimStatus("Password must be at least 8 characters.");
+      return;
+    }
+
+    const res = await claimAccount(guestPassword, {
+      fullName: `${firstName} ${lastName}`.trim(),
+      phone,
+    });
+
+    if (res.error) {
+      setClaimStatus(res.error);
+    } else {
+      setClaimStatus("Account claimed successfully! You can now track your orders in real time.");
+    }
+  };
 
   const steps = [
-    { num: 1, label: "Delivery Address", sub: "Where should we send your order?", shortLabel: "Address" },
-    { num: 2, label: "Delivery Method", sub: "Choose how you'd like to receive it", shortLabel: "Delivery" },
-    { num: 3, label: "Payment", sub: "How would you like to pay?", shortLabel: "Payment" },
-    { num: 4, label: "Order Review", sub: "Review your details and place order", shortLabel: "Review" },
+    {
+      num: 1,
+      label: "Delivery Method",
+      sub: "Choose how you'd like to receive your order",
+      shortLabel: "Delivery",
+    },
+    {
+      num: 2,
+      label: selectedDelivery === "pickup" ? "Pickup Station" : "Delivery Address",
+      sub: selectedDelivery === "pickup" ? "Select a pickup hub close to you" : "Where should we send your order?",
+      shortLabel: selectedDelivery === "pickup" ? "Station" : "Address",
+    },
+    {
+      num: 3,
+      label: "Payment",
+      sub: "How would you like to pay?",
+      shortLabel: "Payment",
+    },
   ];
 
   return (
@@ -356,17 +1004,30 @@ export default function CheckoutPage() {
         </nav>
 
         {/* ── Page title ── */}
-        <div className="mb-6 pb-4 border-b border-gray-100">
-          <h1 className="font-athelas text-3xl sm:text-4xl font-bold tracking-tight text-[#010101]">Checkout</h1>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1">
-            Complete your order in a few simple steps
-          </p>
+        <div className="mb-6 pb-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="font-athelas text-3xl sm:text-4xl font-bold tracking-tight text-[#010101]">Checkout</h1>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">
+              Complete your order with progressive live profile & 1-click checkout
+            </p>
+          </div>
+          {!user && (
+            <div className="bg-[#F9F8F5] border border-gray-200 rounded-2xl px-4 py-2 text-xs flex items-center gap-2">
+              <span className="text-gray-500">Already registered?</span>
+              <button
+                type="button"
+                onClick={() => openAuthModal("login")}
+                className="font-bold text-[#010101] underline hover:text-[#EDCF5D] cursor-pointer"
+              >
+                Sign In
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* ── Mobile Horizontal Stepper (visible on mobile / < lg, aligns with page padding) ── */}
+        {/* ── Mobile Horizontal Stepper ── */}
         <div className="lg:hidden mb-4">
           <div className="flex items-center justify-between relative px-0">
-            {/* Track line starting at center of dot 1 and ending at center of dot 4 */}
             <div className="absolute left-4 right-4 top-4 h-0.5 bg-gray-200 pointer-events-none -z-0">
               <div
                 className="h-full bg-[#010101] transition-all duration-300"
@@ -417,33 +1078,31 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        {/* ── 2-Column Layout (Tight gap-4 on mobile) ── */}
+        {/* ── 2-Column Layout ── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-10 items-start">
 
           {/* ────── LEFT: Stepper Content ────── */}
-          <div className="lg:col-span-7 xl:col-span-8">
+          <div className="lg:col-span-7 xl:col-span-8 space-y-4">
 
-            {/* Step items: On mobile, only render the active step card. Step 4 is mobile-only. */}
             {steps.map((s) => {
               const isActive = currentStep === s.num;
               const isDone = currentStep > s.num;
 
               return (
                 <div key={s.num} className={`${isActive ? "flex" : "hidden lg:flex"} ${s.num === 4 ? "lg:hidden" : ""} gap-5 items-stretch pb-2 lg:pb-6`}>
-                  {/* ── Timeline track (Desktop - 3 steps) ── */}
+                  {/* Timeline track (Desktop) */}
                   <div className="hidden lg:flex flex-col items-center pt-1">
                     <StepDot step={s.num} current={currentStep} total={3} />
                   </div>
 
-                  {/* ── Step content container (No outer card on mobile for breathing room) ── */}
+                  {/* Step container */}
                   <div className={`flex-1 transition-all duration-300 ${
                     isActive
-                      ? "lg:border lg:border-[#010101] lg:rounded-2xl lg:p-6 lg:shadow-[0_2px_20px_rgba(1,1,1,0.07)] lg:bg-white"
+                      ? "lg:border lg:border-[#010101] lg:rounded-2xl lg:p-6 lg:bg-white"
                       : isDone
                       ? "lg:border lg:border-gray-200 lg:rounded-2xl lg:p-6 lg:bg-[#F9F8F5]"
                       : "lg:border lg:border-gray-200 lg:rounded-2xl lg:p-6 lg:bg-[#F9F8F5] opacity-50"
                   }`}>
-                    {/* Card header */}
                     <div
                       className={`flex items-center justify-between px-0 lg:px-6 pt-0 pb-3 lg:py-4 ${
                         isDone ? "cursor-pointer" : ""
@@ -451,7 +1110,6 @@ export default function CheckoutPage() {
                       onClick={() => { if (isDone) setCurrentStep(s.num); }}
                     >
                       <div>
-                        {/* Hidden on mobile, 3 steps total on desktop */}
                         <p className={`hidden lg:block text-xs font-semibold uppercase tracking-wider mb-0.5 ${
                           isActive ? "text-[#EDCF5D]" : isDone ? "text-gray-400" : "text-gray-300"
                         }`}>
@@ -469,411 +1127,340 @@ export default function CheckoutPage() {
                       {isDone && (
                         <button
                           onClick={(e) => { e.stopPropagation(); setCurrentStep(s.num); }}
-                          className="text-xs font-bold text-gray-500 hover:text-[#010101] underline underline-offset-4 transition-colors"
+                          className="text-xs font-bold text-gray-500 hover:text-[#010101] underline transition-colors cursor-pointer"
                         >
                           Change
                         </button>
                       )}
                     </div>
 
-                    {/* ── STEP 1 CONTENT ── */}
+                    {/* ── STEP 1: DELIVERY METHOD ── */}
                     {s.num === 1 && isActive && (
+                      <div className="px-0 lg:px-6 pb-6 space-y-4 border-t border-gray-100 pt-5">
+                        <div className="space-y-3">
+                          {DELIVERY_OPTIONS.map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedDelivery(opt.id);
+                                if (opt.id === "pickup" && !selectedPickupStationId) {
+                                  setIsPickupModalOpen(true);
+                                }
+                              }}
+                              className={`w-full text-left px-4 py-4 rounded-xl border-2 transition-all cursor-pointer ${
+                                selectedDelivery === opt.id
+                                  ? "border-[#010101] bg-[#F9F8F5]"
+                                  : "border-gray-200 bg-white hover:border-gray-400"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                    selectedDelivery === opt.id ? "border-[#010101]" : "border-gray-300"
+                                  }`}>
+                                    {selectedDelivery === opt.id && <div className="w-2 h-2 rounded-full bg-[#010101]" />}
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-sm text-[#010101]">{opt.label}</p>
+                                    <p className="text-xs text-gray-500">{opt.description} · {opt.eta}</p>
+                                  </div>
+                                </div>
+                                <span className="font-bold text-sm text-[#010101]">{opt.fee}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleProceedFromStep1}
+                          className="w-full bg-[#010101] hover:bg-[#EDCF5D] text-white hover:text-[#010101] font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-95 mt-4 cursor-pointer"
+                        >
+                          <span>{selectedDelivery === "pickup" ? "Continue to Select Station" : "Continue to Delivery Address"}</span>
+                          <span>→</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* ── STEP 2: ADDRESS OR PICKUP STATION ── */}
+                    {s.num === 2 && isActive && (
                       <div className="px-0 lg:px-6 pb-6 space-y-5 border-t border-gray-100 pt-5">
-                        {/* Saved addresses */}
-                        {!showNewAddressForm && (
-                          <div className="space-y-3">
-                            <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Saved Addresses</p>
-                            {SAVED_ADDRESSES.map((addr) => (
-                              <button
-                                key={addr.id}
-                                type="button"
-                                onClick={() => setSelectedAddressId(addr.id)}
-                                className={`w-full text-left px-4 py-4 rounded-xl border-2 transition-all ${
-                                  selectedAddressId === addr.id
-                                    ? "border-[#010101] bg-[#F9F8F5]"
-                                    : "border-gray-200 bg-white hover:border-gray-400"
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex items-start gap-3">
-                                    <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                                      selectedAddressId === addr.id ? "border-[#010101]" : "border-gray-300"
-                                    }`}>
-                                      {selectedAddressId === addr.id && (
-                                        <div className="w-2 h-2 rounded-full bg-[#010101]" />
-                                      )}
+                        {selectedDelivery === "pickup" ? (
+                          /* Pickup Station Flow */
+                          <div className="space-y-4">
+                            {selectedStation ? (
+                              <div className="p-4 rounded-xl border border-gray-200 bg-white shadow-2xs">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider bg-[#FFF8F2] text-[#C2410C] border border-[#FDBA74] px-2 py-0.5 rounded-full">
+                                        Pickup Hub
+                                      </span>
+                                      <span className="text-xs font-bold text-[#EA580C]">{selectedStation.feeFormatted}</span>
                                     </div>
-                                    <div>
-                                      <p className="font-bold text-sm text-[#010101]">{addr.name}</p>
-                                      <p className="text-xs text-gray-500 mt-0.5">{addr.phone}</p>
-                                      <p className="text-xs text-gray-600 mt-1">{addr.address}, {addr.city}, {addr.state}</p>
+                                    <h4 className="font-bold text-sm text-[#010101] mt-1">{selectedStation.name}</h4>
+                                    <p className="text-xs text-gray-600">{selectedStation.address}</p>
+                                    <p className="text-[11px] text-gray-700 flex items-center gap-1.5 font-medium">
+                                      <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                                      </svg>
+                                      <span><span className="font-semibold text-gray-900">Close to:</span> {selectedStation.closeTo}</span>
+                                    </p>
+                                    <div className="text-[11px] text-gray-500 pt-0.5 flex flex-wrap items-center gap-3">
+                                      <span className="flex items-center gap-1.5">
+                                        <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span>{selectedStation.hours}</span>
+                                      </span>
+                                      <span className="text-gray-300">•</span>
+                                      <span className="flex items-center gap-1.5">
+                                        <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                                        </svg>
+                                        <span>{selectedStation.phone}</span>
+                                      </span>
                                     </div>
                                   </div>
-                                  {addr.isDefault && (
-                                    <span className="flex-shrink-0 text-[10px] font-extrabold bg-[#EDCF5D] text-[#010101] px-2 py-0.5 rounded-full uppercase tracking-wider">
-                                      Default
-                                    </span>
-                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsPickupModalOpen(true)}
+                                    className="text-xs font-bold text-[#EA580C] hover:text-[#C2410C] underline shrink-0 cursor-pointer"
+                                  >
+                                    Change Station
+                                  </button>
                                 </div>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setIsPickupModalOpen(true)}
+                                className="w-full p-5 rounded-xl border-2 border-dashed border-[#EA580C]/60 hover:border-[#EA580C] bg-[#FFF8F2] text-[#C2410C] font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+                              >
+                                <svg className="w-4 h-4 text-[#EA580C]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <span>Select a Pick-up station close to you</span>
+                                <span>→</span>
                               </button>
-                            ))}
+                            )}
+
+                            {/* Recipient Details for Pickup */}
+                            <div className="pt-2 border-t border-gray-100 space-y-3">
+                              <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Pickup Recipient Details</p>
+                              <p className="text-[11px] text-gray-500">
+                                This person will receive the pickup SMS verification code and must present a matching valid ID at the hub.
+                              </p>
+
+                              <div className="grid grid-cols-2 gap-3">
+                                <FloatingInput id="pickup-fname" label="First Name" value={firstName} onChange={setFirstName} required />
+                                <FloatingInput id="pickup-lname" label="Last Name" value={lastName} onChange={setLastName} required />
+                              </div>
+
+                              <div className="flex gap-2">
+                                <div className="flex items-center px-3 pt-3 pb-2 bg-[#F9F8F5] border border-gray-200 rounded-xl text-sm font-bold text-gray-600 shrink-0">
+                                  +234
+                                </div>
+                                <div className="flex-1">
+                                  <FloatingInput id="pickup-phone" label="Mobile Phone (for pickup code)" type="tel" value={phone} onChange={setPhone} required />
+                                </div>
+                              </div>
+                            </div>
 
                             <button
                               type="button"
-                              onClick={() => { setSelectedAddressId(null); setShowNewAddressForm(true); }}
-                              className="w-full px-4 py-3.5 rounded-xl border-2 border-dashed border-gray-300 hover:border-[#010101] text-sm font-semibold text-gray-500 hover:text-[#010101] transition-all flex items-center justify-center gap-2"
+                              disabled={!canProceedStep2}
+                              onClick={handleProceedFromStep2}
+                              className="w-full bg-[#010101] hover:bg-[#EDCF5D] text-white hover:text-[#010101] font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed mt-2 cursor-pointer"
                             >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                              </svg>
-                              Add New Address
+                              <span>Continue to Payment</span>
+                              <span>→</span>
+                            </button>
+                          </div>
+                        ) : (
+                          /* Door Delivery Address flow */
+                          <div className="space-y-5">
+                            {/* Saved addresses from DB */}
+                            {savedAddresses && savedAddresses.length > 0 && !showNewAddressForm && (
+                              <div className="space-y-3">
+                                <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Saved Addresses</p>
+                                {savedAddresses.map((addr) => (
+                                  <button
+                                    key={addr.id}
+                                    type="button"
+                                    onClick={() => setSelectedAddressId(addr.id)}
+                                    className={`w-full text-left px-4 py-4 rounded-xl border-2 transition-all cursor-pointer ${
+                                      selectedAddressId === addr.id
+                                        ? "border-[#010101] bg-[#F9F8F5]"
+                                        : "border-gray-200 bg-white hover:border-gray-400"
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex items-start gap-3">
+                                        <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                                          selectedAddressId === addr.id ? "border-[#010101]" : "border-gray-300"
+                                        }`}>
+                                          {selectedAddressId === addr.id && (
+                                            <div className="w-2 h-2 rounded-full bg-[#010101]" />
+                                          )}
+                                        </div>
+                                        <div>
+                                          <p className="font-bold text-sm text-[#010101]">{addr.full_name}</p>
+                                          <p className="text-xs text-gray-500 mt-0.5">{addr.phone}</p>
+                                          <p className="text-xs text-gray-600 mt-1">{addr.address_line1}, {addr.city}, {addr.state}</p>
+                                        </div>
+                                      </div>
+                                      {addr.is_default && (
+                                        <span className="text-[10px] font-extrabold bg-[#EDCF5D] text-[#010101] px-2 py-0.5 rounded-full uppercase">
+                                          Default
+                                        </span>
+                                      )}
+                                    </div>
+                                  </button>
+                                ))}
+
+                                {/* Divider & Add New Address Pill Button */}
+                                <div className="pt-2 border-t border-gray-100">
+                                  <button
+                                    type="button"
+                                    onClick={() => { setSelectedAddressId(null); setShowNewAddressForm(true); }}
+                                    className="w-full bg-[#010101] hover:bg-[#EDCF5D] text-white hover:text-[#010101] font-bold text-sm py-3.5 px-6 rounded-full transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99]"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                    </svg>
+                                    <span>Add New Address</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* New Address Form */}
+                            {showNewAddressForm && (
+                              <div className="space-y-4">
+                                {savedAddresses && savedAddresses.length > 0 && (
+                                  <div className="flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => { setShowNewAddressForm(false); setSelectedAddressId(savedAddresses[0]!.id); }}
+                                      className="text-xs font-bold text-gray-500 hover:text-[#010101] underline transition-colors cursor-pointer"
+                                    >
+                                      ← Use saved address
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* Region + City */}
+                                <div className="grid grid-cols-2 gap-3">
+                                  <FloatingSelect id="region" label="State / Region" value={region} onChange={(v) => { setRegion(v); setCity(""); }} options={NIGERIAN_STATES} />
+                                  <FloatingSelect id="city" label="City" value={city} onChange={setCity} options={cities.length > 0 ? cities : ["Select State First", "Central", "Main Town"]} />
+                                </div>
+
+                                {/* First + Last name */}
+                                <div className="grid grid-cols-2 gap-3">
+                                  <FloatingInput id="fname" label="First Name" value={firstName} onChange={setFirstName} required />
+                                  <FloatingInput id="lname" label="Last Name" value={lastName} onChange={setLastName} required />
+                                </div>
+
+                                {/* Phone row */}
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="flex gap-2">
+                                    <div className="flex items-center px-3 pt-3 pb-2 bg-[#F9F8F5] border border-gray-200 rounded-xl text-sm font-bold text-gray-600 shrink-0">
+                                      +234
+                                    </div>
+                                    <div className="flex-1">
+                                      <FloatingInput id="phone" label="Phone Number" type="tel" value={phone} onChange={setPhone} required />
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <div className="flex items-center px-3 pt-3 pb-2 bg-[#F9F8F5] border border-gray-200 rounded-xl text-sm font-bold text-gray-600 shrink-0">
+                                      +234
+                                    </div>
+                                    <div className="flex-1">
+                                      <FloatingInput id="altphone" label="Additional Phone (optional)" type="tel" value={altPhone} onChange={setAltPhone} />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Delivery address */}
+                                <FloatingInput id="delivaddr" label="Delivery Address / Street" value={deliveryAddress} onChange={setDeliveryAddress} required />
+
+                                {/* Landmark */}
+                                <FloatingInput id="landmark" label="Landmark (optional)" value={landmark} onChange={setLandmark} />
+                              </div>
+                            )}
+
+                            <button
+                              type="button"
+                              disabled={!canProceedStep2}
+                              onClick={handleProceedFromStep2}
+                              className="w-full bg-[#010101] hover:bg-[#EDCF5D] text-white hover:text-[#010101] font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed mt-2 cursor-pointer"
+                            >
+                              <span>Continue to Payment</span>
+                              <span>→</span>
                             </button>
                           </div>
                         )}
-
-                        {/* New Address Form */}
-                        {showNewAddressForm && (
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                              <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Add New Address</p>
-                              {SAVED_ADDRESSES.length > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => { setShowNewAddressForm(false); setSelectedAddressId(SAVED_ADDRESSES[0]!.id); }}
-                                  className="text-xs font-bold text-gray-400 hover:text-[#010101] underline transition-colors"
-                                >
-                                  ← Use saved address
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Region + City */}
-                            <div className="grid grid-cols-2 gap-3">
-                              <FloatingSelect id="region" label="Region" value={region} onChange={(v) => { setRegion(v); setCity(""); }} options={NIGERIAN_STATES} />
-                              <FloatingSelect id="city" label="City" value={city} onChange={setCity} options={cities.length > 0 ? cities : ["Please select region first"]} />
-                            </div>
-
-                            {/* First + Last name */}
-                            <div className="grid grid-cols-2 gap-3">
-                              <FloatingInput id="fname" label="First Name" value={firstName} onChange={setFirstName} required />
-                              <FloatingInput id="lname" label="Last Name" value={lastName} onChange={setLastName} required />
-                            </div>
-
-                            {/* Phone row */}
-                            <div className="grid grid-cols-2 gap-3">
-                              <div className="flex gap-2">
-                                <div className="flex items-center px-3 pt-3 pb-2 bg-[#F9F8F5] border border-gray-200 rounded-xl text-sm font-bold text-gray-600 shrink-0">
-                                  +234
-                                </div>
-                                <div className="flex-1">
-                                  <FloatingInput id="phone" label="Phone Number" type="tel" value={phone} onChange={setPhone} required />
-                                </div>
-                              </div>
-                              <div className="flex gap-2">
-                                <div className="flex items-center px-3 pt-3 pb-2 bg-[#F9F8F5] border border-gray-200 rounded-xl text-sm font-bold text-gray-600 shrink-0">
-                                  +234
-                                </div>
-                                <div className="flex-1">
-                                  <FloatingInput id="altphone" label="Additional Phone (optional)" type="tel" value={altPhone} onChange={setAltPhone} />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Delivery address */}
-                            <FloatingInput id="delivaddr" label="Delivery Address" value={deliveryAddress} onChange={setDeliveryAddress} required />
-
-                            {/* Landmark */}
-                            <FloatingInput id="landmark" label="Landmark (optional)" value={landmark} onChange={setLandmark} />
-                          </div>
-                        )}
-
-                        {/* Continue CTA */}
-                        <button
-                          type="button"
-                          disabled={!canProceedStep1}
-                          onClick={() => setCurrentStep(2)}
-                          className="w-full bg-[#010101] hover:bg-[#EDCF5D] text-white hover:text-[#010101] font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed mt-2 cursor-pointer"
-                        >
-                          <span>Continue to Delivery</span>
-                          <span>→</span>
-                        </button>
                       </div>
                     )}
 
-                    {/* ── STEP 1 SUMMARY (when done) ── */}
-                    {s.num === 1 && isDone && (
-                      <div className="px-6 pb-5 border-t border-gray-100 pt-4">
-                        {(() => {
-                          const addr = SAVED_ADDRESSES.find((a) => a.id === selectedAddressId);
-                          return addr ? (
-                            <div className="text-sm text-gray-600">
-                              <p className="font-bold text-[#010101]">{addr.name} · {addr.phone}</p>
-                              <p className="text-xs mt-0.5">{addr.address}, {addr.city}, {addr.state}</p>
-                            </div>
-                          ) : (
-                            <div className="text-sm text-gray-600">
-                              <p className="font-bold text-[#010101]">{firstName} {lastName} · +234{phone}</p>
-                              <p className="text-xs mt-0.5">{deliveryAddress}, {city}, {region}</p>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-
-                    {/* ── STEP 2 CONTENT ── */}
-                    {s.num === 2 && isActive && (
-                      <div className="px-0 lg:px-6 pb-6 space-y-4 border-t border-gray-100 pt-5">
-                        <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Select Delivery Method</p>
-                        {DELIVERY_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => setSelectedDelivery(opt.id)}
-                            className={`w-full text-left px-5 py-4 rounded-xl border-2 transition-all flex items-center gap-4 ${
-                              selectedDelivery === opt.id
-                                ? "border-[#010101] bg-white"
-                                : "border-gray-200 bg-white hover:border-gray-400"
-                            }`}
-                          >
-                            <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                              selectedDelivery === opt.id ? "border-[#010101]" : "border-gray-300"
-                            }`}>
-                              {selectedDelivery === opt.id && <div className="w-2 h-2 rounded-full bg-[#010101]" />}
-                            </div>
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                              selectedDelivery === opt.id ? "bg-[#EDCF5D] text-[#010101]" : "bg-[#F2F0EA] text-gray-600"
-                            }`}>
-                              {opt.icon}
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-bold text-sm text-[#010101]">{opt.label}</p>
-                              <p className="text-xs text-gray-500 mt-0.5">{opt.description}</p>
-                              <p className="text-xs font-bold text-[#010101] mt-1">{opt.fee} · <span className="text-gray-400 font-medium">{opt.eta}</span></p>
-                            </div>
-                          </button>
-                        ))}
-
-                        <button
-                          type="button"
-                          onClick={() => setCurrentStep(3)}
-                          className="w-full bg-[#010101] hover:bg-[#EDCF5D] text-white hover:text-[#010101] font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-95 mt-2 cursor-pointer"
-                        >
-                          <span>Continue to Payment</span>
-                          <span>→</span>
-                        </button>
-                      </div>
-                    )}
-
-                    {/* ── STEP 2 SUMMARY (when done) ── */}
-                    {s.num === 2 && isDone && (
-                      <div className="px-6 pb-5 border-t border-gray-100 pt-4">
-                        {(() => {
-                          const opt = DELIVERY_OPTIONS.find((o) => o.id === selectedDelivery);
-                          return opt ? (
-                            <div className="flex items-center gap-2 text-sm">
-                              <span className="w-6 h-6 rounded-lg bg-[#EDCF5D] flex items-center justify-center text-[#010101]">
-                                {opt.icon}
-                              </span>
-                              <span className="font-bold text-[#010101]">{opt.label}</span>
-                              <span className="text-gray-400">·</span>
-                              <span className="font-bold text-[#010101]">{opt.fee}</span>
-                            </div>
-                          ) : null;
-                        })()}
-                      </div>
-                    )}
-
-                    {/* ── STEP 3 CONTENT ── */}
+                    {/* ── STEP 3: PAYMENT METHOD ── */}
                     {s.num === 3 && isActive && (
-                      <div className="px-0 lg:px-6 pb-6 space-y-3 border-t border-gray-100 pt-5">
-                        {/* Pay Later section */}
-                        <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Pay on Delivery</p>
-                        {PAYMENT_OPTIONS.filter((p) => p.group === "pay-later").map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => setSelectedPayment(opt.id)}
-                            className={`w-full text-left px-5 py-4 rounded-xl border-2 transition-all flex items-center gap-4 ${
-                              selectedPayment === opt.id
-                                ? "border-[#010101] bg-white"
-                                : "border-gray-200 bg-white hover:border-gray-400"
-                            }`}
-                          >
-                            <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                              selectedPayment === opt.id ? "border-[#010101]" : "border-gray-300"
-                            }`}>
-                              {selectedPayment === opt.id && <div className="w-2 h-2 rounded-full bg-[#010101]" />}
-                            </div>
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                              selectedPayment === opt.id ? "bg-[#EDCF5D] text-[#010101]" : "bg-[#F2F0EA] text-gray-600"
-                            }`}>
-                              {opt.icon}
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-bold text-sm text-[#010101]">{opt.label}</p>
-                              <p className="text-xs text-gray-500 mt-0.5">{opt.description}</p>
-                            </div>
-                          </button>
-                        ))}
-
-                        {/* Pre-pay section */}
-                        <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mt-5 mb-1">Pre-pay Now</p>
-                        {PAYMENT_OPTIONS.filter((p) => p.group === "prepay").map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => setSelectedPayment(opt.id)}
-                            className={`w-full text-left px-5 py-4 rounded-xl border-2 transition-all flex items-center gap-4 ${
-                              selectedPayment === opt.id
-                                ? "border-[#010101] bg-white"
-                                : "border-gray-200 bg-white hover:border-gray-400"
-                            }`}
-                          >
-                            <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                              selectedPayment === opt.id ? "border-[#010101]" : "border-gray-300"
-                            }`}>
-                              {selectedPayment === opt.id && <div className="w-2 h-2 rounded-full bg-[#010101]" />}
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-bold text-sm text-[#010101]">{opt.label}</p>
-                              <p className="text-xs text-gray-500 mt-0.5">{opt.description}</p>
-                            </div>
-                            {opt.iconBadge && (
-                              <div className="flex-shrink-0 min-w-[50px] flex justify-end">
+                      <div className="px-0 lg:px-6 pb-6 space-y-4 border-t border-gray-100 pt-5">
+                        <div className="space-y-3">
+                          {PAYMENT_OPTIONS.map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setSelectedPayment(opt.id)}
+                              className={`w-full text-left px-4 py-4 rounded-xl border-2 transition-all cursor-pointer ${
+                                selectedPayment === opt.id
+                                  ? "border-[#010101] bg-[#F9F8F5]"
+                                  : "border-gray-200 bg-white hover:border-gray-400"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                    selectedPayment === opt.id ? "border-[#010101]" : "border-gray-300"
+                                  }`}>
+                                    {selectedPayment === opt.id && <div className="w-2 h-2 rounded-full bg-[#010101]" />}
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-sm text-[#010101]">{opt.label}</p>
+                                    <p className="text-xs text-gray-500">{opt.description}</p>
+                                  </div>
+                                </div>
                                 {opt.iconBadge}
                               </div>
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="pt-2">
+                          <p className="text-xs text-gray-400 leading-relaxed mb-4">
+                            By placing this order, your inventory is reserved and live fulfillment starts immediately in our warehouse.
+                          </p>
+
+                          <button
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={handleConfirmOrder}
+                            className="w-full bg-[#EDCF5D] hover:bg-[#010101] text-[#010101] hover:text-white font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-95 disabled:opacity-50 cursor-pointer"
+                          >
+                            {isSubmitting ? (
+                              <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                                <span>Placing live order...</span>
+                              </div>
+                            ) : (
+                              <span>Place Order · ₦{grandTotal.toLocaleString()}</span>
                             )}
                           </button>
-                        ))}
-
-                        <button
-                          type="button"
-                          onClick={() => setCurrentStep(4)}
-                          className="lg:hidden w-full bg-[#010101] hover:bg-[#EDCF5D] text-white hover:text-[#010101] font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-95 mt-4 cursor-pointer"
-                        >
-                          <span>Review Order →</span>
-                        </button>
-                      </div>
-                    )}
-
-                    {/* ── STEP 3 SUMMARY (when done) ── */}
-                    {s.num === 3 && isDone && (
-                      <div className="px-6 pb-5 border-t border-gray-100 pt-4">
-                        {(() => {
-                          const opt = PAYMENT_OPTIONS.find((o) => o.id === selectedPayment);
-                          return opt ? (
-                            <div className="flex items-center gap-2 text-sm">
-                              <span className="w-6 h-6 rounded-lg bg-[#EDCF5D] flex items-center justify-center text-[#010101]">
-                                {opt.icon}
-                              </span>
-                              <span className="font-bold text-[#010101]">{opt.label}</span>
-                            </div>
-                          ) : null;
-                        })()}
-                      </div>
-                    )}
-
-                    {/* ── STEP 4 CONTENT (Mobile & Desktop Order Summary Review) ── */}
-                    {s.num === 4 && isActive && (
-                      <div className="px-0 lg:px-6 pb-6 space-y-6 border-t border-gray-100 pt-5">
-                        <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Review & Confirm Your Order</p>
-
-                        {/* Collapsed Card 1: Delivery Address */}
-                        <div className="p-4 rounded-xl border border-gray-200 bg-[#F9F8F5] flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-[#010101] text-white flex items-center justify-center shrink-0 mt-0.5">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-                              </svg>
-                            </div>
-                            <div>
-                              <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">1. Delivery Address</p>
-                              {(() => {
-                                const addr = SAVED_ADDRESSES.find((a) => a.id === selectedAddressId);
-                                return addr ? (
-                                  <div className="text-xs text-gray-700">
-                                    <p className="font-bold text-[#010101]">{addr.name} · {addr.phone}</p>
-                                    <p className="mt-0.5">{addr.address}, {addr.city}, {addr.state}</p>
-                                  </div>
-                                ) : (
-                                  <div className="text-xs text-gray-700">
-                                    <p className="font-bold text-[#010101]">{firstName} {lastName} · +234{phone}</p>
-                                    <p className="mt-0.5">{deliveryAddress}, {city}, {region}</p>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setCurrentStep(1)}
-                            className="text-xs font-bold text-gray-500 hover:text-[#010101] underline shrink-0 transition-colors cursor-pointer"
-                          >
-                            Change
-                          </button>
                         </div>
-
-                        {/* Collapsed Card 2: Delivery Method */}
-                        <div className="p-4 rounded-xl border border-gray-200 bg-[#F9F8F5] flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-[#010101] text-white flex items-center justify-center shrink-0 mt-0.5">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v11.135m12 0H3.375" />
-                              </svg>
-                            </div>
-                            <div>
-                              <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">2. Delivery Method</p>
-                              {(() => {
-                                const opt = DELIVERY_OPTIONS.find((o) => o.id === selectedDelivery);
-                                return opt ? (
-                                  <div className="text-xs text-gray-700">
-                                    <p className="font-bold text-[#010101]">{opt.label} ({opt.fee})</p>
-                                    <p className="text-gray-500 mt-0.5">{opt.description} · {opt.eta}</p>
-                                  </div>
-                                ) : null;
-                              })()}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setCurrentStep(2)}
-                            className="text-xs font-bold text-gray-500 hover:text-[#010101] underline shrink-0 transition-colors cursor-pointer"
-                          >
-                            Change
-                          </button>
-                        </div>
-
-                        {/* Collapsed Card 3: Payment Method */}
-                        <div className="p-4 rounded-xl border border-gray-200 bg-[#F9F8F5] flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-[#010101] text-white flex items-center justify-center shrink-0 mt-0.5">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-                              </svg>
-                            </div>
-                            <div>
-                              <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">3. Payment Method</p>
-                              {(() => {
-                                const opt = PAYMENT_OPTIONS.find((o) => o.id === selectedPayment);
-                                return opt ? (
-                                  <div className="text-xs text-gray-700">
-                                    <p className="font-bold text-[#010101]">{opt.label}</p>
-                                    <p className="text-gray-500 mt-0.5">{opt.description}</p>
-                                  </div>
-                                ) : null;
-                              })()}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setCurrentStep(3)}
-                            className="text-xs font-bold text-gray-500 hover:text-[#010101] underline shrink-0 transition-colors cursor-pointer"
-                          >
-                            Change
-                          </button>
-                        </div>
-
                       </div>
                     )}
                   </div>
@@ -886,7 +1473,7 @@ export default function CheckoutPage() {
           <div className="lg:col-span-5 xl:col-span-4 sticky top-28 space-y-4">
 
             {/* Order Summary Card */}
-            <div className="bg-[#F9F8F5] rounded-2xl p-6 border border-gray-200/80 shadow-2xs">
+            <div className="bg-[#F9F8F5] rounded-2xl p-6 border border-gray-200/80">
               <h2 className="font-athelas text-xl font-bold text-[#010101] pb-4 border-b border-gray-200 flex items-center justify-between">
                 Order Summary
                 <span className="text-sm font-semibold text-gray-400 font-sans">
@@ -895,7 +1482,7 @@ export default function CheckoutPage() {
               </h2>
 
               {/* Cart items list */}
-              <div className="divide-y divide-gray-100 my-4 space-y-0">
+              <div className="divide-y divide-gray-100 my-4 space-y-0 max-h-[260px] overflow-y-auto pr-1">
                 {cartItems.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-4">Your cart is empty</p>
                 ) : (
@@ -930,7 +1517,7 @@ export default function CheckoutPage() {
                     </span>
                     Code <strong>{appliedPromo.code}</strong> applied
                   </span>
-                  <button onClick={() => setAppliedPromo(null)} className="text-[11px] font-bold text-gray-400 hover:text-red-500 underline transition-colors">
+                  <button onClick={() => setAppliedPromo(null)} className="text-[11px] font-bold text-gray-400 hover:text-red-500 underline transition-colors cursor-pointer">
                     Remove
                   </button>
                 </div>
@@ -944,13 +1531,13 @@ export default function CheckoutPage() {
                       type="text"
                       value={promoCode}
                       onChange={(e) => setPromoCode(e.target.value)}
-                      placeholder="Enter code here"
-                      className="flex-1 py-2.5 text-xs font-semibold text-[#010101] placeholder-gray-300 outline-none bg-transparent"
+                      placeholder="Promo code (e.g. WELCOME10)"
+                      className="flex-1 py-2.5 text-xs font-semibold text-[#010101] placeholder-gray-400 outline-none bg-transparent"
                     />
                   </div>
                   <button
                     type="submit"
-                    className="text-xs font-bold text-[#010101] hover:text-[#EDCF5D] px-3 transition-colors"
+                    className="text-xs font-bold text-[#010101] hover:text-[#EDCF5D] px-3 transition-colors cursor-pointer"
                   >
                     APPLY
                   </button>
@@ -982,57 +1569,155 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              {/* Confirm order button — enabled once step 3 or step 4 is reached */}
+              {/* Confirm order button */}
               <button
                 type="button"
-                disabled={currentStep < 3}
+                disabled={isSubmitting || cartItems.length === 0}
+                onClick={handleConfirmOrder}
                 className={`w-full font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 transition-all duration-300 mt-4 ${
-                  currentStep < 3
+                  cartItems.length === 0
                     ? "bg-gray-200 text-gray-400 cursor-not-allowed opacity-70"
                     : "bg-[#EDCF5D] hover:bg-[#010101] text-[#010101] hover:text-white shadow-md active:scale-95 cursor-pointer"
                 }`}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>Confirm order</span>
+                {isSubmitting ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    <span>Processing order...</span>
+                  </div>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Confirm & Place Order</span>
+                  </>
+                )}
               </button>
 
-              {/* WhatsApp tip */}
               <p className="text-[11px] text-gray-400 text-center mt-4 leading-relaxed">
-                Please use a WhatsApp-enabled number to receive faster delivery updates and support. By proceeding, you are automatically accepting the{" "}
-                <a href="/terms" className="text-[#010101] font-bold underline underline-offset-2 hover:text-[#EDCF5D]">Terms & Conditions</a>
+                By proceeding, you are automatically accepting the{" "}
+                <Link href="/terms" className="text-[#010101] font-bold underline underline-offset-2 hover:text-[#EDCF5D]">Terms & Conditions</Link>
               </p>
-            </div>
-
-            {/* Trust badges */}
-            <div className="rounded-2xl border border-gray-200 bg-white p-4 flex flex-col gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-[#010101]">Secure Checkout</p>
-                  <p className="text-[11px] text-gray-400">256-bit SSL encryption</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-[#010101]">30-Day Returns</p>
-                  <p className="text-[11px] text-gray-400">Hassle-free return policy</p>
-                </div>
-              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* ── MODAL: ORDER CONFIRMED & PROGRESSIVE PROFILING RECEIPT ── */}
+      {orderConfirmed && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-5 border border-gray-100 my-auto text-center font-sans">
+            
+            {/* Animated Green Check Badge */}
+            <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-inner border border-emerald-100">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+            </div>
+
+            <div>
+              <h2 className="font-athelas text-2xl sm:text-3xl font-extrabold text-[#010101]">
+                Order Confirmed!
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Your order has been recorded in the GTS system.
+              </p>
+            </div>
+
+            <div className="bg-[#F9F8F5] p-4 rounded-2xl border border-gray-200/80 text-left text-xs space-y-2">
+              <div className="flex justify-between items-center pb-2 border-b border-gray-200">
+                <span className="text-gray-500 font-semibold">Order Number:</span>
+                <span className="font-mono font-extrabold text-sm text-[#010101]">{orderConfirmed.order_number}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Status:</span>
+                <span className="font-bold text-emerald-600 uppercase">Paid / Confirmed</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Amount:</span>
+                <span className="font-extrabold text-[#010101]">₦{(orderConfirmed.total / 100).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Delivery Est.:</span>
+                <span className="font-bold text-gray-700">1–3 Business Days</span>
+              </div>
+            </div>
+
+            {/* Progressive Profiling: 1-Click Account Creation if Guest */}
+            {!user && (
+              <div className="rounded-2xl bg-amber-50/70 border border-amber-200 p-4 text-left space-y-3">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-[#010101]">Save your details & track live delivery</p>
+                    <p className="text-[11px] text-gray-600 mt-0.5">
+                      Create a password to turn your email ({email}) into a permanent GTS account with 1-click order tracking.
+                    </p>
+                  </div>
+                </div>
+
+                {claimStatus ? (
+                  <p className="text-xs font-bold text-emerald-700">{claimStatus}</p>
+                ) : (
+                  <form onSubmit={handleClaimAccount} className="flex gap-2">
+                    <input
+                      type="password"
+                      placeholder="Set password (min 8 chars)"
+                      value={guestPassword}
+                      onChange={(e) => setGuestPassword(e.target.value)}
+                      className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium outline-none"
+                    />
+                    <button
+                      type="submit"
+                      className="px-4 py-2 rounded-xl bg-[#010101] text-white font-bold text-xs hover:bg-[#EDCF5D] hover:text-[#010101] transition-all cursor-pointer shrink-0"
+                    >
+                      Save Account
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderConfirmed(null);
+                  router.push("/account?tab=orders");
+                }}
+                className="flex-1 py-3 rounded-full bg-[#010101] text-white font-bold text-xs sm:text-sm hover:bg-[#EDCF5D] hover:text-[#010101] transition-all cursor-pointer shadow-sm"
+              >
+                Track in My Orders
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderConfirmed(null);
+                  router.push("/");
+                }}
+                className="py-3 px-6 rounded-full border border-gray-300 font-bold text-xs sm:text-sm hover:bg-gray-100 transition-all cursor-pointer"
+              >
+                Continue Shopping
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Pickup Station Selector Modal ── */}
+      <PickupStationModal
+        isOpen={isPickupModalOpen}
+        onClose={() => setIsPickupModalOpen(false)}
+        selectedStationId={selectedPickupStationId}
+        onSelectStation={(stationId) => {
+          setSelectedPickupStationId(stationId);
+        }}
+      />
 
       <Footer />
     </div>

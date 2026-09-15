@@ -6,14 +6,250 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { CategoryMegaMenu } from "./category-mega-menu";
 import { UserAccountMenu } from "./user-account-menu";
 import { SearchDropdownCard } from "./search-overlay";
+import { saveRecentSearch } from "./search-history";
 import { useCart } from "../cart-context";
 import { useWishlist } from "../wishlist-context";
 import { useAuthModal } from "../auth-modal-context";
+import { useAuth } from "../auth-context";
+import {
+  getCustomerInboxSeenAt,
+  getCustomerNotifications,
+} from "../../../../lib/notifications";
+
+// ── Mobile Drawer Categories List (Matches Storefront Catalog) ──
+const DRAWER_CATEGORIES = [
+  {
+    name: "Phone & Tablets",
+    query: "Phones & Tablets",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <rect x="6" y="2" width="12" height="20" rx="3" />
+        <path d="M10 18h4" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    name: "Appliances",
+    query: "Appliances",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 4h14v3H5zM8 7v4a4 4 0 008 0V7M5 19h14M7 19v2m10-2v2" />
+      </svg>
+    ),
+  },
+  {
+    name: "Electronics",
+    query: "Electronics",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <rect x="3" y="7" width="18" height="13" rx="2" />
+        <path strokeLinecap="round" d="M16 3l-4 4-4-4" />
+        <circle cx="8.5" cy="13.5" r="1.5" fill="currentColor" />
+        <path strokeLinecap="round" d="M13 11h4M13 14h4M13 17h2" />
+      </svg>
+    ),
+  },
+  {
+    name: "Supermarket",
+    query: "Supermarket",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a7 7 0 007-7c0-4-3-6-7-6s-7 2-7 6a7 7 0 007 7z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8V4c2 0 4 1 4 1" />
+      </svg>
+    ),
+  },
+  {
+    name: "Health & Beauty",
+    query: "Health & Beauty",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 10h4v11H6zM7 10V6l2-2 1 1v5M14 13h4v8h-4zM16 13V9l1-1 1 1v4" />
+      </svg>
+    ),
+  },
+  {
+    name: "Home & Office",
+    query: "Home & Office",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 4h14v3H5zM8 7v4a4 4 0 008 0V7M5 19h14M7 19v2m10-2v2" />
+        <circle cx="12" cy="14" r="1.5" />
+      </svg>
+    ),
+  },
+  {
+    name: "Power",
+    query: "Power",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5L12 3l9 7.5v9.75a1.5 1.5 0 01-1.5 1.5h-15a1.5 1.5 0 01-1.5-1.5V10.5z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13 8.5l-3 4.5h3l-1.5 4.5" />
+      </svg>
+    ),
+  },
+  {
+    name: "Computing",
+    query: "Computing",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <rect x="3" y="4" width="18" height="12" rx="2" />
+        <path strokeLinecap="round" d="M9 20h6M12 16v4" />
+      </svg>
+    ),
+  },
+  {
+    name: "Women's Fashion",
+    query: "Fashion",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 3l-2 5 2 2-3 11h12l-3-11 2-2-2-5H9z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 3a3 3 0 006 0" />
+      </svg>
+    ),
+  },
+  {
+    name: "Men's Fashion",
+    query: "Fashion",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 4l4 2 3-2 3 2 4-2v17H5V4z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11 7l1 1 1-1-1 7-1-7z" />
+      </svg>
+    ),
+  },
+  {
+    name: "Baby Products",
+    query: "Baby Products",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="9" cy="10" r="1" fill="currentColor" />
+        <circle cx="15" cy="10" r="1" fill="currentColor" />
+        <path strokeLinecap="round" d="M9.5 15a3.5 3.5 0 005 0" />
+        <path strokeLinecap="round" d="M12 3a2 2 0 012 2" />
+      </svg>
+    ),
+  },
+  {
+    name: "Gaming",
+    query: "Gaming",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 11h12a4 4 0 014 4v1a4 4 0 01-6.5 3.1L13 17h-2l-2.5 2.1A4 4 0 012 16v-1a4 4 0 014-4z" />
+        <path strokeLinecap="round" d="M6 15h4M8 13v4M16 14h.01M18 16h.01" />
+      </svg>
+    ),
+  },
+  {
+    name: "Sporting Goods",
+    query: "Sporting Goods",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 8v8M4 9.5v5M8 9.5v5M18 8v8M16 9.5v5M20 9.5v5M8 12h8" />
+      </svg>
+    ),
+  },
+  {
+    name: "Automobile",
+    query: "Automobile",
+    icon: (
+      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 11l2-5h10l2 5M4 11h16v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6z" />
+        <circle cx="7.5" cy="15.5" r="1.5" />
+        <circle cx="16.5" cy="15.5" r="1.5" />
+      </svg>
+    ),
+  },
+];
 
 export function Header() {
   const { totalItemCount } = useCart();
   const { wishlistCount } = useWishlist();
   const { openAuthModal } = useAuthModal();
+  const { user, customer, signOut } = useAuth();
+  const [inboxBadge, setInboxBadge] = useState<number>(0);
+
+  useEffect(() => {
+    if (!user) {
+      setInboxBadge(0);
+      return;
+    }
+    const checkInbox = async () => {
+      try {
+        const seenAt = getCustomerInboxSeenAt();
+        let unreadCount = 0;
+
+        // 1. Inquiries from API (staff replies)
+        const res = await fetch("/api/v1/inquiries");
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json.data)) {
+            const unreadInquiries = json.data.filter((item: any) => {
+              if (item.lastSenderType !== "staff") return false;
+              if (!seenAt) return true;
+              return new Date(item.lastMessageAt).getTime() > new Date(seenAt).getTime();
+            });
+            unreadCount += unreadInquiries.length;
+          }
+        }
+
+        // 2. Saved customer notifications (review replies, order phase updates)
+        const notifs = getCustomerNotifications();
+        const unreadNotifs = notifs.filter((n) => {
+          if (!seenAt) return true;
+          return new Date(n.createdAt).getTime() > new Date(seenAt).getTime();
+        });
+        unreadCount += unreadNotifs.length;
+
+        // 3. Fallback check for gts_inbox_notifications
+        try {
+          const rawReviewNotifs = JSON.parse(localStorage.getItem("gts_inbox_notifications") || "[]");
+          if (Array.isArray(rawReviewNotifs)) {
+            const existingIds = new Set(notifs.map((n) => n.id));
+            const unreadReviews = rawReviewNotifs.filter((n: any) => {
+              if (existingIds.has(n.id)) return false;
+              if (!seenAt) return true;
+              return new Date(n.createdAt || n.date).getTime() > new Date(seenAt).getTime();
+            });
+            unreadCount += unreadReviews.length;
+          }
+        } catch {}
+
+        setInboxBadge(unreadCount);
+      } catch {}
+    };
+
+    checkInbox();
+
+    const handleInboxRead = () => {
+      setInboxBadge(0);
+    };
+
+    window.addEventListener("gts_inbox_read", handleInboxRead);
+    window.addEventListener("gts_notification_received", checkInbox);
+
+    return () => {
+      window.removeEventListener("gts_inbox_read", handleInboxRead);
+      window.removeEventListener("gts_notification_received", checkInbox);
+    };
+  }, [user]);
+
+  const displayName =
+    customer?.full_name?.trim() ||
+    (user?.user_metadata?.full_name as string)?.trim() ||
+    (user?.user_metadata?.name as string)?.trim() ||
+    customer?.email?.split("@")[0] ||
+    user?.email?.split("@")[0] ||
+    "Shopper";
+
+  const avatarInitial = (
+    customer?.full_name?.trim() ||
+    (user?.user_metadata?.full_name as string)?.trim() ||
+    (user?.user_metadata?.name as string)?.trim() ||
+    user?.email ||
+    "U"
+  ).charAt(0).toUpperCase();
   const searchParams = useSearchParams();
   const rawUrlQ = searchParams.get("q") ?? searchParams.get("search") ?? searchParams.get("category") ?? "";
   const [searchQuery, setSearchQuery] = useState(rawUrlQ);
@@ -31,20 +267,7 @@ export function Header() {
   const [canScrollRight, setCanScrollRight] = useState(true);
 
   const chipsRef = useRef<HTMLDivElement>(null);
-  const secondaryRowRef = useRef<HTMLDivElement>(null);
-  // Outer clip wrapper — we animate height on this via ref (exact measured height → 0)
-  const secondaryClipRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
-
-  // All scroll tracking stays in refs — zero React re-renders from scroll
-  const lastScrollY = useRef(0);
-  const ticking = useRef(false);
-  const isHidden = useRef(false);
-  const secondaryRowHeight = useRef(0);
-  // Cooldown: prevent toggling faster than the CSS transition duration (220ms)
-  // This stops rapid scroll reversals from interrupting mid-animation
-  const lastToggleTime = useRef(0);
-  const TOGGLE_COOLDOWN_MS = 280;
 
   const updateScrollState = () => {
     if (chipsRef.current) {
@@ -68,105 +291,20 @@ export function Header() {
       currentChips.addEventListener("scroll", updateScrollState, { passive: true });
     }
 
-    // Measure the inner secondary row height once after mount
-    if (secondaryRowRef.current && secondaryClipRef.current) {
-      const h = secondaryRowRef.current.getBoundingClientRect().height;
-      secondaryRowHeight.current = h;
-      // Set the clip wrapper to the exact measured height
-      secondaryClipRef.current.style.height = `${h}px`;
-    }
-
-    const showSecondary = () => {
-      if (!secondaryClipRef.current || !secondaryRowRef.current) return;
-      secondaryClipRef.current.style.height = `${secondaryRowHeight.current}px`;
-      secondaryClipRef.current.style.overflow = "visible";
-      secondaryRowRef.current.style.transform = "translateY(0)";
-      secondaryRowRef.current.style.opacity = "1";
-      secondaryRowRef.current.style.pointerEvents = "";
-    };
-
-    const hideSecondary = () => {
-      if (!secondaryClipRef.current || !secondaryRowRef.current) return;
-      secondaryClipRef.current.style.overflow = "hidden";
-      secondaryClipRef.current.style.height = "0px";
-      secondaryRowRef.current.style.transform = `translateY(-${secondaryRowHeight.current}px)`;
-      secondaryRowRef.current.style.opacity = "0";
-      secondaryRowRef.current.style.pointerEvents = "none";
-    };
-
     const onScroll = () => {
-      // Do NOT run scroll-hide / border animations on the search page!
-      if (isSearchPage) {
-        if (headerRef.current) {
-          headerRef.current.style.borderBottomColor = "#E5E7EB";
+      if (headerRef.current) {
+        const currentScrollY = window.scrollY;
+        if (currentScrollY > 10) {
+          headerRef.current.style.borderBottomColor = "rgba(209,213,219,0.8)";
+          headerRef.current.style.boxShadow = "0 1px 2px 0 rgba(0,0,0,0.05)";
+        } else {
+          headerRef.current.style.borderBottomColor = isSearchPage ? "#E5E7EB" : "transparent";
           headerRef.current.style.boxShadow = "none";
         }
-        if (isHidden.current) {
-          isHidden.current = false;
-          showSecondary();
-        }
-        return;
-      }
-      // rAF ticking: only one execution per animation frame
-      if (!ticking.current) {
-        window.requestAnimationFrame(() => {
-          const currentScrollY = window.scrollY;
-          const delta = currentScrollY - lastScrollY.current;
-
-          // Update header border — direct DOM write, no React state
-          if (headerRef.current) {
-            if (currentScrollY > 10) {
-              headerRef.current.style.borderBottomColor = "rgba(209,213,219,0.8)";
-              headerRef.current.style.boxShadow = "0 1px 2px 0 rgba(0,0,0,0.05)";
-            } else {
-              headerRef.current.style.borderBottomColor = "transparent";
-              headerRef.current.style.boxShadow = "none";
-            }
-          }
-
-          const now = performance.now();
-          const cooldownElapsed = now - lastToggleTime.current > TOGGLE_COOLDOWN_MS;
-
-          // Near top → always reveal immediately (bypass cooldown so user is never stuck)
-          if (currentScrollY < 100) {
-            if (isHidden.current) {
-              isHidden.current = false;
-              lastToggleTime.current = now;
-              showSecondary();
-            }
-          } else if (cooldownElapsed && Math.abs(delta) >= 10) {
-            // Only allow a state change if the previous transition has had time to finish
-            if (delta > 0 && !isHidden.current) {
-              isHidden.current = true;
-              lastToggleTime.current = now;
-              hideSecondary();
-            } else if (delta < 0 && isHidden.current) {
-              isHidden.current = false;
-              lastToggleTime.current = now;
-              showSecondary();
-            }
-          }
-
-          lastScrollY.current = currentScrollY;
-          ticking.current = false;
-        });
-
-        ticking.current = true;
       }
     };
 
-    if (!isSearchPage) {
-      window.addEventListener("scroll", onScroll, { passive: true });
-    } else {
-      if (headerRef.current) {
-        headerRef.current.style.borderBottomColor = "#E5E7EB";
-        headerRef.current.style.boxShadow = "none";
-      }
-      if (isHidden.current) {
-        isHidden.current = false;
-        showSecondary();
-      }
-    }
+    window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", updateScrollState);
 
     return () => {
@@ -202,7 +340,7 @@ export function Header() {
           <button
             aria-label="Open menu"
             onClick={() => setIsMobileDrawerOpen(true)}
-            className="sm:hidden p-1.5 text-[#010101] hover:bg-gray-100 rounded-full transition-colors shrink-0"
+            className="sm:hidden p-1.5 text-[#010101] hover:bg-gray-100 rounded-full transition-colors shrink-0 relative"
           >
             <svg
               className="w-6 h-6"
@@ -217,6 +355,11 @@ export function Header() {
                 d="M4 6h16M4 12h16M4 18h16"
               />
             </svg>
+            {inboxBadge > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-[#010101] text-white text-[9px] font-extrabold flex items-center justify-center border-2 border-white shadow-2xs font-sans animate-fade-in">
+                {inboxBadge}
+              </span>
+            )}
           </button>
 
           {/* Desktop User Account Pill (Replaces Hamburger on Desktop) */}
@@ -311,47 +454,18 @@ export function Header() {
         />
       )}
 
-      {/*
-        Outer clip wrapper — overflow:hidden clips the sliding row.
-        Height is transitioned between measured value ↔ 0 directly via ref (no React state, no reflow loop).
-      */}
-      <div
-        ref={secondaryClipRef}
-        className="w-full overflow-visible"
-        style={{
-          transition: "height 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
-          willChange: "height",
-        }}
-      >
-        {/* Inner row — transforms up behind Row 1 as height collapses */}
-        <div
-          ref={secondaryRowRef}
-          className="w-full flex items-center justify-between gap-2.5 pb-2"
-          style={{
-            transform: isSearchOpen ? "none" : "translateY(0)",
-            opacity: 1,
-            transition: "transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease-out",
-            willChange: isSearchOpen ? "auto" : "transform, opacity",
-          }}
-        >
-          {/* Left Dropdown Pills: Categories + New Product — hidden on mobile */}
-          <div className="hidden sm:flex items-center gap-2.5 shrink-0">
+      {/* ── SECONDARY ROW: Categories + Single Search Pill + Filter Chips (Stationary) ── */}
+      <div className="w-full overflow-visible">
+        <div className="w-full flex items-center justify-between gap-3 pb-2">
+          {/* Left Wrapper: flex-1 to balance right side width and guarantee search bar is dead-center */}
+          <div className="hidden sm:flex items-center gap-2.5 flex-1 min-w-0 justify-start shrink-0">
             <CategoryMegaMenu />
-
-            <button className="flex items-center justify-between min-w-[130px] sm:min-w-[148px] bg-[#F2F0EA] hover:bg-[#EDCF5D] text-[#010101] text-xs sm:text-sm font-medium pl-4 sm:pl-5 pr-1 h-9 sm:h-[38px] rounded-full transition-colors group shrink-0">
-              <span className="text-[#010101]/80 group-hover:text-[#010101]">New Product</span>
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white shadow-2xs flex items-center justify-center text-[#010101] shrink-0">
-                <svg className="w-3 h-3 text-[#010101]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </button>
           </div>
 
-          {/* Center Search Pill — single search bar in navbar; expands & mounts dropdown card when active */}
+          {/* Center Search Pill — dead-center in the header */}
           <div
-            className={`relative flex-1 transition-all duration-300 ${
-              isSearchOpen ? "sm:max-w-xl lg:max-w-2xl z-50" : "sm:max-w-md lg:max-w-lg z-10"
+            className={`relative w-full transition-all duration-300 ${
+              isSearchOpen ? "sm:max-w-xl lg:max-w-2xl xl:max-w-3xl z-50" : "sm:max-w-lg lg:max-w-xl xl:max-w-2xl z-10"
             }`}
           >
             <form
@@ -359,11 +473,12 @@ export function Header() {
                 e.preventDefault();
                 const trimmed = searchQuery.trim();
                 if (trimmed) {
+                  saveRecentSearch(trimmed);
                   setIsSearchOpen(false);
                   router.push(`/search?q=${encodeURIComponent(trimmed)}`);
                 }
               }}
-              className={`flex items-center justify-between rounded-full pl-4 sm:pl-5 pr-1 h-9 sm:h-[38px] transition-all relative ${
+              className={`flex items-center justify-between rounded-full pl-4 sm:pl-5 pr-[6px] sm:pr-[5px] h-11 sm:h-[38px] transition-all relative ${
                 isSearchOpen
                   ? "bg-white border border-[#010101] shadow-md ring-1 ring-[#010101]/10 z-50"
                   : "bg-[#F2F0EA] hover:bg-[#EAE7DF]"
@@ -375,14 +490,14 @@ export function Header() {
                 value={searchQuery}
                 onFocus={() => setIsSearchOpen(true)}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent text-xs sm:text-sm text-[#010101] placeholder-[#A4A4A4] outline-none w-full font-medium cursor-text"
+                className="bg-transparent text-sm sm:text-sm text-[#010101] placeholder-[#A4A4A4] outline-none w-full font-medium cursor-text"
               />
               <button
                 type="submit"
                 aria-label="Search"
-                className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#010101] text-white shadow-2xs flex items-center justify-center shrink-0 ml-2 hover:bg-black transition-colors"
+                className="w-8 h-8 sm:w-7 sm:h-7 rounded-full bg-[#010101] text-white shadow-2xs flex items-center justify-center shrink-0 hover:bg-black transition-colors cursor-pointer"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                <svg className="w-4 h-4 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </button>
@@ -397,19 +512,8 @@ export function Header() {
             />
           </div>
 
-          {/* Mobile-only compact Categories pill — animatedly fades away when search is focused */}
-          <div
-            className={`sm:hidden shrink-0 transition-all duration-300 ease-out origin-right ${
-              isSearchOpen
-                ? "max-w-0 opacity-0 pointer-events-none scale-95 overflow-hidden -ml-2.5"
-                : "max-w-[140px] opacity-100 scale-100 ml-0"
-            }`}
-          >
-            <CategoryMegaMenu />
-          </div>
-
-          {/* Right Category Chips Track */}
-          <div className="hidden sm:flex group/track relative items-center gap-1 min-w-0 flex-1 max-w-[200px] sm:max-w-[280px] md:max-w-[340px] overflow-hidden">
+          {/* Right Wrapper: flex-1 to mirror left side width and guarantee search bar is dead-center */}
+          <div className="hidden sm:flex group/track relative items-center gap-1 flex-1 min-w-0 justify-end overflow-hidden">
             <button
               aria-label="Scroll chips left"
               onClick={() => scrollChips("left")}
@@ -420,7 +524,7 @@ export function Header() {
               </svg>
             </button>
 
-            <div className="relative flex-1 min-w-0 flex items-center overflow-hidden">
+            <div className="relative max-w-[200px] sm:max-w-[280px] md:max-w-[340px] flex-1 min-w-0 flex items-center overflow-hidden">
               <div
                 className={`absolute left-0 top-0 bottom-0 w-7 bg-gradient-to-r from-white via-white/80 to-transparent pointer-events-none z-10 transition-opacity duration-300 ${
                   canScrollLeft ? "opacity-100" : "opacity-0"
@@ -478,15 +582,40 @@ export function Header() {
           <div className="fixed inset-y-0 left-0 z-50 w-80 max-w-[85vw] bg-white shadow-2xl flex flex-col animate-in slide-in-from-left duration-300 text-[#010101] font-sans">
             {/* ── Drawer Body: Account + Navigation ── */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 pt-6">
+              {/* Guest Welcome Banner */}
+              {!user && (
+                <div className="flex items-center justify-between p-3.5 bg-[#F9F8F5] rounded-2xl border border-gray-200/80">
+                  <div>
+                    <p className="font-bold text-sm text-[#010101]">Welcome to GTS</p>
+                    <p className="text-xs text-gray-500">Sign in for orders & chat</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileDrawerOpen(false);
+                      openAuthModal("login");
+                    }}
+                    className="px-3.5 py-1.5 rounded-full bg-[#010101] text-white text-xs font-bold hover:bg-[#EDCF5D] hover:text-[#010101] transition-all cursor-pointer shadow-2xs"
+                  >
+                    Sign in
+                  </button>
+                </div>
+              )}
+
               {/* Account Menu Items */}
               <div className="space-y-1">
+                {/* My Account */}
                 <button
                   type="button"
                   onClick={() => {
                     setIsMobileDrawerOpen(false);
-                    openAuthModal("login");
+                    if (user) {
+                      router.push("/account");
+                    } else {
+                      openAuthModal("login");
+                    }
                   }}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-gray-700 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-gray-700 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors text-left cursor-pointer"
                 >
                   <svg className="w-5 h-5 shrink-0 text-[#010101]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -494,27 +623,59 @@ export function Header() {
                   <span>My Account</span>
                 </button>
 
-                <div className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-gray-400 opacity-60 cursor-not-allowed select-none">
-                  <svg className="w-5 h-5 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                {/* Orders */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
+                    if (user) {
+                      router.push("/account?tab=orders");
+                    } else {
+                      openAuthModal("login");
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-gray-700 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors text-left cursor-pointer"
+                >
+                  <svg className="w-5 h-5 shrink-0 text-[#010101]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
                   </svg>
                   <span>Orders</span>
-                </div>
+                </button>
 
-                <div className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-gray-400 opacity-60 cursor-not-allowed select-none">
-                  <svg className="w-5 h-5 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                  </svg>
-                  <span>Inbox</span>
-                </div>
+                {/* Inbox */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
+                    if (user) {
+                      router.push("/account?tab=inbox");
+                    } else {
+                      openAuthModal("login");
+                    }
+                  }}
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold text-gray-700 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors text-left cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <svg className="w-5 h-5 shrink-0 text-[#010101]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                    </svg>
+                    <span>Inbox</span>
+                  </div>
+                  {inboxBadge > 0 && (
+                    <span className="bg-[#010101] text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full font-sans">
+                      {inboxBadge}
+                    </span>
+                  )}
+                </button>
 
+                {/* Wishlist */}
                 <button
                   type="button"
                   onClick={() => {
                     setIsMobileDrawerOpen(false);
                     router.push("/wishlist");
                   }}
-                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold text-gray-700 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors text-left"
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold text-gray-700 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors text-left cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
                     <svg className="w-5 h-5 shrink-0 text-[#010101]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
@@ -529,13 +690,14 @@ export function Header() {
                   )}
                 </button>
 
+                {/* My Cart */}
                 <button
                   type="button"
                   onClick={() => {
                     setIsMobileDrawerOpen(false);
                     router.push("/cart");
                   }}
-                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold text-gray-700 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors text-left"
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold text-gray-700 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors text-left cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
                     <svg className="w-5 h-5 shrink-0 text-[#010101]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
@@ -550,16 +712,58 @@ export function Header() {
                   )}
                 </button>
 
-                <div className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-gray-400 opacity-60 cursor-not-allowed select-none">
-                  <svg className="w-5 h-5 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                {/* Vouchers */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
+                    if (user) {
+                      router.push("/account?tab=vouchers");
+                    } else {
+                      openAuthModal("login");
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-gray-700 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors text-left cursor-pointer"
+                >
+                  <svg className="w-5 h-5 shrink-0 text-[#010101]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-12v.75m0 3v.75m0 3v.75m0 3V18M3 7.5h18a1.5 1.5 0 011.5 1.5v7.5a1.5 1.5 0 01-1.5 1.5H3a1.5 1.5 0 01-1.5-1.5V9A1.5 1.5 0 013 7.5z" />
                   </svg>
-                  <span>Voucher</span>
+                  <span>Vouchers & Promos</span>
+                </button>
+              </div>
+
+              {/* ── OUR CATEGORIES SECTION ── */}
+              <div className="pt-3 border-t border-gray-100">
+                <div className="flex items-center justify-between px-3.5 mb-2.5">
+                  <span className="text-[11px] font-extrabold text-[#707070] uppercase tracking-wider font-sans">
+                    Our Categories
+                  </span>
+                </div>
+
+                <div className="space-y-0.5">
+                  {DRAWER_CATEGORIES.map((cat) => (
+                    <button
+                      key={cat.name}
+                      type="button"
+                      onClick={() => {
+                        setIsMobileDrawerOpen(false);
+                        router.push(`/search?category=${encodeURIComponent(cat.query)}`);
+                      }}
+                      className="w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-gray-800 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors text-left cursor-pointer group"
+                    >
+                      <span className="w-5 h-5 flex items-center justify-center text-gray-500 group-hover:text-[#010101] transition-colors shrink-0">
+                        {cat.icon}
+                      </span>
+                      <span className="text-[13.5px] font-medium text-gray-800 group-hover:text-[#010101] flex-1 truncate">
+                        {cat.name}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
               {/* Navigation Items */}
-              <div className="pt-2 space-y-1">
+              <div className="pt-2 space-y-1 border-t border-gray-100">
                 <p className="text-[11px] font-bold text-[#A4A4A4] uppercase tracking-widest px-3 mb-2 font-sans">Navigation</p>
                 <Link
                   href="/search"
@@ -588,23 +792,40 @@ export function Header() {
               </div>
             </div>
 
-            {/* ── Anchored Drawer Footer: Sign In Button Pinned at Bottom ── */}
+            {/* ── Anchored Drawer Footer: Contextual Sign In / Sign Out ── */}
             <div className="p-4 border-t border-gray-100 bg-white shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMobileDrawerOpen(false);
-                  openAuthModal("login");
-                }}
-                className="w-full flex items-center justify-center gap-2 bg-[#010101] hover:bg-[#010101]/90 text-white font-bold text-sm py-3.5 px-4 rounded-xl shadow-xs transition-all active:scale-[0.98] group/btn cursor-pointer"
-              >
-                <span>Sign in</span>
-                <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                  <svg className="w-3 h-3 text-white group-hover/btn:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              {user ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsMobileDrawerOpen(false);
+                    await signOut();
+                    router.push("/");
+                  }}
+                  className="w-full flex items-center justify-center gap-2 border border-gray-300 hover:border-red-400 hover:bg-red-50 text-gray-700 hover:text-red-600 font-bold text-sm py-3 px-4 rounded-xl transition-all cursor-pointer shadow-2xs"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
                   </svg>
-                </div>
-              </button>
+                  <span>Sign out</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
+                    openAuthModal("login");
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-[#010101] hover:bg-[#EDCF5D] hover:text-[#010101] text-white font-bold text-sm py-3.5 px-4 rounded-xl shadow-xs transition-all active:scale-[0.98] group/btn cursor-pointer"
+                >
+                  <span>Sign in</span>
+                  <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                    <svg className="w-3 h-3 text-current group-hover/btn:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                    </svg>
+                  </div>
+                </button>
+              )}
             </div>
           </div>
         </>

@@ -25,7 +25,6 @@ const POSITION: Record<SlideRole, {
   "far-right": { x: "160%",  scale: 0.40, opacity: 0,    zIndex: 0  },
 };
 
-// ─── Data types ───────────────────────────────────────────────────────────────
 interface ColorVariant {
   id: string;
   colorName: string;
@@ -34,6 +33,7 @@ interface ColorVariant {
   radialGradient: string;
   glowColor: string;
   edgeColor: string;
+  hasTransparentBg?: boolean;
 }
 
 interface HeroProduct {
@@ -47,6 +47,13 @@ interface HeroProduct {
   rating: number;
   reviews: string;
   variants: ColorVariant[];
+}
+
+function getHeroEligibleVariants(product: HeroProduct): ColorVariant[] {
+  const eligible = (product.variants || []).filter(
+    (v) => v.hasTransparentBg !== false && (v.image.endsWith(".png") || !v.image.endsWith(".jpg"))
+  );
+  return eligible.length > 0 ? eligible : [product.variants[0]!];
 }
 
 // ─── Product Data ─────────────────────────────────────────────────────────────
@@ -382,8 +389,9 @@ export function Hero() {
   }, [isPaused, handleNext]);
 
   const activeProduct      = HERO_PRODUCTS[currentIndex] ?? HERO_PRODUCTS[0]!;
-  const activeVariantIndex = selectedVariants[activeProduct.id] ?? 0;
-  const activeVariant      = activeProduct.variants[activeVariantIndex]!;
+  const activeVariants     = getHeroEligibleVariants(activeProduct);
+  const activeVariantIndex = Math.min(selectedVariants[activeProduct.id] ?? 0, Math.max(0, activeVariants.length - 1));
+  const activeVariant      = activeVariants[activeVariantIndex] ?? activeProduct.variants[0]!;
 
   return (
     <div
@@ -394,9 +402,10 @@ export function Hero() {
       <section className="relative w-full h-[75vh] sm:h-[calc(100vh-140px)] min-h-[380px] sm:min-h-[520px] max-h-[780px] overflow-hidden rounded-[18px] border border-white/10 shadow-xl">
 
         {/* ── Background Gradient Layers ── */}
-        {HERO_PRODUCTS.map((product, pi) =>
-          product.variants.map((variant, vi) => {
-            const isActive = pi === currentIndex && vi === (selectedVariants[product.id] ?? 0);
+        {HERO_PRODUCTS.map((product, pi) => {
+          const eligible = getHeroEligibleVariants(product);
+          return eligible.map((variant, vi) => {
+            const isActive = pi === currentIndex && vi === Math.min(selectedVariants[product.id] ?? 0, Math.max(0, eligible.length - 1));
             return (
               <div
                 key={variant.id}
@@ -404,13 +413,14 @@ export function Hero() {
                 style={{ background: variant.radialGradient, opacity: isActive ? 1 : 0, pointerEvents: "none" }}
               />
             );
-          })
-        )}
+          });
+        })}
 
         {/* ── Ambient Glow ── */}
-        {HERO_PRODUCTS.map((product, pi) =>
-          product.variants.map((variant, vi) => {
-            const isActive = pi === currentIndex && vi === (selectedVariants[product.id] ?? 0);
+        {HERO_PRODUCTS.map((product, pi) => {
+          const eligible = getHeroEligibleVariants(product);
+          return eligible.map((variant, vi) => {
+            const isActive = pi === currentIndex && vi === Math.min(selectedVariants[product.id] ?? 0, Math.max(0, eligible.length - 1));
             return (
               <div
                 key={`glow-${variant.id}`}
@@ -418,8 +428,8 @@ export function Hero() {
                 style={{ background: variant.glowColor, opacity: isActive ? 0.7 : 0 }}
               />
             );
-          })
-        )}
+          });
+        })}
 
         {/* ── Edge Fades (match bg edge color) ── */}
         <div
@@ -459,8 +469,9 @@ export function Hero() {
             const isCenter    = role === "center";
             const isSide      = role === "left" || role === "right";
 
-            const variantIdx = selectedVariants[product.id] ?? 0;
-            const variant    = product.variants[variantIdx]!;
+            const productVariants = getHeroEligibleVariants(product);
+            const variantIdx      = Math.min(selectedVariants[product.id] ?? 0, Math.max(0, productVariants.length - 1));
+            const variant         = productVariants[variantIdx] ?? product.variants[0]!;
 
             return (
               <motion.div
@@ -552,7 +563,7 @@ export function Hero() {
               transition={{ ...TEXT_SPRING, delay: 0.05 }}
               className="flex items-center gap-2 sm:gap-3"
             >
-              {activeProduct.variants.map((variant, vi) => {
+              {activeVariants.map((variant, vi) => {
                 const isSelected = vi === activeVariantIndex;
                 return (
                   <button
