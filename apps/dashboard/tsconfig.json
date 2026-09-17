@@ -16,6 +16,9 @@
       "@gts/types": [
         "../../packages/types/src"
       ],
+      "@gts/utils": [
+        "../../packages/utils/src"
+      ],
       "@gts/utils/*": [
         "../../packages/utils/src/*"
       ],
@@ -24,6 +27,7 @@
       ]
     },
     "allowJs": true,
+    "jsx": "preserve",
     "noEmit": true
   },
   "include": [

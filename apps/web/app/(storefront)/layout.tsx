@@ -22,7 +22,7 @@ function Logo() {
 
 function Nav() {
   return (
-    <nav className="sticky top-0 z-40 bg-page/85 dark:bg-[#111614]/85 backdrop-blur-[12px] border-b border-line dark:border-[#2A312A] transition-colors">
+    <nav className="sticky top-0 z-40 bg-page/85 dark:bg-[#DDDAD4]/85 backdrop-blur-[12px] border-b border-line dark:border-[#2A312A] transition-colors">
       <div className="max-w-[1120px] mx-auto px-7 flex items-center justify-between h-[68px]">
         <Logo />
         <div className="hidden md:flex gap-[30px] text-[15px] font-medium text-txt-2 dark:text-[#A3B0A5]">
@@ -148,6 +148,15 @@ function Footer() {
   );
 }
 
+import { Header } from "./_components/landing/header";
+import { CartProvider } from "./_components/cart-context";
+import { WishlistProvider } from "./_components/wishlist-context";
+import { AuthModalProvider } from "./_components/auth-modal-context";
+import { AuthProvider } from "./_components/auth-context";
+import { AuthModal } from "./_components/auth-modal";
+import { CookieConsentBanner } from "./_components/cookie-banner";
+import { BroadcastModal } from "./_components/broadcast-modal";
+
 export default function StorefrontLayout({
   children,
 }: {
@@ -155,12 +164,27 @@ export default function StorefrontLayout({
 }) {
   return (
     <ThemeProvider>
-      <Nav />
-      <ThemeToggle />
       <ErrorBoundary>
-        {children}
+        <AuthProvider>
+          <AuthModalProvider>
+            <WishlistProvider>
+              <CartProvider>
+                {/* ── Full-width white background wrapper for zoom-out excess space ── */}
+                <div className="w-full min-h-screen bg-white">
+                  {/* ── Max-width shell: centers the entire storefront at extreme zoom-out ── */}
+                  <div className="relative mx-auto w-full max-w-[1600px] min-h-screen bg-white">
+                    <Header />
+                    {children}
+                    <AuthModal />
+                    <CookieConsentBanner />
+                    <BroadcastModal />
+                  </div>
+                </div>
+              </CartProvider>
+            </WishlistProvider>
+          </AuthModalProvider>
+        </AuthProvider>
       </ErrorBoundary>
-      <Footer />
     </ThemeProvider>
   );
 }

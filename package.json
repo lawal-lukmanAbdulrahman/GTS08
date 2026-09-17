@@ -1,18 +1,19 @@
 {
   "name": "gts",
   "private": true,
-  "packageManager": "pnpm@10.17.0",
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "npx concurrently \"npm --prefix apps/web run dev\" \"npm --prefix apps/dashboard run dev\"",
+    "dev:turbo": "turbo run dev",
     "build": "turbo run build",
-    "typecheck": "turbo run typecheck",
+    "typecheck": "npm --prefix apps/web run typecheck && npm --prefix apps/dashboard run typecheck",
     "lint": "turbo run lint",
-    "test": "turbo run test",
+    "test": "npm --prefix apps/web run test",
     "test:watch": "turbo run test:watch",
     "test:rls": "turbo run test:rls",
     "test:e2e": "turbo run test:e2e"
   },
   "devDependencies": {
+    "concurrently": "^9.1.2",
     "turbo": "^2.4.0",
     "typescript": "^5.7.0"
   }

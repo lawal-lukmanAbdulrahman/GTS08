@@ -12,26 +12,28 @@
     "test:watch": "vitest watch"
   },
   "dependencies": {
-    "next": "^15.1.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
     "@gts/database": "workspace:*",
     "@gts/types": "workspace:*",
+    "@gts/ui": "workspace:*",
     "@gts/utils": "workspace:*",
-    "@gts/ui": "workspace:*"
+    "framer-motion": "^12.43.0",
+    "next": "^15.1.0",
+    "ogl": "^1.0.11",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
+    "@gts/config": "workspace:*",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/react": "^16.0.0",
+    "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/node": "^22.0.0",
-    "@gts/config": "workspace:*",
-    "tailwindcss": "^3.4.0",
-    "postcss": "^8.0.0",
     "autoprefixer": "^10.0.0",
-    "vitest": "^3.0.0",
-    "@testing-library/react": "^16.0.0",
-    "@testing-library/jest-dom": "^6.0.0",
-    "eslint": "^9.0.0"
+    "eslint": "^9.0.0",
+    "postcss": "^8.0.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
   }
 }
