@@ -10,7 +10,10 @@ export interface PosCartTotals {
 }
 
 /**
- * Pure cart math for the POS. All amounts are integer kobo — never Naira floats.
+ * Pure cart math for the POS. All amounts are integer kobo — never Naira
+ * floats. Shared between the POS API routes (apps/web) and the POS UI
+ * (apps/dashboard) so cart totals never diverge between what the cashier
+ * sees live and what the server computes authoritatively at confirmation.
  */
 export function computeCartTotals(
   lines: PosCartLine[],

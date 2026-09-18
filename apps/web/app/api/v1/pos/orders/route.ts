@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../_lib/access";
 import { sanitizeEmail } from "../../auth/utils";
-import { computeCartTotals, type PosCartLine } from "../_lib/cart-totals";
+import { computeCartTotals, type PosCartLine } from "@gts/utils";
 import { checkStockSufficiency } from "../_lib/stock-sufficiency";
 import { variantAvailable } from "../_lib/stock-status";
 

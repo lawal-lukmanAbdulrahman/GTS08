@@ -40,7 +40,7 @@ describe("checkStockSufficiency (spec Part 8, rule 4: re-validated at order crea
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.insufficient).toHaveLength(1);
-      expect(result.insufficient[0].variantId).toBe("v1");
+      expect(result.insufficient[0]?.variantId).toBe("v1");
     }
   });
 });

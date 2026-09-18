@@ -110,10 +110,10 @@ describe("POST /api/v1/pos/whatsapp-orders/:id/confirm (D001)", () => {
     expect(res.status).toBe(200);
     expect(body.data.status).toBe("completed");
 
-    const orderUpdateCall = allCalls.orders.find((c) => c.method === "update");
+    const orderUpdateCall = allCalls.orders!.find((c) => c.method === "update");
     expect(orderUpdateCall?.args[0]).toMatchObject({ status: "completed" });
 
-    const txInsertCall = allCalls.transactions.find((c) => c.method === "insert");
+    const txInsertCall = allCalls.transactions!.find((c) => c.method === "insert");
     expect(txInsertCall?.args[0]).toMatchObject({
       order_id: "order-1",
       payment_method: "pos_terminal",
@@ -122,10 +122,10 @@ describe("POST /api/v1/pos/whatsapp-orders/:id/confirm (D001)", () => {
       amount: 1500000,
     });
 
-    const invUpdateCall = allCalls.inventory.find((c) => c.method === "update");
+    const invUpdateCall = allCalls.inventory!.find((c) => c.method === "update");
     expect(invUpdateCall?.args[0]).toMatchObject({ quantity: 9, reserved_quantity: 0 });
 
-    const movementInsertCall = allCalls.stock_movements.find((c) => c.method === "insert");
+    const movementInsertCall = allCalls.stock_movements!.find((c) => c.method === "insert");
     expect(movementInsertCall?.args[0]).toMatchObject({
       variant_id: "v1",
       delta: -1,

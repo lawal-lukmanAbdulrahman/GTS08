@@ -1,4 +1,5 @@
 export { formatKobo, koboToNaira, nairaToKobo } from "./money";
+export { computeCartTotals, type PosCartLine, type PosCartTotals } from "./pos";
 export { formatWAT, formatWATDate, toISOString } from "./date";
 export { isValidSlug, toSlug } from "./slug";
 export { idempotentFetch, generateIdempotencyKey, type IdempotentRequestInit } from "./idempotent-fetch";

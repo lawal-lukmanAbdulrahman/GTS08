@@ -17,9 +17,9 @@ function makeQueryStub() {
   };
   return stub;
 }
-const mockFrom = vi.fn(() => makeQueryStub());
+const mockFrom = vi.fn((_table: string) => makeQueryStub());
 vi.mock("@gts/database", () => ({
-  createServiceClient: () => ({ from: (...args: unknown[]) => mockFrom(...args) }),
+  createServiceClient: () => ({ from: (table: string) => mockFrom(table) }),
 }));
 
 import { NextRequest } from "next/server";

@@ -20,9 +20,9 @@ function makeQueryStub(result: { data: unknown; count?: number; error: unknown }
 }
 
 let queryResult: { data: unknown; count?: number; error: unknown } = { data: [], count: 0, error: null };
-const mockFrom = vi.fn(() => makeQueryStub(queryResult));
+const mockFrom = vi.fn((_table: string) => makeQueryStub(queryResult));
 vi.mock("@gts/database", () => ({
-  createServiceClient: () => ({ from: (...args: unknown[]) => mockFrom(...args) }),
+  createServiceClient: () => ({ from: (table: string) => mockFrom(table) }),
 }));
 
 import { NextRequest } from "next/server";

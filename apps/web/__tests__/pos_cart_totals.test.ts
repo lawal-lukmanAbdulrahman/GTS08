@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeCartTotals, type PosCartLine } from "../app/api/v1/pos/_lib/cart-totals";
+import { computeCartTotals, type PosCartLine } from "@gts/utils";
 
 describe("computeCartTotals (POS, all amounts in kobo)", () => {
   it("sums line totals into a subtotal", () => {

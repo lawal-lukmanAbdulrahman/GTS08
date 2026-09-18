@@ -151,7 +151,7 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
     expect(res.status).toBe(200);
     expect(body.data.order_number).toBe("GTS-202609-000001");
 
-    const orderInsertCall = allCalls.orders.find((c) => c.method === "insert");
+    const orderInsertCall = allCalls.orders!.find((c) => c.method === "insert");
     expect(orderInsertCall?.args[0]).toMatchObject({
       channel: "walk_in",
       status: "completed",
@@ -160,7 +160,7 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
       total: 3000000,
     });
 
-    const txInsertCall = allCalls.transactions.find((c) => c.method === "insert");
+    const txInsertCall = allCalls.transactions!.find((c) => c.method === "insert");
     expect(txInsertCall?.args[0]).toMatchObject({
       order_id: "order-1",
       payment_method: "cash",
@@ -169,10 +169,10 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
       amount: 3000000,
     });
 
-    const invUpdateCall = allCalls.inventory.find((c) => c.method === "update");
+    const invUpdateCall = allCalls.inventory!.find((c) => c.method === "update");
     expect(invUpdateCall?.args[0]).toMatchObject({ quantity: 8 }); // 10 - 2
 
-    const movementInsertCall = allCalls.stock_movements.find((c) => c.method === "insert");
+    const movementInsertCall = allCalls.stock_movements!.find((c) => c.method === "insert");
     expect(movementInsertCall?.args[0]).toMatchObject({
       variant_id: "v1",
       delta: -2,

@@ -130,14 +130,14 @@ describe("POST /api/v1/pos/whatsapp-orders (create pending order, D001)", () => 
     expect(res.status).toBe(200);
     expect(body.data.order_number).toBe("GTS-202609-000002");
 
-    const orderInsertCall = allCalls.orders.find((c) => c.method === "insert");
+    const orderInsertCall = allCalls.orders!.find((c) => c.method === "insert");
     expect(orderInsertCall?.args[0]).toMatchObject({
       channel: "whatsapp",
       status: "pending_payment",
       internal_notes: expect.stringContaining("08031234567"),
     });
 
-    const invUpdateCall = allCalls.inventory.find((c) => c.method === "update");
+    const invUpdateCall = allCalls.inventory!.find((c) => c.method === "update");
     expect(invUpdateCall?.args[0]).toMatchObject({ reserved_quantity: 1 }); // 0 + 1
   });
 });

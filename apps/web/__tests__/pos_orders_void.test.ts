@@ -132,13 +132,13 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
     expect(res.status).toBe(200);
     expect(body.data.status).toBe("voided");
 
-    const orderUpdateCall = allCalls.orders.find((c) => c.method === "update");
+    const orderUpdateCall = allCalls.orders!.find((c) => c.method === "update");
     expect(orderUpdateCall?.args[0]).toMatchObject({
       status: "voided",
       internal_notes: "customer changed mind",
     });
 
-    const movementInsertCall = allCalls.stock_movements.find((c) => c.method === "insert");
+    const movementInsertCall = allCalls.stock_movements!.find((c) => c.method === "insert");
     expect(movementInsertCall?.args[0]).toMatchObject({
       variant_id: "v1",
       delta: 2,
