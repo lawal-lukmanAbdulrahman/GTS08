@@ -42,7 +42,7 @@ export async function apiCall<T = unknown>(path: string, init: CallInit = {}): P
     return { ok: false, status: 0, message: UNREACHABLE };
   }
 
-  let body: any = null;
+  let body: ({ data?: unknown; meta?: PageMeta; error?: string; code?: string; details?: Record<string, string> }) | null = null;
   try {
     body = await res.json();
   } catch {

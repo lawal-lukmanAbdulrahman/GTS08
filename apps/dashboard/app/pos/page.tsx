@@ -119,7 +119,6 @@ export default function PosPage() {
   const [pendingOrders, setPendingOrders] = useState<PendingWhatsAppOrder[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
 
-  const activeCart = mode === "walkin" ? cart : waCart;
   const setActiveCart = mode === "walkin" ? setCart : setWaCart;
 
   const subtotal = cart.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
