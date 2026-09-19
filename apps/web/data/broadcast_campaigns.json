@@ -219,21 +219,21 @@
       "backgroundColor": "#010101"
     },
     "createdAt": "2026-09-05T19:45:57.007Z",
-    "updatedAt": "2026-09-07T03:50:35.979Z",
+    "updatedAt": "2026-09-19T05:44:10.304Z",
     "analytics": {
-      "impressions": 10,
+      "impressions": 13,
       "uniqueVisitors": 1,
-      "avgAttentionSeconds": 67.1,
+      "avgAttentionSeconds": 113.2,
       "clicks": 0,
       "ctrPct": 0,
-      "dismissals": 6,
-      "desktopPct": 80,
-      "mobilePct": 20,
+      "dismissals": 9,
+      "desktopPct": 85,
+      "mobilePct": 15,
       "retentionBreakdown": {
         "under2s": 0,
-        "twoTo5s": 0,
+        "twoTo5s": 11,
         "fiveTo10s": 0,
-        "over10s": 100
+        "over10s": 89
       }
     },
     "rebroadcastedAt": "2026-09-05T21:47:40.567Z"
@@ -358,21 +358,21 @@
       "backgroundColor": "#010101"
     },
     "createdAt": "2026-09-05T20:36:05.490Z",
-    "updatedAt": "2026-09-06T23:21:35.043Z",
+    "updatedAt": "2026-09-18T00:06:01.644Z",
     "analytics": {
-      "impressions": 4,
+      "impressions": 5,
       "uniqueVisitors": 2,
-      "avgAttentionSeconds": 9.4,
-      "clicks": 1,
-      "ctrPct": 25,
+      "avgAttentionSeconds": 8.2,
+      "clicks": 2,
+      "ctrPct": 40,
       "dismissals": 3,
-      "desktopPct": 75,
-      "mobilePct": 25,
+      "desktopPct": 80,
+      "mobilePct": 20,
       "retentionBreakdown": {
-        "under2s": 25,
-        "twoTo5s": 0,
-        "fiveTo10s": 25,
-        "over10s": 50
+        "under2s": 20,
+        "twoTo5s": 20,
+        "fiveTo10s": 20,
+        "over10s": 40
       }
     },
     "rebroadcastedAt": "2026-09-05T21:47:50.896Z"
