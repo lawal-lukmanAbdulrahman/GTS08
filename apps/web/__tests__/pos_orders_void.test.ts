@@ -5,6 +5,17 @@ vi.mock("../app/api/v1/pos/_lib/access", () => ({
   requirePosAccess: (...args: unknown[]) => mockRequirePosAccess(...args),
 }));
 
+const mockAdjustAll = vi.fn();
+const mockRollback = vi.fn();
+vi.mock("../app/api/v1/pos/_lib/inventory", () => ({
+  adjustAll: (...args: unknown[]) => mockAdjustAll(...args),
+  rollback: (...args: unknown[]) => mockRollback(...args),
+}));
+const mockTransition = vi.fn();
+vi.mock("../app/api/v1/pos/_lib/order-status", () => ({
+  transitionOrderStatus: (...args: unknown[]) => mockTransition(...args),
+}));
+
 type TableHandler = (calls: { method: string; args: unknown[] }[]) => any;
 let tableConfig: Record<string, TableHandler> = {};
 const allCalls: Record<string, { method: string; args: unknown[] }[]> = {};
@@ -63,6 +74,12 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
     });
     mockFrom.mockClear();
     Object.keys(allCalls).forEach((k) => delete allCalls[k]);
+    mockAdjustAll.mockReset();
+    mockAdjustAll.mockResolvedValue({ ok: true });
+    mockRollback.mockReset();
+    mockRollback.mockResolvedValue(undefined);
+    mockTransition.mockReset();
+    mockTransition.mockResolvedValue(true);
     tableConfig = {
       orders: (calls) => {
         const isUpdate = calls.some((c) => c.method === "update");
@@ -132,19 +149,41 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
     expect(res.status).toBe(200);
     expect(body.data.status).toBe("voided");
 
-    const orderUpdateCall = allCalls.orders!.find((c) => c.method === "update");
-    expect(orderUpdateCall?.args[0]).toMatchObject({
-      status: "voided",
-      internal_notes: "customer changed mind",
-    });
+    expect(mockTransition).toHaveBeenCalledWith(
+      expect.anything(),
+      "order-1",
+      "completed",
+      expect.objectContaining({ status: "voided", internal_notes: "customer changed mind" })
+    );
+    expect(mockAdjustAll).toHaveBeenCalledWith(expect.anything(), [{ variantId: "v1", deltaQuantity: 2 }]);
 
     const movementInsertCall = allCalls.stock_movements!.find((c) => c.method === "insert");
-    expect(movementInsertCall?.args[0]).toMatchObject({
-      variant_id: "v1",
-      delta: 2,
-      reason: "void",
-      order_id: "order-1",
-      actor_id: "cashier-1",
+    expect(movementInsertCall?.args[0]).toEqual([
+      {
+        variant_id: "v1",
+        delta: 2,
+        reason: "void",
+        order_id: "order-1",
+        actor_id: "cashier-1",
+        notes: "customer changed mind",
+      },
+    ]);
+  });
+
+  it("refuses to void an order that is not completed (e.g. still pending)", async () => {
+    tableConfig.orders = () => ({
+      data: { id: "order-1", status: "pending_payment", created_at: TODAY_ISO, cashier_id: "cashier-1", items: [] },
+      error: null,
     });
+    const res = await PUT(makeRequest({ reason: "wrong item" }), ctx("order-1"));
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe("NOT_VOIDABLE");
+  });
+
+  it("does not restock twice when two voids race", async () => {
+    mockTransition.mockResolvedValue(false);
+    const res = await PUT(makeRequest({ reason: "wrong item" }), ctx("order-1"));
+    expect(res.status).toBe(409);
+    expect(mockAdjustAll).not.toHaveBeenCalled();
   });
 });

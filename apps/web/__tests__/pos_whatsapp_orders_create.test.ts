@@ -5,6 +5,13 @@ vi.mock("../app/api/v1/pos/_lib/access", () => ({
   requirePosAccess: (...args: unknown[]) => mockRequirePosAccess(...args),
 }));
 
+const mockAdjustAll = vi.fn();
+const mockRollback = vi.fn();
+vi.mock("../app/api/v1/pos/_lib/inventory", () => ({
+  adjustAll: (...args: unknown[]) => mockAdjustAll(...args),
+  rollback: (...args: unknown[]) => mockRollback(...args),
+}));
+
 type TableHandler = (calls: { method: string; args: unknown[] }[]) => any;
 let tableConfig: Record<string, TableHandler> = {};
 const allCalls: Record<string, { method: string; args: unknown[] }[]> = {};
@@ -63,6 +70,10 @@ describe("POST /api/v1/pos/whatsapp-orders (create pending order, D001)", () => 
     });
     mockFrom.mockClear();
     Object.keys(allCalls).forEach((k) => delete allCalls[k]);
+    mockAdjustAll.mockReset();
+    mockAdjustAll.mockResolvedValue({ ok: true });
+    mockRollback.mockReset();
+    mockRollback.mockResolvedValue(undefined);
     tableConfig = {
       product_variants: () => ({
         data: [
@@ -137,7 +148,29 @@ describe("POST /api/v1/pos/whatsapp-orders (create pending order, D001)", () => 
       internal_notes: expect.stringContaining("08031234567"),
     });
 
-    const invUpdateCall = allCalls.inventory!.find((c) => c.method === "update");
-    expect(invUpdateCall?.args[0]).toMatchObject({ reserved_quantity: 1 }); // 0 + 1
+    expect(mockAdjustAll).toHaveBeenCalledWith(expect.anything(), [
+      { variantId: "v1", deltaReserved: 1, requireAvailable: 1 },
+    ]);
+  });
+
+  it("returns 409 and creates nothing if another cashier reserves the stock first", async () => {
+    mockAdjustAll.mockResolvedValue({
+      ok: false,
+      reason: "INSUFFICIENT_STOCK",
+      available: 0,
+      failedVariantId: "v1",
+    });
+    const res = await POST(makeRequest(VALID_BODY));
+    expect(res.status).toBe(409);
+    expect(allCalls.orders).toBeUndefined();
+  });
+
+  it("releases the reservation if the order row cannot be created", async () => {
+    tableConfig.orders = () => ({ data: null, error: { message: "db down" } });
+    const res = await POST(makeRequest(VALID_BODY));
+    expect(res.status).toBe(500);
+    expect(mockRollback).toHaveBeenCalledWith(expect.anything(), [
+      { variantId: "v1", deltaReserved: 1, requireAvailable: 1 },
+    ]);
   });
 });

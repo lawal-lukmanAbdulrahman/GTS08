@@ -5,6 +5,17 @@ vi.mock("../app/api/v1/pos/_lib/access", () => ({
   requirePosAccess: (...args: unknown[]) => mockRequirePosAccess(...args),
 }));
 
+const mockAdjustAll = vi.fn();
+const mockRollback = vi.fn();
+vi.mock("../app/api/v1/pos/_lib/inventory", () => ({
+  adjustAll: (...args: unknown[]) => mockAdjustAll(...args),
+  rollback: (...args: unknown[]) => mockRollback(...args),
+}));
+const mockTransition = vi.fn();
+vi.mock("../app/api/v1/pos/_lib/order-status", () => ({
+  transitionOrderStatus: (...args: unknown[]) => mockTransition(...args),
+}));
+
 type TableHandler = (calls: { method: string; args: unknown[] }[]) => any;
 let tableConfig: Record<string, TableHandler> = {};
 const allCalls: Record<string, { method: string; args: unknown[] }[]> = {};
@@ -57,6 +68,12 @@ describe("POST /api/v1/pos/whatsapp-orders/:id/confirm (D001)", () => {
     });
     mockFrom.mockClear();
     Object.keys(allCalls).forEach((k) => delete allCalls[k]);
+    mockAdjustAll.mockReset();
+    mockAdjustAll.mockResolvedValue({ ok: true });
+    mockRollback.mockReset();
+    mockRollback.mockResolvedValue(undefined);
+    mockTransition.mockReset();
+    mockTransition.mockResolvedValue(true);
     tableConfig = {
       orders: (calls) => {
         if (calls.some((c) => c.method === "update")) return { data: null, error: null };
@@ -110,8 +127,12 @@ describe("POST /api/v1/pos/whatsapp-orders/:id/confirm (D001)", () => {
     expect(res.status).toBe(200);
     expect(body.data.status).toBe("completed");
 
-    const orderUpdateCall = allCalls.orders!.find((c) => c.method === "update");
-    expect(orderUpdateCall?.args[0]).toMatchObject({ status: "completed" });
+    expect(mockTransition).toHaveBeenCalledWith(
+      expect.anything(),
+      "order-1",
+      "pending_payment",
+      expect.objectContaining({ status: "completed" })
+    );
 
     const txInsertCall = allCalls.transactions!.find((c) => c.method === "insert");
     expect(txInsertCall?.args[0]).toMatchObject({
@@ -122,16 +143,34 @@ describe("POST /api/v1/pos/whatsapp-orders/:id/confirm (D001)", () => {
       amount: 1500000,
     });
 
-    const invUpdateCall = allCalls.inventory!.find((c) => c.method === "update");
-    expect(invUpdateCall?.args[0]).toMatchObject({ quantity: 9, reserved_quantity: 0 });
+    expect(mockAdjustAll).toHaveBeenCalledWith(expect.anything(), [
+      { variantId: "v1", deltaQuantity: -1, deltaReserved: -1 },
+    ]);
 
     const movementInsertCall = allCalls.stock_movements!.find((c) => c.method === "insert");
-    expect(movementInsertCall?.args[0]).toMatchObject({
-      variant_id: "v1",
-      delta: -1,
-      reason: "sale_pos",
-      order_id: "order-1",
-      actor_id: "cashier-2",
-    });
+    expect(movementInsertCall?.args[0]).toEqual([
+      { variant_id: "v1", delta: -1, reason: "sale_pos", order_id: "order-1", actor_id: "cashier-2" },
+    ]);
+  });
+
+  it("returns 409 and touches no stock when the order was cancelled a moment earlier", async () => {
+    mockTransition.mockResolvedValue(false);
+    const res = await POST(makeRequest({ payment_method: "cash" }), ctx("order-1"));
+    expect(res.status).toBe(409);
+    expect(mockAdjustAll).not.toHaveBeenCalled();
+    expect(allCalls.transactions).toBeUndefined();
+  });
+
+  it("reopens the order and records no payment if stock cannot be updated", async () => {
+    mockAdjustAll.mockResolvedValue({ ok: false, reason: "CONTENTION", failedVariantId: "v1" });
+    const res = await POST(makeRequest({ payment_method: "cash" }), ctx("order-1"));
+    expect(res.status).toBe(503);
+    expect(mockTransition).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "order-1",
+      "completed",
+      expect.objectContaining({ status: "pending_payment" })
+    );
+    expect(allCalls.transactions).toBeUndefined();
   });
 });

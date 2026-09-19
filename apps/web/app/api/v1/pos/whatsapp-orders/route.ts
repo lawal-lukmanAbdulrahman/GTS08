@@ -6,6 +6,7 @@ import { sanitizeEmail, sanitizeSqlInput } from "../../auth/utils";
 import { computeCartTotals, type PosCartLine } from "@gts/utils";
 import { checkStockSufficiency } from "../_lib/stock-sufficiency";
 import { variantAvailable } from "../_lib/stock-status";
+import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
 
 interface OrderItemInput {
   variant_id: string;
@@ -116,6 +117,33 @@ export async function POST(request: NextRequest) {
   });
   const totals = computeCartTotals(cartLines, 0);
 
+  const reserveChanges: InventoryChange[] = items.map((i) => ({
+    variantId: i.variant_id,
+    deltaReserved: i.quantity,
+    requireAvailable: i.quantity,
+  }));
+  const reserveResult = await adjustAll(serviceClient, reserveChanges);
+  if (!reserveResult.ok) {
+    if (reserveResult.reason === "INSUFFICIENT_STOCK") {
+      const requested = items.find((i) => i.variant_id === reserveResult.failedVariantId)?.quantity ?? 0;
+      return NextResponse.json(
+        {
+          error: "One or more items do not have enough stock to reserve.",
+          code: "INSUFFICIENT_STOCK",
+          details: [{ variantId: reserveResult.failedVariantId, requested, available: reserveResult.available }],
+        },
+        { status: 409 }
+      );
+    }
+    if (reserveResult.reason === "CONTENTION") {
+      return NextResponse.json(
+        { error: "The till is busy updating that item's stock. Please try again.", code: "STOCK_BUSY" },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ error: reserveResult.message, code: "DATABASE_ERROR" }, { status: 500 });
+  }
+
   let customerId: string | null = null;
   const contactNote = `WhatsApp customer: ${customerName} (${customerPhone})`;
   if (body.customer_email) {
@@ -155,6 +183,7 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (orderError || !order) {
+    await rollback(serviceClient, reserveChanges);
     return NextResponse.json(
       { error: orderError?.message || "Failed to create order.", code: "ORDER_CREATION_FAILED" },
       { status: 500 }
@@ -175,12 +204,6 @@ export async function POST(request: NextRequest) {
     };
   });
   await serviceClient.from("order_items").insert(orderItemsPayload);
-
-  for (const i of items) {
-    const v = variantById.get(i.variant_id)!;
-    const newReserved = (v.inventory?.reserved_quantity ?? 0) + i.quantity;
-    await serviceClient.from("inventory").update({ reserved_quantity: newReserved }).eq("variant_id", i.variant_id);
-  }
 
   return NextResponse.json({
     data: {

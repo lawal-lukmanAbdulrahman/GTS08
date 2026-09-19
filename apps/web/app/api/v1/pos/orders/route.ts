@@ -6,6 +6,7 @@ import { sanitizeEmail } from "../../auth/utils";
 import { computeCartTotals, type PosCartLine } from "@gts/utils";
 import { checkStockSufficiency } from "../_lib/stock-sufficiency";
 import { variantAvailable } from "../_lib/stock-status";
+import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
 
 const PAYMENT_METHODS = ["cash", "pos_terminal"] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -23,6 +24,30 @@ interface VariantRow {
   price_modifier: number;
   inventory: { quantity: number; reserved_quantity: number } | null;
   product: { id: string; name: string; base_price: number };
+}
+
+function stockFailureResponse(
+  failure: Exclude<Awaited<ReturnType<typeof adjustAll>>, { ok: true }>,
+  items: OrderItemInput[]
+) {
+  if (failure.reason === "INSUFFICIENT_STOCK") {
+    const requested = items.find((i) => i.variant_id === failure.failedVariantId)?.quantity ?? 0;
+    return NextResponse.json(
+      {
+        error: "One or more items no longer have sufficient stock.",
+        code: "INSUFFICIENT_STOCK",
+        details: [{ variantId: failure.failedVariantId, requested, available: failure.available }],
+      },
+      { status: 409 }
+    );
+  }
+  if (failure.reason === "CONTENTION") {
+    return NextResponse.json(
+      { error: "The till is busy updating that item's stock. Please try again.", code: "STOCK_BUSY" },
+      { status: 503 }
+    );
+  }
+  return NextResponse.json({ error: failure.message, code: "DATABASE_ERROR" }, { status: 500 });
 }
 
 export async function POST(request: NextRequest) {
@@ -113,6 +138,16 @@ export async function POST(request: NextRequest) {
   });
   const totals = computeCartTotals(cartLines, body.discount_amount || 0);
 
+  const stockChanges: InventoryChange[] = items.map((i) => ({
+    variantId: i.variant_id,
+    deltaQuantity: -i.quantity,
+    requireAvailable: i.quantity,
+  }));
+  const stockResult = await adjustAll(serviceClient, stockChanges);
+  if (!stockResult.ok) {
+    return stockFailureResponse(stockResult, items);
+  }
+
   let customerId: string | null = null;
   if (body.customer_email) {
     const email = sanitizeEmail(body.customer_email);
@@ -131,6 +166,7 @@ export async function POST(request: NextRequest) {
         .select("id")
         .single();
       if (custError) {
+        await rollback(serviceClient, stockChanges);
         return NextResponse.json({ error: custError.message, code: "DATABASE_ERROR" }, { status: 500 });
       }
       customerId = (created as { id: string }).id;
@@ -155,6 +191,7 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (orderError || !order) {
+    await rollback(serviceClient, stockChanges);
     return NextResponse.json(
       { error: orderError?.message || "Failed to create order.", code: "ORDER_CREATION_FAILED" },
       { status: 500 }
@@ -190,22 +227,15 @@ export async function POST(request: NextRequest) {
     confirmed_by: access.user.id,
   });
 
-  for (const i of items) {
-    const v = variantById.get(i.variant_id)!;
-    const newQuantity = (v.inventory?.quantity ?? 0) - i.quantity;
-    await serviceClient
-      .from("inventory")
-      .update({ quantity: newQuantity, last_sold_at: new Date().toISOString() })
-      .eq("variant_id", i.variant_id);
-
-    await serviceClient.from("stock_movements").insert({
+  await serviceClient.from("stock_movements").insert(
+    items.map((i) => ({
       variant_id: i.variant_id,
       delta: -i.quantity,
       reason: "sale_pos",
       order_id: createdOrder.id,
       actor_id: access.user.id,
-    });
-  }
+    }))
+  );
 
   return NextResponse.json({
     data: {

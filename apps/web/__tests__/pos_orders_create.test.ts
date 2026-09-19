@@ -5,6 +5,13 @@ vi.mock("../app/api/v1/pos/_lib/access", () => ({
   requirePosAccess: (...args: unknown[]) => mockRequirePosAccess(...args),
 }));
 
+const mockAdjustAll = vi.fn();
+const mockRollback = vi.fn();
+vi.mock("../app/api/v1/pos/_lib/inventory", () => ({
+  adjustAll: (...args: unknown[]) => mockAdjustAll(...args),
+  rollback: (...args: unknown[]) => mockRollback(...args),
+}));
+
 /** Per-table configurable Supabase stub. `tableConfig[table]` is a function
  * that receives the called method name + args and returns the eventual
  * `{ data, error }` (or a further chainable stub for select chains). */
@@ -66,6 +73,11 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
       role: "cashier",
     });
     mockFrom.mockClear();
+    Object.keys(allCalls).forEach((k) => delete allCalls[k]);
+    mockAdjustAll.mockReset();
+    mockAdjustAll.mockResolvedValue({ ok: true });
+    mockRollback.mockReset();
+    mockRollback.mockResolvedValue(undefined);
     tableConfig = {
       product_variants: () => ({
         data: [
@@ -169,17 +181,51 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
       amount: 3000000,
     });
 
-    const invUpdateCall = allCalls.inventory!.find((c) => c.method === "update");
-    expect(invUpdateCall?.args[0]).toMatchObject({ quantity: 8 }); // 10 - 2
+    expect(mockAdjustAll).toHaveBeenCalledWith(expect.anything(), [
+      { variantId: "v1", deltaQuantity: -2, requireAvailable: 2 },
+    ]);
 
     const movementInsertCall = allCalls.stock_movements!.find((c) => c.method === "insert");
-    expect(movementInsertCall?.args[0]).toMatchObject({
-      variant_id: "v1",
-      delta: -2,
-      reason: "sale_pos",
-      order_id: "order-1",
-      actor_id: "cashier-1",
+    expect(movementInsertCall?.args[0]).toEqual([
+      {
+        variant_id: "v1",
+        delta: -2,
+        reason: "sale_pos",
+        order_id: "order-1",
+        actor_id: "cashier-1",
+      },
+    ]);
+  });
+
+  it("returns 409 and creates no order when another cashier takes the stock first", async () => {
+    mockAdjustAll.mockResolvedValue({
+      ok: false,
+      reason: "INSUFFICIENT_STOCK",
+      available: 0,
+      failedVariantId: "v1",
     });
+    const res = await POST(makeRequest(VALID_BODY));
+    const body = await res.json();
+    expect(res.status).toBe(409);
+    expect(body.code).toBe("INSUFFICIENT_STOCK");
+    expect(body.details[0]).toMatchObject({ variantId: "v1", requested: 2, available: 0 });
+    expect(allCalls.orders).toBeUndefined();
+  });
+
+  it("returns 503 when stock is too contended to update safely", async () => {
+    mockAdjustAll.mockResolvedValue({ ok: false, reason: "CONTENTION", failedVariantId: "v1" });
+    const res = await POST(makeRequest(VALID_BODY));
+    expect(res.status).toBe(503);
+    expect((await res.json()).code).toBe("STOCK_BUSY");
+  });
+
+  it("puts the stock back if the order row cannot be created", async () => {
+    tableConfig.orders = () => ({ data: null, error: { message: "db down" } });
+    const res = await POST(makeRequest(VALID_BODY));
+    expect(res.status).toBe(500);
+    expect(mockRollback).toHaveBeenCalledWith(expect.anything(), [
+      { variantId: "v1", deltaQuantity: -2, requireAvailable: 2 },
+    ]);
   });
 
   it("creates a customer record only when an email is provided", async () => {

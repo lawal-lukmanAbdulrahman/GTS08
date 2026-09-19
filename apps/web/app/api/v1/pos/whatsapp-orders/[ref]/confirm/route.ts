@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../../../_lib/access";
+import { adjustAll, type InventoryChange } from "../../../_lib/inventory";
+import { transitionOrderStatus } from "../../../_lib/order-status";
 
 const PAYMENT_METHODS = ["cash", "pos_terminal"] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -63,10 +65,34 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
     );
   }
 
-  await serviceClient
-    .from("orders")
-    .update({ status: "completed", paid_at: new Date().toISOString() })
-    .eq("id", id);
+  // Claim the order first: if a cancel (or another confirm) got there first
+  // this returns false and no stock is touched.
+  const claimed = await transitionOrderStatus(serviceClient, id, "pending_payment", {
+    status: "completed",
+    paid_at: new Date().toISOString(),
+  });
+  if (!claimed) {
+    return NextResponse.json(
+      { error: "This order was just changed by someone else.", code: "ORDER_NOT_PENDING" },
+      { status: 409 }
+    );
+  }
+
+  const stockChanges: InventoryChange[] = found.items
+    .filter((item) => item.variant_id)
+    .map((item) => ({
+      variantId: item.variant_id as string,
+      deltaQuantity: -item.quantity,
+      deltaReserved: -item.quantity,
+    }));
+  const stockResult = await adjustAll(serviceClient, stockChanges);
+  if (!stockResult.ok) {
+    await transitionOrderStatus(serviceClient, id, "completed", { status: "pending_payment", paid_at: null });
+    return NextResponse.json(
+      { error: "Could not update stock for this order. Nothing was charged; try again.", code: "STOCK_UPDATE_FAILED" },
+      { status: 503 }
+    );
+  }
 
   await serviceClient.from("transactions").insert({
     order_id: id,
@@ -76,32 +102,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
     confirmed_by: access.user.id,
   });
 
-  for (const item of found.items) {
-    if (!item.variant_id) continue;
-
-    const { data: inv } = await serviceClient
-      .from("inventory")
-      .select("quantity, reserved_quantity")
-      .eq("variant_id", item.variant_id)
-      .maybeSingle();
-
-    const current = inv as { quantity: number; reserved_quantity: number } | null;
-    const newQuantity = (current?.quantity ?? 0) - item.quantity;
-    const newReserved = Math.max(0, (current?.reserved_quantity ?? 0) - item.quantity);
-
-    await serviceClient
-      .from("inventory")
-      .update({ quantity: newQuantity, reserved_quantity: newReserved, last_sold_at: new Date().toISOString() })
-      .eq("variant_id", item.variant_id);
-
-    await serviceClient.from("stock_movements").insert({
-      variant_id: item.variant_id,
-      delta: -item.quantity,
+  await serviceClient.from("stock_movements").insert(
+    stockChanges.map((c) => ({
+      variant_id: c.variantId,
+      delta: c.deltaQuantity,
       reason: "sale_pos",
       order_id: id,
       actor_id: access.user.id,
-    });
-  }
+    }))
+  );
 
   return NextResponse.json({
     data: {

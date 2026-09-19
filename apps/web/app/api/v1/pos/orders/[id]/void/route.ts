@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../../../_lib/access";
+import { adjustAll, type InventoryChange } from "../../../_lib/inventory";
+import { transitionOrderStatus } from "../../../_lib/order-status";
 import { sanitizeSqlInput } from "../../../../auth/utils";
 
 function isToday(isoDate: string): boolean {
@@ -74,36 +76,39 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       { status: 409 }
     );
   }
+  if (found.status !== "completed") {
+    return NextResponse.json(
+      { error: `Only completed orders can be voided (this one is '${found.status}').`, code: "NOT_VOIDABLE" },
+      { status: 409 }
+    );
+  }
 
-  await serviceClient
-    .from("orders")
-    .update({ status: "voided", internal_notes: reason, updated_at: new Date().toISOString() })
-    .eq("id", id);
+  const claimed = await transitionOrderStatus(serviceClient, id, "completed", {
+    status: "voided",
+    internal_notes: reason,
+  });
+  if (!claimed) {
+    return NextResponse.json(
+      { error: "This order was just changed by someone else.", code: "ORDER_NOT_COMPLETED" },
+      { status: 409 }
+    );
+  }
 
-  for (const item of found.items) {
-    if (!item.variant_id) continue;
+  const restock: InventoryChange[] = found.items
+    .filter((item) => item.variant_id)
+    .map((item) => ({ variantId: item.variant_id as string, deltaQuantity: item.quantity }));
+  await adjustAll(serviceClient, restock);
 
-    const { data: inv } = await serviceClient
-      .from("inventory")
-      .select("quantity")
-      .eq("variant_id", item.variant_id)
-      .maybeSingle();
-
-    const currentQuantity = (inv as { quantity: number } | null)?.quantity ?? 0;
-    await serviceClient
-      .from("inventory")
-      .update({ quantity: currentQuantity + item.quantity })
-      .eq("variant_id", item.variant_id);
-
-    await serviceClient.from("stock_movements").insert({
-      variant_id: item.variant_id,
-      delta: item.quantity,
+  await serviceClient.from("stock_movements").insert(
+    restock.map((c) => ({
+      variant_id: c.variantId,
+      delta: c.deltaQuantity,
       reason: "void",
       order_id: id,
       actor_id: access.user.id,
       notes: reason,
-    });
-  }
+    }))
+  );
 
   return NextResponse.json({ data: { id, status: "voided" } });
 }
