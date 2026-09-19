@@ -173,6 +173,16 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       ),
     },
     {
+      name: "Product Flags",
+      href: "/admin/flags",
+      exact: false,
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18M3 4.5h13.5l-2.25 4.5 2.25 4.5H3" />
+        </svg>
+      ),
+    },
+    {
       name: "Store Details",
       href: "/admin/settings",
       exact: false,

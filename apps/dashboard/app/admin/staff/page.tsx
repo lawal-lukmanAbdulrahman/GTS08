@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AdminTopStrip } from "../sidebar-context";
+import { apiCall } from "../../lib/staff-api";
 
 interface StaffMember {
   id: string;
@@ -21,6 +23,7 @@ interface StaffMember {
 export default function AdminStaffPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStaff();
@@ -28,17 +31,11 @@ export default function AdminStaffPage() {
 
   const fetchStaff = async () => {
     setLoading(true);
-    try {
-      const res = await fetch("http://localhost:3000/api/v1/users/staff");
-      if (res.ok) {
-        const json = await res.json();
-        setStaff(json.data || []);
-      }
-    } catch {
-      // API fallback
-    } finally {
-      setLoading(false);
-    }
+    setError(null);
+    const result = await apiCall<StaffMember[]>("/users/staff");
+    if (result.ok) setStaff(result.data || []);
+    else setError(result.message);
+    setLoading(false);
   };
 
   return (
@@ -57,6 +54,12 @@ export default function AdminStaffPage() {
         </div>
       </div>
 
+      {error && (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+
       {loading ? (
         <div className="space-y-3 animate-pulse">
           {[1, 2, 3].map((i) => (
@@ -74,13 +77,14 @@ export default function AdminStaffPage() {
                 <th className="p-4">Inventory Access</th>
                 <th className="p-4">Order Access</th>
                 <th className="p-4">Products Access</th>
-                <th className="p-4 text-right">Status</th>
+                <th className="p-4">Status</th>
+                <th className="p-4 text-right">Record</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-[#2A2C32]/60">
               {staff.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-gray-400 dark:text-[#6B7280] font-mono">
+                  <td colSpan={8} className="p-8 text-center text-gray-400 dark:text-[#6B7280] font-mono">
                     No staff records found
                   </td>
                 </tr>
@@ -124,7 +128,7 @@ export default function AdminStaffPage() {
                         <span className="text-gray-400 dark:text-gray-600">Off</span>
                       )}
                     </td>
-                    <td className="p-4 text-right">
+                    <td className="p-4">
                       {s.is_blocked ? (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
                           Blocked
@@ -134,6 +138,11 @@ export default function AdminStaffPage() {
                           Active
                         </span>
                       )}
+                    </td>
+                    <td className="p-4 text-right">
+                      <Link href={`/admin/staff/${s.id}`} className="font-semibold text-gray-700 dark:text-gray-200 underline">
+                        View
+                      </Link>
                     </td>
                   </tr>
                 ))
