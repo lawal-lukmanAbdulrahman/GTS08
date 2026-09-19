@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { signOutMessage } from "../lib/session";
 
 /**
  * Prevents and sanitizes input parameters against SQL Injection attacks and malicious payloads.
@@ -36,7 +37,7 @@ export default function LoginPage() {
   // Field-specific error states (No Emojis, placed directly beneath fields)
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [generalError, setGeneralError] = useState<string | null>(null);
+  const [generalError, setGeneralError] = useState<string | null>(() => signOutMessage(searchParams.get("reason")));
 
   // Shaking field state for weighted tactile jiggle feedback
   const [shakingField, setShakingField] = useState<"email" | "password" | "all" | null>(null);
