@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
       phone: staff.phone,
       role: staff.role,
       is_admin: staff.isAdmin,
+      is_super_admin: staff.isSuperAdmin,
       permissions: staff.permissions,
     },
   });

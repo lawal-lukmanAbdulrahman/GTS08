@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AdminTopStrip } from "../sidebar-context";
+import type { NewStaffInput } from "@gts/utils";
 import { apiCall } from "../../lib/staff-api";
+import { useStaffSession } from "../../lib/use-staff-session";
+import AddStaffForm, { type CreateResult, type CreatedStaff } from "./add-staff-form";
 
 interface StaffMember {
   id: string;
@@ -24,10 +27,18 @@ export default function AdminStaffPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const { profile } = useStaffSession();
 
   useEffect(() => {
     fetchStaff();
   }, []);
+
+  async function createStaff(input: NewStaffInput): Promise<CreateResult> {
+    const result = await apiCall<CreatedStaff>("/users/staff", { method: "POST", json: input });
+    if (result.ok) return { ok: true, data: result.data };
+    return { ok: false, message: result.message, errors: result.details };
+  }
 
   const fetchStaff = async () => {
     setLoading(true);
@@ -52,6 +63,15 @@ export default function AdminStaffPage() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Staff & Permissions</h1>
           <p className="text-xs text-gray-500 dark:text-[#9CA3AF] mt-0.5 font-mono">Manage staff roles, access levels, and granular permission flags</p>
         </div>
+        {profile?.is_super_admin && (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="px-4 py-2.5 text-sm font-bold rounded-[8px] bg-[#EDCF5D] text-[#010101] self-start md:self-auto"
+          >
+            + Add staff member
+          </button>
+        )}
       </div>
 
       {error && (
@@ -150,6 +170,17 @@ export default function AdminStaffPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {adding && (
+        <AddStaffForm
+          onCreate={createStaff}
+          onClose={() => setAdding(false)}
+          onDone={() => {
+            setAdding(false);
+            fetchStaff();
+          }}
+        />
       )}
     </div>
   );

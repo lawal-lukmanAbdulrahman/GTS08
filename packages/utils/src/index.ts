@@ -26,3 +26,4 @@ export {
   type RateLimitOptions,
   type RateLimitResult,
 } from "./rate-limiter";
+export { validateNewStaff, defaultGrants, STAFF_ROLES, STAFF_ROLE_LABELS, PERMISSION_GRANTS, type NewStaffInput, type NewStaffRole, type NewStaffValidation, type PermissionGrant } from "./new-staff";

@@ -14,6 +14,7 @@ export type ActivityAction =
   | "pos.receipt_reprint"
   | "profile.update_phone"
   | "profile.change_password"
+  | "staff.create"
   | "staff.permissions_update"
   | "product_flag.raise"
   | "product_flag.update";

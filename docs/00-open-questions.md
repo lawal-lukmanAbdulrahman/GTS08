@@ -71,6 +71,21 @@ recorded against their own profile. Decisions (reviewer: project owner):
   from (the reading of "same for orders" is unconfirmed by the owner and easy
   to revert).
 
+### D004: Super admin adds staff (migration 00011)
+
+- **Super admin:** `users.is_super_admin` (only an admin can hold it). The
+  earliest-created admin is marked by the migration; change with the UPDATE in
+  the migration's comment. Only a super admin sees "Add staff member" and can
+  call `POST /users/staff`.
+- **Limited access is by role + grants, not by a "limited admin".** The seven
+  permission flags are only enforced on POS routes; other admin routes gate on
+  `role = 'admin'`. So an admin is always full-access, and narrower access is
+  given by creating a cashier or inventory_staff with chosen grants.
+- **Onboarding:** the account is created confirmed with a random one-time
+  password shown once to the super admin (never stored or logged). No email is
+  sent. There is no forced password change on first sign-in yet.
+- **Not built:** editing or blocking other admins, transferring super admin.
+
 ## Spec Corrections
 
 - `gts_03_cashier_spec.md` Part 9's documented paths (`/pos/orders`,

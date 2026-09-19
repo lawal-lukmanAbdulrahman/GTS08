@@ -86,3 +86,12 @@ describe("describeActivity", () => {
     expect(describeActivity(entry("pos.void", {}))).toEqual({ title: "Voided a sale" });
   });
 });
+
+describe("describeActivity: staff.create", () => {
+  it("says who was added and as what", () => {
+    const d = describeActivity(entry("staff.create", { email: "ada@x.com", role: "cashier" }));
+    expect(d.title).toBe("Added a staff account");
+    expect(d.detail).toMatch(/ada@x\.com/);
+    expect(d.detail).toMatch(/cashier/i);
+  });
+});

@@ -25,6 +25,7 @@ import {
   requireAdmin,
   requirePosAccess,
   requirePosPermission,
+  requireSuperAdmin,
 } from "../app/api/v1/_lib/staff-access";
 
 const req = () => new NextRequest("http://localhost:3000/api/v1/x");
@@ -211,5 +212,41 @@ describe("requirePosPermission", () => {
   it("allows an admin implicitly", async () => {
     profile({ role: "admin" }, null);
     expect(((await requirePosPermission(req(), "can_apply_discounts")) as any).ok).toBe(true);
+  });
+});
+
+
+describe("requireSuperAdmin", () => {
+  beforeEach(() => {
+    mockGetUser.mockReset();
+    mockGetUser.mockResolvedValue({ id: "u1", email: "boss@gts.ng" });
+  });
+
+  it("lets the super admin through", async () => {
+    profile({ role: "admin", is_super_admin: true }, null);
+    const r = await requireSuperAdmin(req());
+    expect(r.ok && r.isSuperAdmin).toBe(true);
+  });
+
+  it("refuses an ordinary admin", async () => {
+    profile({ role: "admin", is_super_admin: false }, null);
+    await denied(requireSuperAdmin(req()), 403, "SUPER_ADMIN_ONLY");
+  });
+
+  it("refuses a cashier, even one wrongly flagged", async () => {
+    profile({ role: "cashier", is_super_admin: true });
+    await denied(requireSuperAdmin(req()), 403, "SUPER_ADMIN_ONLY");
+  });
+
+  it("treats a database without the column yet (migration pending) as not a super admin", async () => {
+    profile({ role: "admin" }, null); // no is_super_admin key at all
+    await denied(requireSuperAdmin(req()), 403, "SUPER_ADMIN_ONLY");
+    const r = await requireAdmin(req());
+    expect(r.ok && r.isSuperAdmin).toBe(false);
+  });
+
+  it("still refuses a blocked super admin", async () => {
+    profile({ role: "admin", is_super_admin: true, is_blocked: true }, null);
+    await denied(requireSuperAdmin(req()), 403, "ACCOUNT_BLOCKED");
   });
 });

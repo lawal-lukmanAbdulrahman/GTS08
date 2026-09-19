@@ -68,6 +68,8 @@ export function describeActivity(entry: ActivityLike): { title: string; detail?:
       return { title: "Changed their password" };
     case "profile.update_phone":
       return { title: c.cleared === true ? "Removed their phone number" : "Updated their phone number" };
+    case "staff.create":
+      return withDetail("Added a staff account", join([str(c.email), str(c.role) ? `as ${String(c.role).replace("_", " ")}` : null]));
     case "staff.permissions_update": {
       const words = (k: string) => (Array.isArray(c[k]) ? (c[k] as string[]).map((p) => PERMISSION_WORDS[p] ?? p).join(", ") : "");
       return withDetail(

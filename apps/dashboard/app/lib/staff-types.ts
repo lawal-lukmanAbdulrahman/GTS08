@@ -57,5 +57,7 @@ export interface StaffProfileView {
   phone: string | null;
   role: string;
   is_admin: boolean;
+  /** The one admin who can add people. */
+  is_super_admin?: boolean;
   permissions: PermissionsView;
 }

@@ -21,6 +21,8 @@ export interface StaffContext {
   user: { id: string; email: string | null };
   role: string;
   isAdmin: boolean;
+  /** The one admin who can add people (D004). Always false for non-admins. */
+  isSuperAdmin: boolean;
   fullName: string;
   phone: string | null;
   /** Effective permissions: an admin has every one implicitly. */
@@ -79,7 +81,8 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
 
   const { data, error } = await createServiceClient()
     .from("users")
-    .select("id, email, full_name, phone, role, is_blocked, employee_permissions!employee_permissions_user_id_fkey(*)")
+    // "*" so a database that hasn't had the is_super_admin column added yet still signs people in.
+    .select("*, employee_permissions!employee_permissions_user_id_fkey(*)")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -90,6 +93,7 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
     phone?: string | null;
     role: string;
     is_blocked?: boolean;
+    is_super_admin?: boolean;
     employee_permissions?: Record<string, unknown> | Array<Record<string, unknown>> | null;
   };
   // A one-to-one embed comes back as an object; tolerate the array form too.
@@ -106,6 +110,7 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
     user: { id: user.id, email: user.email ?? null },
     role: row.role,
     isAdmin,
+    isSuperAdmin: isAdmin && row.is_super_admin === true,
     fullName: row.full_name ?? "",
     phone: row.phone ?? null,
     permissions: effectivePermissions(permissionRow, isAdmin),
@@ -116,6 +121,14 @@ export async function requireAdmin(request: NextRequest): Promise<StaffResult> {
   const staff = await requireStaff(request);
   if (!staff.ok) return staff;
   if (!staff.isAdmin) return deny(403, "Only admins can do this.", "FORBIDDEN");
+  return staff;
+}
+
+/** Creating and managing other admins is for the super admin alone. */
+export async function requireSuperAdmin(request: NextRequest): Promise<StaffResult> {
+  const staff = await requireStaff(request);
+  if (!staff.ok) return staff;
+  if (!staff.isSuperAdmin) return deny(403, "Only the super admin can do this.", "SUPER_ADMIN_ONLY");
   return staff;
 }
 
