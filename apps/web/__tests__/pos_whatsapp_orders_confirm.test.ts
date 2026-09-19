@@ -173,4 +173,23 @@ describe("POST /api/v1/pos/whatsapp-orders/:id/confirm (D001)", () => {
     );
     expect(allCalls.transactions).toBeUndefined();
   });
+
+  it("records the payment in the audit log against the cashier who took it", async () => {
+    await POST(makeRequest({ payment_method: "pos_terminal" }), ctx("order-1"));
+    const row = allCalls.activity_logs!.find((c) => c.method === "insert")!.args[0] as any;
+    expect(row).toMatchObject({
+      actor_id: "cashier-2",
+      action: "pos.whatsapp_confirm",
+      target_type: "order",
+      target_id: "order-1",
+      changes: { order_number: "GTS-202609-000002", total: 1500000, payment_method: "pos_terminal" },
+    });
+  });
+
+  it("logs nothing if the confirmation didn't happen", async () => {
+    mockTransition.mockResolvedValue(false);
+    await POST(makeRequest({ payment_method: "cash" }), ctx("order-1"));
+    expect(allCalls.activity_logs).toBeUndefined();
+  });
 });
+

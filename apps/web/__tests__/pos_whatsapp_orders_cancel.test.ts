@@ -10,6 +10,12 @@ vi.mock("../app/api/v1/pos/_lib/inventory", () => ({
   adjustAll: (...args: unknown[]) => mockAdjustAll(...args),
 }));
 
+const mockLog = vi.fn();
+vi.mock("../app/api/v1/_lib/activity", () => ({
+  logActivity: (...args: unknown[]) => mockLog(...args),
+  clientIp: () => "9.9.9.9",
+}));
+
 const mockTransition = vi.fn();
 vi.mock("../app/api/v1/pos/_lib/order-status", () => ({
   transitionOrderStatus: (...args: unknown[]) => mockTransition(...args),
@@ -57,6 +63,7 @@ describe("PUT /api/v1/pos/whatsapp-orders/:id/cancel", () => {
     mockAdjustAll.mockResolvedValue({ ok: true });
     mockTransition.mockReset();
     mockTransition.mockResolvedValue(true);
+    mockLog.mockReset();
     orderResult = { data: PENDING_ORDER, error: null };
   });
 
@@ -127,4 +134,26 @@ describe("PUT /api/v1/pos/whatsapp-orders/:id/cancel", () => {
     expect(res.status).toBe(409);
     expect(mockAdjustAll).not.toHaveBeenCalled();
   });
+
+  it("records the cancellation and its reason in the audit log", async () => {
+    await PUT(makeRequest({ reason: "customer went quiet" }), ctx("order-1"));
+    expect(mockLog).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        actorId: "cashier-1",
+        action: "pos.whatsapp_cancel",
+        targetType: "order",
+        targetId: "order-1",
+        changes: { reason: "customer went quiet" },
+        ip: "9.9.9.9",
+      })
+    );
+  });
+
+  it("logs nothing when the order was already confirmed", async () => {
+    mockTransition.mockResolvedValue(false);
+    await PUT(makeRequest({ reason: "x" }), ctx("order-1"));
+    expect(mockLog).not.toHaveBeenCalled();
+  });
 });
+

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { requirePosAccess } from "../../../_lib/access";
+import { requirePosPermission } from "../../../_lib/access";
+import { clientIp, logActivity } from "../../../../_lib/activity";
 import { adjustAll, type InventoryChange } from "../../../_lib/inventory";
 import { transitionOrderStatus } from "../../../_lib/order-status";
 import { sanitizeSqlInput } from "../../../../auth/utils";
@@ -21,7 +22,7 @@ function isToday(isoDate: string): boolean {
  * which restores inventory and logs the reversal.
  */
 export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const access = await requirePosAccess(request);
+  const access = await requirePosPermission(request, "can_void_orders");
   if (!access.ok) return access.response;
 
   const { id } = await context.params;
@@ -62,6 +63,25 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     cashier_id: string | null;
     items: Array<{ variant_id: string | null; quantity: number }>;
   };
+
+  // A sale belongs to whoever took the payment (for a WhatsApp order that can
+  // differ from who recorded it). Cashiers void only their own; admins any.
+  if (!access.isAdmin) {
+    const { data: payment } = await serviceClient
+      .from("transactions")
+      .select("confirmed_by")
+      .eq("order_id", id)
+      .eq("payment_status", "success")
+      .limit(1)
+      .maybeSingle();
+    const owner = (payment as { confirmed_by: string | null } | null)?.confirmed_by ?? found.cashier_id;
+    if (owner !== access.user.id) {
+      return NextResponse.json(
+        { error: "You can only void sales you took payment for.", code: "NOT_YOUR_SALE" },
+        { status: 403 }
+      );
+    }
+  }
 
   if (!isToday(found.created_at)) {
     return NextResponse.json(
@@ -109,6 +129,15 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       notes: reason,
     }))
   );
+
+  await logActivity(serviceClient, {
+    actorId: access.user.id,
+    action: "pos.void",
+    targetType: "order",
+    targetId: id,
+    changes: { reason },
+    ip: clientIp(request),
+  });
 
   return NextResponse.json({ data: { id, status: "voided" } });
 }

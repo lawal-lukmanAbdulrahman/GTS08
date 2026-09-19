@@ -20,8 +20,8 @@ let tableConfig: Record<string, TableHandler> = {};
 const allCalls: Record<string, { method: string; args: unknown[] }[]> = {};
 
 function makeTableStub(table: string) {
-  const calls: { method: string; args: unknown[] }[] = [];
-  allCalls[table] = calls;
+  // Accumulate across every from(table) call, so repeated writes to one table are all visible.
+  const calls = (allCalls[table] ??= []);
 
   const stub: any = new Proxy(
     {},
@@ -59,6 +59,21 @@ function makeRequest(body: unknown) {
   });
 }
 
+function staff(overrides: { isAdmin?: boolean; can_apply_discounts?: boolean } = {}) {
+  return {
+    ok: true,
+    user: { id: "cashier-1", email: "cashier@gts.ng" },
+    role: overrides.isAdmin ? "admin" : "cashier",
+    isAdmin: overrides.isAdmin ?? false,
+    fullName: "Ada Cashier",
+    permissions: {
+      can_process_pos: true,
+      can_void_orders: false,
+      can_apply_discounts: overrides.can_apply_discounts ?? false,
+    },
+  };
+}
+
 const VALID_BODY = {
   items: [{ variant_id: "v1", quantity: 2 }],
   payment_method: "cash",
@@ -67,11 +82,7 @@ const VALID_BODY = {
 describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
   beforeEach(() => {
     mockRequirePosAccess.mockReset();
-    mockRequirePosAccess.mockResolvedValue({
-      ok: true,
-      user: { id: "cashier-1", email: "cashier@gts.ng" },
-      role: "cashier",
-    });
+    mockRequirePosAccess.mockResolvedValue(staff());
     mockFrom.mockClear();
     Object.keys(allCalls).forEach((k) => delete allCalls[k]);
     mockAdjustAll.mockReset();
@@ -236,5 +247,79 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
     Object.keys(allCalls).forEach((k) => delete allCalls[k]);
     await POST(makeRequest({ ...VALID_BODY, customer_email: "shopper@example.com" }));
     expect(allCalls.customers?.length).toBeGreaterThan(0);
+  });
+
+  it("records the sale in the audit log against the cashier", async () => {
+    await POST(makeRequest(VALID_BODY));
+    const row = allCalls.activity_logs!.find((c) => c.method === "insert")!.args[0];
+    expect(row).toMatchObject({
+      actor_id: "cashier-1",
+      action: "pos.sale",
+      target_type: "order",
+      target_id: "order-1",
+      changes: expect.objectContaining({ order_number: "GTS-202609-000001", total: 3000000, payment_method: "cash" }),
+    });
+  });
+
+  describe("manual discount (cashier spec Part 4.2)", () => {
+    const withDiscount = (manual_discount: unknown) => makeRequest({ ...VALID_BODY, manual_discount });
+
+    it("ignores the old client-supplied discount_amount and promo_code, so nobody can grant themselves a discount", async () => {
+      await POST(makeRequest({ ...VALID_BODY, discount_amount: 2999999, promo_code: "FREE" }));
+      const order = allCalls.orders!.find((c) => c.method === "insert")!.args[0];
+      expect(order).toMatchObject({ subtotal: 3000000, discount_amount: 0, total: 3000000 });
+      expect(order).toMatchObject({ promo_code: null });
+    });
+
+    it("refuses a cashier without the discount grant, before touching stock or creating anything", async () => {
+      const res = await POST(withDiscount(1000));
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe("PERMISSION_DENIED");
+      expect(mockAdjustAll).not.toHaveBeenCalled();
+      expect(allCalls.orders).toBeUndefined();
+    });
+
+    it("applies a permitted cashier's discount to the order and logs it", async () => {
+      mockRequirePosAccess.mockResolvedValue(staff({ can_apply_discounts: true }));
+      const res = await POST(withDiscount(300000)); // 10% of ₦30,000
+      expect(res.status).toBe(200);
+      expect(allCalls.orders!.find((c) => c.method === "insert")!.args[0]).toMatchObject({
+        subtotal: 3000000,
+        discount_amount: 300000,
+        total: 2700000,
+      });
+      expect(allCalls.transactions!.find((c) => c.method === "insert")!.args[0]).toMatchObject({ amount: 2700000 });
+
+      const actions = allCalls.activity_logs!.filter((c) => c.method === "insert").map((c) => (c.args[0] as any).action);
+      expect(actions).toEqual(expect.arrayContaining(["pos.sale", "pos.manual_discount"]));
+      const discountLog = allCalls.activity_logs!.map((c) => c.args[0] as any).find((r) => r?.action === "pos.manual_discount");
+      expect(discountLog.changes).toMatchObject({ amount: 300000, subtotal: 3000000, share_bps: 1000 });
+    });
+
+    it("refuses a cashier above 20% and says what the limit is", async () => {
+      mockRequirePosAccess.mockResolvedValue(staff({ can_apply_discounts: true }));
+      const res = await POST(withDiscount(700000)); // 23%
+      const body = await res.json();
+      expect(res.status).toBe(403);
+      expect(body.code).toBe("DISCOUNT_LIMIT_EXCEEDED");
+      expect(body.details).toEqual({ maxAmount: 600000 });
+      expect(mockAdjustAll).not.toHaveBeenCalled();
+    });
+
+    it("lets an admin discount above 20%", async () => {
+      mockRequirePosAccess.mockResolvedValue(staff({ isAdmin: true }));
+      const res = await POST(withDiscount(2000000));
+      expect(res.status).toBe(200);
+      expect(allCalls.orders!.find((c) => c.method === "insert")!.args[0]).toMatchObject({ discount_amount: 2000000, total: 1000000 });
+    });
+
+    it("rejects a malformed discount", async () => {
+      mockRequirePosAccess.mockResolvedValue(staff({ isAdmin: true }));
+      for (const bad of [-5, 1.5, "100"]) {
+        const res = await POST(withDiscount(bad));
+        expect(res.status).toBe(400);
+        expect((await res.json()).code).toBe("INVALID_DISCOUNT");
+      }
+    });
   });
 });

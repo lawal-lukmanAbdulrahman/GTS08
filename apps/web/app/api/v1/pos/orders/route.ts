@@ -3,10 +3,11 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../_lib/access";
 import { sanitizeEmail } from "../../auth/utils";
-import { computeCartTotals, type PosCartLine } from "@gts/utils";
+import { checkManualDiscount, computeCartTotals, type PosCartLine } from "@gts/utils";
 import { checkStockSufficiency } from "../_lib/stock-sufficiency";
 import { variantAvailable } from "../_lib/stock-status";
 import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
+import { clientIp, logActivity } from "../../_lib/activity";
 
 const PAYMENT_METHODS = ["cash", "pos_terminal"] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -57,8 +58,8 @@ export async function POST(request: NextRequest) {
   let body: {
     items?: OrderItemInput[];
     payment_method?: string;
-    discount_amount?: number;
-    promo_code?: string;
+    /** Kobo. Needs can_apply_discounts; a cashier is capped at 20% of the subtotal. */
+    manual_discount?: unknown;
     customer_email?: string;
   };
   try {
@@ -136,7 +137,27 @@ export async function POST(request: NextRequest) {
     const v = variantById.get(i.variant_id)!;
     return { unitPrice: v.product.base_price + v.price_modifier, quantity: i.quantity };
   });
-  const totals = computeCartTotals(cartLines, body.discount_amount || 0);
+  // The discount is decided here, never taken on trust from the client, and
+  // before any stock is touched so a refusal leaves nothing to undo.
+  const subtotal = computeCartTotals(cartLines, 0).subtotal;
+  const requestedDiscount = body.manual_discount ?? 0;
+  const discountCheck = checkManualDiscount({
+    amount: requestedDiscount,
+    subtotal,
+    isAdmin: access.isAdmin,
+    canApply: access.permissions.can_apply_discounts,
+  });
+  if (!discountCheck.ok) {
+    return NextResponse.json(
+      {
+        error: discountCheck.message,
+        code: discountCheck.code,
+        details: discountCheck.maxAmount === undefined ? undefined : { maxAmount: discountCheck.maxAmount },
+      },
+      { status: discountCheck.code === "INVALID_DISCOUNT" ? 400 : 403 }
+    );
+  }
+  const totals = computeCartTotals(cartLines, requestedDiscount as number);
 
   const stockChanges: InventoryChange[] = items.map((i) => ({
     variantId: i.variant_id,
@@ -179,7 +200,7 @@ export async function POST(request: NextRequest) {
       channel: "walk_in",
       status: "completed",
       customer_id: customerId,
-      promo_code: body.promo_code || null,
+      promo_code: null,
       subtotal: totals.subtotal,
       discount_amount: totals.discountAmount,
       delivery_fee: 0,
@@ -236,6 +257,35 @@ export async function POST(request: NextRequest) {
       actor_id: access.user.id,
     }))
   );
+
+  const ip = clientIp(request);
+  await logActivity(serviceClient, {
+    actorId: access.user.id,
+    action: "pos.sale",
+    targetType: "order",
+    targetId: createdOrder.id,
+    changes: {
+      order_number: createdOrder.order_number,
+      total: createdOrder.total,
+      payment_method: paymentMethod,
+      item_count: items.reduce((n, i) => n + i.quantity, 0),
+    },
+    ip,
+  });
+  if (totals.discountAmount > 0) {
+    await logActivity(serviceClient, {
+      actorId: access.user.id,
+      action: "pos.manual_discount",
+      targetType: "order",
+      targetId: createdOrder.id,
+      changes: {
+        amount: totals.discountAmount,
+        subtotal: totals.subtotal,
+        share_bps: Math.round((totals.discountAmount * 10000) / totals.subtotal),
+      },
+      ip,
+    });
+  }
 
   return NextResponse.json({
     data: {

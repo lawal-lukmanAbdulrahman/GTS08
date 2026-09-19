@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../../../_lib/access";
 import { adjustAll, type InventoryChange } from "../../../_lib/inventory";
 import { transitionOrderStatus } from "../../../_lib/order-status";
+import { clientIp, logActivity } from "../../../../_lib/activity";
 import { sanitizeSqlInput } from "../../../../auth/utils";
 
 /**
@@ -79,6 +80,15 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ ref
     .filter((item) => item.variant_id)
     .map((item) => ({ variantId: item.variant_id as string, deltaReserved: -item.quantity }));
   await adjustAll(serviceClient, release);
+
+  await logActivity(serviceClient, {
+    actorId: access.user.id,
+    action: "pos.whatsapp_cancel",
+    targetType: "order",
+    targetId: id,
+    changes: { reason },
+    ip: clientIp(request),
+  });
 
   return NextResponse.json({ data: { id, status: "cancelled" } });
 }

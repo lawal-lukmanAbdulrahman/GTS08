@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockRequirePosAccess = vi.fn();
 vi.mock("../app/api/v1/pos/_lib/access", () => ({
-  requirePosAccess: (...args: unknown[]) => mockRequirePosAccess(...args),
+  requirePosPermission: (...args: unknown[]) => mockRequirePosAccess(...args),
 }));
 
 const mockAdjustAll = vi.fn();
@@ -64,14 +64,21 @@ function makeRequest(body: unknown) {
 
 const TODAY_ISO = new Date().toISOString();
 
+function staff(overrides: { id?: string; isAdmin?: boolean } = {}) {
+  return {
+    ok: true,
+    user: { id: overrides.id ?? "cashier-1", email: null },
+    role: overrides.isAdmin ? "admin" : "cashier",
+    isAdmin: overrides.isAdmin ?? false,
+    fullName: "Ada",
+    permissions: { can_process_pos: true, can_void_orders: true, can_apply_discounts: false },
+  };
+}
+
 describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
   beforeEach(() => {
     mockRequirePosAccess.mockReset();
-    mockRequirePosAccess.mockResolvedValue({
-      ok: true,
-      user: { id: "cashier-1", email: null },
-      role: "cashier",
-    });
+    mockRequirePosAccess.mockResolvedValue(staff());
     mockFrom.mockClear();
     Object.keys(allCalls).forEach((k) => delete allCalls[k]);
     mockAdjustAll.mockReset();
@@ -185,5 +192,59 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
     const res = await PUT(makeRequest({ reason: "wrong item" }), ctx("order-1"));
     expect(res.status).toBe(409);
     expect(mockAdjustAll).not.toHaveBeenCalled();
+  });
+
+  it("requires the void permission, not just POS access", async () => {
+    await PUT(makeRequest({ reason: "wrong item" }), ctx("order-1"));
+    expect(mockRequirePosAccess).toHaveBeenCalledWith(expect.anything(), "can_void_orders");
+  });
+
+  describe("only your own sales (admins may void any)", () => {
+    // A WhatsApp order recorded by ana but paid at the till by ben.
+    const paidByBen = () => {
+      tableConfig.transactions = () => ({ data: { confirmed_by: "ben" }, error: null });
+      const base = tableConfig.orders!;
+      tableConfig.orders = (calls) => {
+        const r = base(calls);
+        return r.data?.items ? { ...r, data: { ...r.data, cashier_id: "ana" } } : r;
+      };
+    };
+
+    it("refuses a cashier voiding a sale someone else took payment for", async () => {
+      paidByBen();
+      mockRequirePosAccess.mockResolvedValue(staff({ id: "cashier-9" }));
+      const res = await PUT(makeRequest({ reason: "x" }), ctx("order-1"));
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe("NOT_YOUR_SALE");
+      expect(mockTransition).not.toHaveBeenCalled();
+      expect(mockAdjustAll).not.toHaveBeenCalled();
+    });
+
+    it("goes by who took the payment, not who recorded the order", async () => {
+      paidByBen();
+      mockRequirePosAccess.mockResolvedValue(staff({ id: "ana" })); // recorded it, didn't take payment
+      expect((await PUT(makeRequest({ reason: "x" }), ctx("order-1"))).status).toBe(403);
+
+      mockRequirePosAccess.mockResolvedValue(staff({ id: "ben" }));
+      expect((await PUT(makeRequest({ reason: "x" }), ctx("order-1"))).status).toBe(200);
+    });
+
+    it("lets an admin void anyone's sale", async () => {
+      paidByBen();
+      mockRequirePosAccess.mockResolvedValue(staff({ id: "boss", isAdmin: true }));
+      expect((await PUT(makeRequest({ reason: "x" }), ctx("order-1"))).status).toBe(200);
+    });
+  });
+
+  it("records the void in the audit log with the reason", async () => {
+    await PUT(makeRequest({ reason: "customer changed mind" }), ctx("order-1"));
+    const row = allCalls.activity_logs!.find((c) => c.method === "insert")!.args[0];
+    expect(row).toMatchObject({
+      actor_id: "cashier-1",
+      action: "pos.void",
+      target_type: "order",
+      target_id: "order-1",
+      changes: expect.objectContaining({ reason: "customer changed mind" }),
+    });
   });
 });

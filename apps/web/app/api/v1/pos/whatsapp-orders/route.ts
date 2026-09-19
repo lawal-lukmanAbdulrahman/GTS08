@@ -7,6 +7,7 @@ import { computeCartTotals, parseWhatsAppContact, type PosCartLine } from "@gts/
 import { checkStockSufficiency } from "../_lib/stock-sufficiency";
 import { variantAvailable } from "../_lib/stock-status";
 import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
+import { clientIp, logActivity } from "../../_lib/activity";
 
 interface OrderItemInput {
   variant_id: string;
@@ -252,6 +253,19 @@ export async function POST(request: NextRequest) {
     };
   });
   await serviceClient.from("order_items").insert(orderItemsPayload);
+
+  await logActivity(serviceClient, {
+    actorId: access.user.id,
+    action: "pos.whatsapp_create",
+    targetType: "order",
+    targetId: createdOrder.id,
+    changes: {
+      order_number: createdOrder.order_number,
+      total: createdOrder.total,
+      item_count: items.reduce((n, i) => n + i.quantity, 0),
+    },
+    ip: clientIp(request),
+  });
 
   return NextResponse.json({
     data: {

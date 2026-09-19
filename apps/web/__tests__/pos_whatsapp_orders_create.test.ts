@@ -173,4 +173,18 @@ describe("POST /api/v1/pos/whatsapp-orders (create pending order, D001)", () => 
       { variantId: "v1", deltaReserved: 1, requireAvailable: 1 },
     ]);
   });
+
+  it("records the new order in the audit log without the customer's phone number", async () => {
+    await POST(makeRequest(VALID_BODY));
+    const row = allCalls.activity_logs!.find((c) => c.method === "insert")!.args[0] as any;
+    expect(row).toMatchObject({
+      actor_id: "staff-1",
+      action: "pos.whatsapp_create",
+      target_type: "order",
+      target_id: "order-1",
+      changes: { order_number: "GTS-202609-000002", total: 1500000, item_count: 1 },
+    });
+    expect(JSON.stringify(row)).not.toContain("08031234567");
+  });
 });
+

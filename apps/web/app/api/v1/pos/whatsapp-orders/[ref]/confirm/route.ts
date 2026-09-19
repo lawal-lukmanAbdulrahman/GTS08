@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../../../_lib/access";
 import { adjustAll, type InventoryChange } from "../../../_lib/inventory";
 import { transitionOrderStatus } from "../../../_lib/order-status";
+import { clientIp, logActivity } from "../../../../_lib/activity";
 
 const PAYMENT_METHODS = ["cash", "pos_terminal"] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -111,6 +112,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
       actor_id: access.user.id,
     }))
   );
+
+  await logActivity(serviceClient, {
+    actorId: access.user.id,
+    action: "pos.whatsapp_confirm",
+    targetType: "order",
+    targetId: id,
+    changes: { order_number: found.order_number, total: found.total, payment_method: paymentMethod },
+    ip: clientIp(request),
+  });
 
   return NextResponse.json({
     data: {
