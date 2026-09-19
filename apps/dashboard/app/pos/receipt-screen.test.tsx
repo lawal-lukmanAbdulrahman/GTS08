@@ -175,3 +175,15 @@ describe("ReceiptScreen", () => {
     expect(onNewTransaction).toHaveBeenCalled();
   });
 });
+
+describe("ReceiptScreen for a reprint", () => {
+  it("prints DUPLICATE on the sheet", () => {
+    render(<ReceiptScreen sale={{ ...SALE, duplicate: true }} onNewTransaction={vi.fn()} />);
+    expect(sheet().textContent).toContain("DUPLICATE");
+  });
+
+  it("leaves the original unmarked", () => {
+    render(<ReceiptScreen sale={SALE} onNewTransaction={vi.fn()} />);
+    expect(sheet().textContent).not.toContain("DUPLICATE");
+  });
+});

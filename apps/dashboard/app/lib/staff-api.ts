@@ -1,7 +1,14 @@
 import { API_BASE, getToken, signOut } from "./session";
 
+export interface PageMeta {
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
 export type ApiResult<T> =
-  | { ok: true; status: number; data: T }
+  | { ok: true; status: number; data: T; meta?: PageMeta }
   | { ok: false; status: number; message: string; code?: string; details?: Record<string, string> };
 
 interface CallInit {
@@ -42,7 +49,7 @@ export async function apiCall<T = unknown>(path: string, init: CallInit = {}): P
     // not JSON (e.g. a proxy error page)
   }
 
-  if (res.ok) return { ok: true, status: res.status, data: (body?.data ?? body) as T };
+  if (res.ok) return { ok: true, status: res.status, data: (body?.data ?? body) as T, meta: body?.meta };
 
   if (res.status === 401) void signOut({ reason: "expired", revoke: false });
   else if (res.status === 403 && body?.code === "ACCOUNT_BLOCKED") void signOut({ reason: "blocked", revoke: false });

@@ -31,6 +31,12 @@ describe("apiCall", () => {
     expect(init.headers.Authorization).toBe("Bearer tok123");
   });
 
+  it("passes a list response's paging meta through", async () => {
+    fetchMock.mockReturnValue(reply(200, { data: [1, 2], meta: { total: 9, page: 1, limit: 2, pages: 5 } }));
+    const r = await apiCall<number[]>("/pos/products/search");
+    expect(r).toMatchObject({ ok: true, data: [1, 2], meta: { total: 9, page: 1, limit: 2, pages: 5 } });
+  });
+
   it("sends a JSON body with the right header", async () => {
     fetchMock.mockReturnValue(reply(200, { data: {} }));
     await apiCall("/pos/orders", { method: "POST", json: { a: 1 } });

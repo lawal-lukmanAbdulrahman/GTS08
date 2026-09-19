@@ -35,6 +35,7 @@ function toReceiptData(sale: CompletedSale, store?: ReceiptStore): ReceiptData {
     customerName: sale.customerName,
     customerPhone: sale.customerPhone,
     cashReceived: sale.cashReceived,
+    duplicate: sale.duplicate,
     store,
   };
 }

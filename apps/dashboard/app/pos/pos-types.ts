@@ -46,4 +46,5 @@ export interface CompletedSale {
   customerName?: string;
   customerPhone?: string;
   cashReceived?: number; // kobo, cash payments only
+  duplicate?: boolean; // a reprint of an earlier sale
 }
