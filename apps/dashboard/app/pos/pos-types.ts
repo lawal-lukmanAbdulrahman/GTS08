@@ -42,4 +42,8 @@ export interface CompletedSale {
   paymentMethod: PaymentMethod;
   cashierName: string;
   createdAt: string;
+  channel?: "walk_in" | "whatsapp";
+  customerName?: string;
+  customerPhone?: string;
+  cashReceived?: number; // kobo, cash payments only
 }

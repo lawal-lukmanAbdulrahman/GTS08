@@ -1,11 +1,18 @@
-import { formatKobo } from "@gts/utils";
+import { formatKobo, formatWAT } from "@gts/utils";
 
 export interface ReceiptItem {
   name: string;
   size: string | null;
   color: string | null;
   quantity: number;
+  unitPrice?: number; // kobo; derived from lineTotal / quantity when absent
   lineTotal: number; // kobo
+}
+
+export interface ReceiptStore {
+  name: string;
+  address?: string;
+  phone?: string;
 }
 
 export interface ReceiptData {
@@ -17,6 +24,11 @@ export interface ReceiptData {
   paymentMethod: "cash" | "pos_terminal";
   cashierName: string;
   createdAt: string; // ISO
+  channel?: "walk_in" | "whatsapp";
+  customerName?: string;
+  customerPhone?: string;
+  cashReceived?: number; // kobo, cash payments only
+  store?: ReceiptStore;
 }
 
 const PAYMENT_METHOD_LABEL: Record<ReceiptData["paymentMethod"], string> = {
@@ -39,7 +51,7 @@ export function buildReceiptText(receipt: ReceiptData): string {
   const lines = [
     "GTS",
     `Order ${receipt.orderNumber}`,
-    new Date(receipt.createdAt).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" }),
+    formatWAT(receipt.createdAt),
     "",
     ...receipt.items.map(itemLine),
     "",

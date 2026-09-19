@@ -1,8 +1,12 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { formatKobo } from "@gts/utils";
 import type { CompletedSale } from "./pos-types";
 import { buildWhatsAppShareUrl, type ReceiptData } from "./receipt";
+import { getReceiptStore } from "./receipt-config";
+import { PAPER_SIZES, layoutReceipt, paperCss, type PaperSize } from "./receipt-layout";
+import { loadPaperSize, savePaperSize } from "./receipt-paper";
 
 interface ReceiptScreenProps {
   sale: CompletedSale;
@@ -17,6 +21,7 @@ function toReceiptData(sale: CompletedSale): ReceiptData {
       size: i.size,
       color: i.color,
       quantity: i.quantity,
+      unitPrice: i.unitPrice,
       lineTotal: i.unitPrice * i.quantity,
     })),
     subtotal: sale.subtotal,
@@ -25,103 +30,109 @@ function toReceiptData(sale: CompletedSale): ReceiptData {
     paymentMethod: sale.paymentMethod,
     cashierName: sale.cashierName,
     createdAt: sale.createdAt,
+    channel: sale.channel,
+    customerName: sale.customerName,
+    customerPhone: sale.customerPhone,
+    cashReceived: sale.cashReceived,
+    store: getReceiptStore(),
   };
 }
 
+const PAPER_ORDER: PaperSize[] = ["58mm", "80mm", "a4"];
+
 /**
- * gts_03_cashier_spec.md Part 5.3. The printable receipt below is a
- * @media-print styled block; "Print Receipt" opens the OS print dialog
- * (which can target any printer, including a thermal one, already set up on
- * the till's device) rather than a direct hardware integration (D001).
+ * gts_03_cashier_spec.md Part 5.3, extended (D001): a live preview of the
+ * receipt at the chosen paper size, printed through the browser's print
+ * dialog (so any installed receipt printer or an A4 printer works), or shared
+ * to the customer over WhatsApp. The preview and the printed page come from
+ * the same layout, so what's on screen is what prints.
  */
 export default function ReceiptScreen({ sale, onNewTransaction }: ReceiptScreenProps) {
-  const receipt = toReceiptData(sale);
+  const [paper, setPaper] = useState<PaperSize>(() => loadPaperSize());
+  const receipt = useMemo(() => toReceiptData(sale), [sale]);
+  const lines = useMemo(() => layoutReceipt(receipt, paper), [receipt, paper]);
 
-  function handlePrint() {
-    window.print();
+  function choosePaper(next: PaperSize) {
+    setPaper(next);
+    savePaperSize(next);
   }
 
   function handleWhatsAppShare() {
-    window.open(buildWhatsAppShareUrl(receipt), "_blank");
+    window.open(buildWhatsAppShareUrl(receipt, sale.customerPhone), "_blank");
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-      <div className="no-print space-y-4 max-w-sm w-full">
-        <div className="text-5xl">✓</div>
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Sale Complete!</h2>
-        <p className="text-sm text-gray-600 dark:text-gray-300">
-          Order #{sale.orderNumber}
-          <br />
-          {formatKobo(sale.total)} — {sale.paymentMethod === "cash" ? "Cash" : "Card Terminal"}
-        </p>
+    <div className="min-h-screen bg-[#F8F7F4] dark:bg-[#1C1C1C] p-6 font-sans">
+      <div className="mx-auto max-w-5xl grid gap-8 lg:grid-cols-[minmax(0,20rem)_1fr] items-start">
+        <div className="no-print space-y-5">
+          <div className="text-center md:text-left space-y-1">
+            <div className="text-4xl text-emerald-600">✓</div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Sale Complete!</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Order #{sale.orderNumber}
+              <br />
+              {formatKobo(sale.total)} — {sale.paymentMethod === "cash" ? "Cash" : "Card Terminal"}
+            </p>
+          </div>
 
-        <div className="space-y-2 pt-2">
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="w-full py-2.5 rounded-[8px] bg-[#EDCF5D] text-[#010101] font-bold text-sm"
-          >
-            Print Receipt
-          </button>
-          <button
-            type="button"
-            onClick={handleWhatsAppShare}
-            className="w-full py-2.5 rounded-[8px] bg-emerald-600 text-white font-bold text-sm"
-          >
-            Share via WhatsApp
-          </button>
-          <button
-            type="button"
-            onClick={onNewTransaction}
-            className="w-full py-2.5 rounded-[8px] border border-gray-200 dark:border-[#383838] text-sm font-semibold text-gray-700 dark:text-gray-200"
-          >
-            New Transaction
-          </button>
+          <div role="group" aria-label="Paper size" className="space-y-1.5">
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Paper size</p>
+            <div className="flex gap-2">
+              {PAPER_ORDER.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={paper === id}
+                  onClick={() => choosePaper(id)}
+                  className={`flex-1 py-2 rounded-[6px] text-xs font-semibold border transition-all ${
+                    paper === id
+                      ? "bg-[#EDCF5D] border-[#EDCF5D] text-[#010101]"
+                      : "border-gray-200 dark:border-[#383838] text-gray-700 dark:text-gray-200"
+                  }`}
+                >
+                  {PAPER_SIZES[id].label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+              Choose the paper loaded in your printer. In the print dialog, pick the receipt printer and turn
+              off &quot;Headers and footers&quot;.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="w-full py-2.5 rounded-[8px] bg-[#EDCF5D] text-[#010101] font-bold text-sm"
+            >
+              Print Receipt
+            </button>
+            <button
+              type="button"
+              onClick={handleWhatsAppShare}
+              className="w-full py-2.5 rounded-[8px] bg-emerald-600 text-white font-bold text-sm"
+            >
+              Share via WhatsApp
+            </button>
+            <button
+              type="button"
+              onClick={onNewTransaction}
+              className="w-full py-2.5 rounded-[8px] border border-gray-200 dark:border-[#383838] text-sm font-semibold text-gray-700 dark:text-gray-200"
+            >
+              New Transaction
+            </button>
+          </div>
+        </div>
+
+        <div className="receipt-preview overflow-x-auto" style={{ zoom: paper === "a4" ? 0.75 : 1 }}>
+          <div className="inline-block bg-white text-black shadow-lg rounded-[4px] px-[5mm] py-[4mm] border border-gray-200">
+            <pre className="receipt-sheet m-0">{lines.join("\n")}</pre>
+          </div>
         </div>
       </div>
 
-      <div className="print-only hidden">
-        <h1>GTS</h1>
-        <p>Order {receipt.orderNumber}</p>
-        <p>{new Date(receipt.createdAt).toLocaleString("en-NG")}</p>
-        <hr />
-        {receipt.items.map((item, idx) => (
-          <p key={idx}>
-            {item.quantity} x {item.name}
-            {item.size || item.color ? ` (${[item.size, item.color].filter(Boolean).join(" / ")})` : ""} —{" "}
-            {formatKobo(item.lineTotal)}
-          </p>
-        ))}
-        <hr />
-        <p>Subtotal: {formatKobo(receipt.subtotal)}</p>
-        {receipt.discountAmount > 0 && <p>Discount: -{formatKobo(receipt.discountAmount)}</p>}
-        <p>Total: {formatKobo(receipt.total)}</p>
-        <p>Payment: {receipt.paymentMethod === "cash" ? "Cash" : "Card Terminal"}</p>
-        <p>Served by: {receipt.cashierName}</p>
-      </div>
-
-      <style jsx global>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          .print-only,
-          .print-only * {
-            visibility: visible;
-            display: block !important;
-          }
-          .print-only {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
+      <style>{paperCss(paper, lines.length)}</style>
     </div>
   );
 }

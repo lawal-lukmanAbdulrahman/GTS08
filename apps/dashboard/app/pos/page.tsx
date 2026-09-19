@@ -8,7 +8,8 @@ import PaymentConfirmModal from "./payment-confirm-modal";
 import ReceiptScreen from "./receipt-screen";
 import TodaysOrdersPanel from "./todays-orders-panel";
 import WhatsAppPanel from "./whatsapp-panel";
-import { resolveQuickAddVariant } from "./quick-add";
+import { nairaToKobo } from "@gts/utils";
+import { parseWhatsAppContact } from "./receipt-layout";
 import type { CartLine, CompletedSale, PaymentMethod, PosProduct } from "./pos-types";
 
 const API_BASE = "http://localhost:3000/api/v1";
@@ -29,6 +30,11 @@ function getCashierName(): string {
 }
 
 export default function PosPage() {
+  // localStorage only exists in the browser; reading it during render makes the
+  // server HTML ("Cashier") differ from the client's ("Admin User") and breaks hydration.
+  const [cashierName, setCashierName] = useState("");
+  useEffect(() => setCashierName(getCashierName()), []);
+
   const [mode, setMode] = useState<"walkin" | "whatsapp">("walkin");
 
   // Product search
@@ -63,7 +69,13 @@ export default function PosPage() {
     id: string;
     order_number: string;
     total: number;
-    items: Array<{ id: string; quantity: number; unit_price: number; product_snapshot: { name: string } }>;
+    internal_notes: string | null;
+    items: Array<{
+      id: string;
+      quantity: number;
+      unit_price: number;
+      product_snapshot: { name: string; size?: string | null; color?: string | null };
+    }>;
   } | null>(null);
   const [waPaymentMethod, setWaPaymentMethod] = useState<PaymentMethod | null>(null);
   const [cancelledOrderNumber, setCancelledOrderNumber] = useState<string | null>(null);
@@ -171,6 +183,9 @@ export default function PosPage() {
         paymentMethod: paymentMethod as PaymentMethod,
         cashierName: getCashierName(),
         createdAt: new Date().toISOString(),
+        channel: "walk_in",
+        cashReceived:
+          paymentMethod === "cash" && Number(cashReceived) > 0 ? nairaToKobo(Number(cashReceived)) : undefined,
       });
       setShowPaymentConfirm(false);
     } catch {
@@ -281,8 +296,8 @@ export default function PosPage() {
         variantId: i.id,
         productId: i.id,
         productName: i.product_snapshot.name,
-        size: null,
-        color: null,
+        size: i.product_snapshot.size ?? null,
+        color: i.product_snapshot.color ?? null,
         unitPrice: i.unit_price,
         quantity: i.quantity,
         available: i.quantity,
@@ -293,6 +308,9 @@ export default function PosPage() {
       paymentMethod: waPaymentMethod,
       cashierName: getCashierName(),
       createdAt: new Date().toISOString(),
+      channel: "whatsapp",
+      customerName: parseWhatsAppContact(foundOrder.internal_notes)?.name,
+      customerPhone: parseWhatsAppContact(foundOrder.internal_notes)?.phone,
     });
     setFoundOrder(null);
     setLookupOrderNumber("");
@@ -308,7 +326,7 @@ export default function PosPage() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#262626] bg-white dark:bg-[#1C1C1C]">
         <h1 className="text-sm font-bold text-gray-900 dark:text-white">GTS POS</h1>
         <div className="flex items-center gap-4">
-          <span className="text-xs text-gray-500 dark:text-gray-400">{getCashierName() || "Cashier"}</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">{cashierName || "Cashier"}</span>
           <div className="flex gap-1 bg-gray-100 dark:bg-[#242424] rounded-full p-0.5">
             <button
               type="button"
