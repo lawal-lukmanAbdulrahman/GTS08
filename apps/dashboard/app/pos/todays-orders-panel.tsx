@@ -22,7 +22,11 @@ interface TodaysOrder {
 
 interface TodaysOrdersPanelProps {
   orders: TodaysOrder[];
+  /** Whether this staff member holds the void permission (default: yes). */
+  canVoid?: boolean;
   onVoid: (orderId: string, reason: string) => void;
+  onReprint?: (orderId: string) => void;
+  reprintError?: string | null;
   onClose: () => void;
 }
 
@@ -32,7 +36,7 @@ const STATUS_LABEL: Record<TodaysOrder["status"], string> = {
 };
 
 /** gts_03_cashier_spec.md Part 6. */
-export default function TodaysOrdersPanel({ orders, onVoid, onClose }: TodaysOrdersPanelProps) {
+export default function TodaysOrdersPanel({ orders, canVoid = true, onVoid, onReprint, reprintError, onClose }: TodaysOrdersPanelProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [voidingId, setVoidingId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -46,6 +50,12 @@ export default function TodaysOrdersPanel({ orders, onVoid, onClose }: TodaysOrd
             &times;
           </button>
         </div>
+
+        {reprintError && (
+          <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+            {reprintError}
+          </p>
+        )}
 
         {orders.length === 0 && (
           <p className="text-sm text-gray-500 text-center pt-10">No orders yet today.</p>
@@ -91,7 +101,24 @@ export default function TodaysOrdersPanel({ orders, onVoid, onClose }: TodaysOrd
                   </div>
                 ))}
 
+                {order.status === "completed" && onReprint && (
+                  <button
+                    type="button"
+                    onClick={() => onReprint(order.id)}
+                    className="mt-2 mr-4 text-xs font-semibold text-gray-700 dark:text-gray-200 underline"
+                  >
+                    Reprint receipt
+                  </button>
+                )}
+
+                {order.status === "completed" && !canVoid && (
+                  <p className="pt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Ask a manager to void this order.
+                  </p>
+                )}
+
                 {order.status === "completed" &&
+                  canVoid &&
                   (voidingId === order.id ? (
                     <div className="pt-2 space-y-2">
                       <input

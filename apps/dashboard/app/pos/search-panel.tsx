@@ -18,8 +18,12 @@ interface SearchPanelProps {
   categories: Category[];
   products: PosProduct[];
   loading: boolean;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
   onQuickAdd: (product: PosProduct, variantId: string) => void;
   onOpenVariantModal: (product: PosProduct) => void;
+  onFlagProduct: (product: PosProduct) => void;
 }
 
 const STOCK_BADGE: Record<PosProduct["stock_status"], { label: string; className: string }> = {
@@ -36,9 +40,14 @@ export default function SearchPanel({
   categories,
   products,
   loading,
+  hasMore,
+  loadingMore,
+  onLoadMore,
   onQuickAdd,
   onOpenVariantModal,
+  onFlagProduct,
 }: SearchPanelProps) {
+  const searching = query.trim() !== "";
   function handleProductTap(product: PosProduct) {
     if (product.stock_status === "out_of_stock") return;
     const quickVariantId = resolveQuickAddVariant(product);
@@ -93,52 +102,73 @@ export default function SearchPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-4">
-        {loading ? (
-          <p className="text-sm text-gray-500 text-center pt-10">Searching...</p>
+        {loading && products.length === 0 ? (
+          <p className="text-sm text-gray-500 text-center pt-10">Loading products...</p>
         ) : products.length === 0 ? (
           <p className="text-sm text-gray-500 text-center pt-10">
-            {query ? "No products found." : "Start typing to search products."}
+            {searching ? "No products found." : "No products available."}
           </p>
         ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-            {products.map((product) => {
-              const badge = STOCK_BADGE[product.stock_status];
-              const outOfStock = product.stock_status === "out_of_stock";
-              return (
-                <button
-                  key={product.id}
-                  type="button"
-                  onClick={() => handleProductTap(product)}
-                  disabled={outOfStock}
-                  className={`text-left rounded-[10px] border border-gray-200 dark:border-[#262626] p-2.5 bg-white dark:bg-[#1C1C1C] hover:border-gray-400 dark:hover:border-[#444] transition-all ${
-                    outOfStock ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
-                  }`}
-                >
-                  <div className="aspect-square rounded-[8px] bg-gray-100 dark:bg-[#242424] mb-2 overflow-hidden">
-                    {product.primary_image && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={`https://res.cloudinary.com/daht6d5ck/image/upload/${product.primary_image.cloudinary_id}`}
-                        alt={product.primary_image.alt}
-                        className="w-full h-full object-cover"
-                      />
-                    )}
+          <>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
+              {searching ? `Results for "${query.trim()}"` : "Best sellers"}
+            </p>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+              {products.map((product) => {
+                const badge = STOCK_BADGE[product.stock_status];
+                const outOfStock = product.stock_status === "out_of_stock";
+                return (
+                  <div key={product.id} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => handleProductTap(product)}
+                      disabled={outOfStock}
+                      className={`w-full text-left rounded-[10px] border border-gray-200 dark:border-[#262626] p-2.5 bg-white dark:bg-[#1C1C1C] hover:border-gray-400 dark:hover:border-[#444] transition-all ${
+                        outOfStock ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+                      }`}
+                    >
+                      <div className="aspect-square rounded-[8px] bg-gray-100 dark:bg-[#242424] mb-2 overflow-hidden">
+                        {product.primary_image && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={`https://res.cloudinary.com/daht6d5ck/image/upload/${product.primary_image.cloudinary_id}`}
+                            alt={product.primary_image.alt}
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                      </div>
+                      <p className="text-xs font-semibold text-gray-900 dark:text-white line-clamp-2">{product.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{formatKobo(product.base_price)}</p>
+                      <span className={`inline-block mt-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${badge.className}`}>
+                        {badge.label}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Flag ${product.name}`}
+                      title="Report a problem with this product"
+                      onClick={() => onFlagProduct(product)}
+                      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 dark:bg-[#1C1C1C]/90 border border-gray-200 dark:border-[#383838] text-[11px] text-gray-500 hover:text-red-600 hover:border-red-300"
+                    >
+                      ⚑
+                    </button>
                   </div>
-                  <p className="text-xs font-semibold text-gray-900 dark:text-white line-clamp-2">
-                    {product.name}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    {formatKobo(product.base_price)}
-                  </p>
-                  <span
-                    className={`inline-block mt-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${badge.className}`}
-                  >
-                    {badge.label}
-                  </span>
+                );
+              })}
+            </div>
+            {hasMore && (
+              <div className="flex justify-center pt-4">
+                <button
+                  type="button"
+                  onClick={onLoadMore}
+                  disabled={loadingMore}
+                  className="px-4 py-2 text-xs font-semibold rounded-[8px] bg-gray-100 dark:bg-[#242424] disabled:opacity-50"
+                >
+                  {loadingMore ? "Loading..." : "Load more"}
                 </button>
-              );
-            })}
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

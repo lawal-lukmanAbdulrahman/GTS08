@@ -37,6 +37,13 @@ const OUT_OF_STOCK_PRODUCT: PosProduct = {
   variants: [{ id: "v4", size: "M", color: "Black", color_hex: "#000", sku: "J-M", price_modifier: 0, quantity: 0, available: 0 }],
 };
 
+const DEFAULTS = {
+  hasMore: false,
+  loadingMore: false,
+  onLoadMore: vi.fn(),
+  onFlagProduct: vi.fn(),
+};
+
 describe("SearchPanel (spec Part 3)", () => {
   it("shows a stock badge per product and dims an out-of-stock card", () => {
     render(
@@ -48,6 +55,7 @@ describe("SearchPanel (spec Part 3)", () => {
         categories={[{ id: "c1", name: "Tees", slug: "tees" }]}
         products={[SINGLE_VARIANT_PRODUCT, MULTI_VARIANT_PRODUCT, OUT_OF_STOCK_PRODUCT]}
         loading={false}
+        {...DEFAULTS}
         onQuickAdd={vi.fn()}
         onOpenVariantModal={vi.fn()}
       />
@@ -69,6 +77,7 @@ describe("SearchPanel (spec Part 3)", () => {
         categories={[]}
         products={[SINGLE_VARIANT_PRODUCT]}
         loading={false}
+        {...DEFAULTS}
         onQuickAdd={onQuickAdd}
         onOpenVariantModal={onOpenVariantModal}
       />
@@ -90,6 +99,7 @@ describe("SearchPanel (spec Part 3)", () => {
         categories={[]}
         products={[MULTI_VARIANT_PRODUCT]}
         loading={false}
+        {...DEFAULTS}
         onQuickAdd={onQuickAdd}
         onOpenVariantModal={onOpenVariantModal}
       />
@@ -111,6 +121,7 @@ describe("SearchPanel (spec Part 3)", () => {
         categories={[]}
         products={[OUT_OF_STOCK_PRODUCT]}
         loading={false}
+        {...DEFAULTS}
         onQuickAdd={onQuickAdd}
         onOpenVariantModal={onOpenVariantModal}
       />
@@ -131,6 +142,7 @@ describe("SearchPanel (spec Part 3)", () => {
         categories={[]}
         products={[]}
         loading={false}
+        {...DEFAULTS}
         onQuickAdd={vi.fn()}
         onOpenVariantModal={vi.fn()}
       />
@@ -139,5 +151,99 @@ describe("SearchPanel (spec Part 3)", () => {
       target: { value: "shirt" },
     });
     expect(onQueryChange).toHaveBeenCalledWith("shirt");
+  });
+
+  describe("opens on the catalogue, before any search", () => {
+    const render0 = (over = {}) =>
+      render(
+        <SearchPanel
+          query=""
+          onQueryChange={vi.fn()}
+          category="all"
+          onCategoryChange={vi.fn()}
+          categories={[]}
+          products={[SINGLE_VARIANT_PRODUCT, MULTI_VARIANT_PRODUCT]}
+          loading={false}
+          onQuickAdd={vi.fn()}
+          onOpenVariantModal={vi.fn()}
+          {...DEFAULTS}
+          {...over}
+        />
+      );
+
+    it("shows products with no search text, headed 'Best sellers'", () => {
+      render0();
+      expect(screen.getByText("Best sellers")).toBeInTheDocument();
+      expect(screen.getByText("Plain Tee")).toBeInTheDocument();
+      expect(screen.queryByText(/start typing/i)).not.toBeInTheDocument();
+    });
+
+    it("heads the list 'Results' once the cashier searches", () => {
+      render0({ query: "tee" });
+      expect(screen.getByText(/results for .tee./i)).toBeInTheDocument();
+      expect(screen.queryByText("Best sellers")).not.toBeInTheDocument();
+    });
+
+    it("says so when the catalogue is empty, and when a search finds nothing", () => {
+      const { rerender } = render0({ products: [] });
+      expect(screen.getByText(/no products available/i)).toBeInTheDocument();
+      rerender(
+        <SearchPanel query="zzz" onQueryChange={vi.fn()} category="all" onCategoryChange={vi.fn()} categories={[]} products={[]} loading={false} onQuickAdd={vi.fn()} onOpenVariantModal={vi.fn()} {...DEFAULTS} />
+      );
+      expect(screen.getByText(/no products found/i)).toBeInTheDocument();
+    });
+
+    it("shows a loading state for the first load", () => {
+      render0({ products: [], loading: true });
+      expect(screen.getByText(/loading products/i)).toBeInTheDocument();
+    });
+
+    it("pages: 'Load more' appears only when there are more, and asks for them", () => {
+      const onLoadMore = vi.fn();
+      const { rerender } = render0();
+      expect(screen.queryByRole("button", { name: /load more/i })).not.toBeInTheDocument();
+      rerender(
+        <SearchPanel query="" onQueryChange={vi.fn()} category="all" onCategoryChange={vi.fn()} categories={[]} products={[SINGLE_VARIANT_PRODUCT]} loading={false} onQuickAdd={vi.fn()} onOpenVariantModal={vi.fn()} {...DEFAULTS} hasMore onLoadMore={onLoadMore} />
+      );
+      fireEvent.click(screen.getByRole("button", { name: /load more/i }));
+      expect(onLoadMore).toHaveBeenCalled();
+    });
+
+    it("disables 'Load more' while it loads", () => {
+      render0({ hasMore: true, loadingMore: true });
+      expect(screen.getByRole("button", { name: /loading/i })).toBeDisabled();
+    });
+
+    it("renders the category tabs and picks one", () => {
+      const onCategoryChange = vi.fn();
+      render0({ categories: [{ id: "c1", name: "Appliances", slug: "appliances" }], onCategoryChange });
+      fireEvent.click(screen.getByRole("button", { name: "Appliances" }));
+      expect(onCategoryChange).toHaveBeenCalledWith("appliances");
+    });
+  });
+
+  describe("flagging a product", () => {
+    const renderWith = (products: PosProduct[], handlers: Record<string, unknown> = {}) =>
+      render(
+        <SearchPanel query="" onQueryChange={vi.fn()} category="all" onCategoryChange={vi.fn()} categories={[]} products={products} loading={false} onQuickAdd={vi.fn()} onOpenVariantModal={vi.fn()} {...DEFAULTS} {...handlers} />
+      );
+
+    it("has a flag button on each card that flags that product without adding it to the cart", () => {
+      const onFlagProduct = vi.fn();
+      const onQuickAdd = vi.fn();
+      renderWith([SINGLE_VARIANT_PRODUCT], { onFlagProduct, onQuickAdd });
+      fireEvent.click(screen.getByRole("button", { name: /flag plain tee/i }));
+      expect(onFlagProduct).toHaveBeenCalledWith(SINGLE_VARIANT_PRODUCT);
+      expect(onQuickAdd).not.toHaveBeenCalled();
+    });
+
+    it("still lets you flag an out-of-stock product (that's often exactly the problem)", () => {
+      const onFlagProduct = vi.fn();
+      renderWith([OUT_OF_STOCK_PRODUCT], { onFlagProduct });
+      const flag = screen.getByRole("button", { name: /flag sold out jacket/i });
+      expect(flag).toBeEnabled();
+      fireEvent.click(flag);
+      expect(onFlagProduct).toHaveBeenCalledWith(OUT_OF_STOCK_PRODUCT);
+    });
   });
 });

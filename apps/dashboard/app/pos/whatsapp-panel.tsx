@@ -17,6 +17,16 @@ interface FoundOrder {
   items: FoundOrderItem[];
 }
 
+export interface PendingWhatsAppOrder {
+  id: string;
+  order_number: string;
+  total: number;
+  customer_name: string | null;
+  customer_phone: string | null;
+  item_count: number;
+  created_at: string;
+}
+
 interface WhatsAppPanelProps {
   mode: "create" | "confirm";
   onModeChange: (mode: "create" | "confirm") => void;
@@ -44,6 +54,11 @@ interface WhatsAppPanelProps {
   onConfirmPayment: () => void;
   onCancelOrder: (reason: string) => void;
   cancelledOrderNumber: string | null;
+  /** Orders waiting for payment; picking one saves typing its number. */
+  pendingOrders?: PendingWhatsAppOrder[];
+  pendingLoading?: boolean;
+  onSelectPending?: (orderNumber: string) => void;
+  onRefreshPending?: () => void;
 }
 
 /**
@@ -75,6 +90,10 @@ export default function WhatsAppPanel({
   onConfirmPayment,
   onCancelOrder,
   cancelledOrderNumber,
+  pendingOrders,
+  pendingLoading = false,
+  onSelectPending,
+  onRefreshPending,
 }: WhatsAppPanelProps) {
   const [cancelling, setCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
@@ -180,6 +199,41 @@ export default function WhatsAppPanel({
             <p className="text-xs text-emerald-700 dark:text-emerald-300">
               Order {cancelledOrderNumber} was cancelled and its reserved stock released.
             </p>
+          )}
+
+          {!foundOrder && pendingOrders && (
+            <div className="space-y-2 overflow-y-auto">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Waiting for payment</p>
+                {onRefreshPending && (
+                  <button type="button" onClick={onRefreshPending} className="text-xs font-semibold underline">
+                    Refresh
+                  </button>
+                )}
+              </div>
+              {pendingLoading ? (
+                <p className="text-sm text-gray-500 text-center pt-4">Loading orders...</p>
+              ) : pendingOrders.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center pt-4">No WhatsApp orders waiting for payment.</p>
+              ) : (
+                pendingOrders.map((order) => (
+                  <button
+                    key={order.id}
+                    type="button"
+                    onClick={() => onSelectPending?.(order.order_number)}
+                    className="w-full flex items-center justify-between text-left p-2.5 rounded-[8px] border border-gray-200 dark:border-[#262626] hover:border-gray-400 dark:hover:border-[#444]"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{order.order_number}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {order.customer_name ?? "Unnamed customer"} · {order.item_count} item{order.item_count === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">{formatKobo(order.total)}</span>
+                  </button>
+                ))
+              )}
+            </div>
           )}
 
           {foundOrder && (

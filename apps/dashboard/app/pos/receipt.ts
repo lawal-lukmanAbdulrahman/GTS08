@@ -28,6 +28,7 @@ export interface ReceiptData {
   customerName?: string;
   customerPhone?: string;
   cashReceived?: number; // kobo, cash payments only
+  duplicate?: boolean; // a reprint, not the original
   store?: ReceiptStore;
 }
 
@@ -50,6 +51,7 @@ function itemLine(item: ReceiptItem): string {
 export function buildReceiptText(receipt: ReceiptData): string {
   const lines = [
     "GTS",
+    ...(receipt.duplicate ? ["*** DUPLICATE ***"] : []),
     `Order ${receipt.orderNumber}`,
     formatWAT(receipt.createdAt),
     "",

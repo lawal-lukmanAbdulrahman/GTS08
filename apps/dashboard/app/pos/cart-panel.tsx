@@ -1,56 +1,59 @@
 "use client";
 
-import { formatKobo, computeCartTotals } from "@gts/utils";
+import { formatKobo, computeCartTotals, parseNairaInput } from "@gts/utils";
+import { resolveManualDiscount } from "./manual-discount-input";
 import type { CartLine, PaymentMethod } from "./pos-types";
 
 interface CartPanelProps {
   lines: CartLine[];
   paymentMethod: PaymentMethod | null;
-  promoCode?: string;
-  discountAmount?: number;
-  promoError?: string | null;
+  /** Whether this staff member may apply a manual discount at all. */
+  canDiscount?: boolean;
+  /** Admins may discount past the cashier cap. */
+  isAdmin?: boolean;
+  /** The discount box's text, in Naira as typed. */
+  discountText?: string;
   cashReceived?: string;
   onIncrement: (variantId: string) => void;
   onDecrement: (variantId: string) => void;
   onRemove: (variantId: string) => void;
   onPaymentMethodChange: (method: PaymentMethod) => void;
   onCashReceivedChange?: (value: string) => void;
-  onPromoCodeChange?: (value: string) => void;
-  onApplyPromo?: () => void;
-  onRemovePromo?: () => void;
+  onDiscountTextChange?: (value: string) => void;
+  onFlagLine?: (line: CartLine) => void;
   onConfirm: () => void;
 }
 
 export default function CartPanel({
   lines,
   paymentMethod,
-  promoCode,
-  discountAmount = 0,
-  promoError,
+  canDiscount = false,
+  isAdmin = false,
+  discountText = "",
   cashReceived,
   onIncrement,
   onDecrement,
   onRemove,
   onPaymentMethodChange,
   onCashReceivedChange,
-  onPromoCodeChange,
-  onApplyPromo,
-  onRemovePromo,
+  onDiscountTextChange,
+  onFlagLine,
   onConfirm,
 }: CartPanelProps) {
+  const rawSubtotal = lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
+  const discount = resolveManualDiscount(discountText, { subtotal: rawSubtotal, isAdmin, canApply: canDiscount || isAdmin });
   const totals =
     lines.length > 0
       ? computeCartTotals(
           lines.map((l) => ({ unitPrice: l.unitPrice, quantity: l.quantity })),
-          discountAmount
+          discount.kobo
         )
       : { subtotal: 0, discountAmount: 0, total: 0 };
 
-  const canConfirm = lines.length > 0 && paymentMethod !== null;
-  const changeDue =
-    paymentMethod === "cash" && cashReceived
-      ? Math.max(0, Math.round(Number(cashReceived) * 100) - totals.total)
-      : null;
+  // A discount that was typed but refused must not be silently dropped at the till.
+  const canConfirm = lines.length > 0 && paymentMethod !== null && discount.error === null;
+  const received = paymentMethod === "cash" && cashReceived ? parseNairaInput(cashReceived) : null;
+  const changeDue = received === null ? null : Math.max(0, received - totals.total);
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#1C1C1C] border-l border-gray-200 dark:border-[#262626]">
@@ -105,6 +108,17 @@ export default function CartPanel({
                     <span className="text-sm font-semibold ml-1">{formatKobo(lineTotal)}</span>
                   </div>
                 </div>
+                {onFlagLine && (
+                  <button
+                    type="button"
+                    aria-label={`Flag ${line.productName}`}
+                    title="Report a problem with this product"
+                    onClick={() => onFlagLine(line)}
+                    className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 text-sm leading-none px-1"
+                  >
+                    ⚑
+                  </button>
+                )}
                 <button
                   type="button"
                   aria-label={`Remove ${line.productName}`}
@@ -120,35 +134,25 @@ export default function CartPanel({
       </div>
 
       <div className="border-t border-gray-200 dark:border-[#262626] p-4 space-y-3">
-        {onPromoCodeChange && (
+        {(canDiscount || isAdmin) && onDiscountTextChange && (
           <div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={promoCode || ""}
-                onChange={(e) => onPromoCodeChange(e.target.value)}
-                placeholder="Promo code"
-                className="flex-1 px-3 py-1.5 text-xs rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
-              />
-              {discountAmount > 0 ? (
-                <button
-                  type="button"
-                  onClick={onRemovePromo}
-                  className="px-3 py-1.5 text-xs font-semibold text-gray-500 underline"
-                >
-                  Remove
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onApplyPromo}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-[6px] bg-gray-100 dark:bg-[#242424]"
-                >
-                  Apply
-                </button>
-              )}
-            </div>
-            {promoError && <p className="text-xs text-red-600 mt-1">{promoError}</p>}
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1" htmlFor="manual-discount">
+              Discount (₦)
+            </label>
+            <input
+              id="manual-discount"
+              type="text"
+              inputMode="decimal"
+              value={discountText}
+              onChange={(e) => onDiscountTextChange(e.target.value)}
+              placeholder="0"
+              className="w-full px-3 py-1.5 text-xs rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
+            />
+            {discount.error && (
+              <p role="alert" className="text-xs text-red-600 dark:text-red-400 mt-1">
+                {discount.error}
+              </p>
+            )}
           </div>
         )}
 
@@ -192,7 +196,8 @@ export default function CartPanel({
         {paymentMethod === "cash" && onCashReceivedChange && (
           <div>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               value={cashReceived || ""}
               onChange={(e) => onCashReceivedChange(e.target.value)}
               placeholder="Cash received (₦)"

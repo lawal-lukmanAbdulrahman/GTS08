@@ -53,4 +53,46 @@ describe("TodaysOrdersPanel (spec Part 6)", () => {
     fireEvent.click(screen.getByRole("button", { name: /confirm void/i }));
     expect(onVoid).toHaveBeenCalledWith("o1", "wrong item scanned");
   });
+
+  describe("void permission", () => {
+    it("hides Void and says why when the cashier hasn't been granted it", () => {
+      render(<TodaysOrdersPanel orders={ORDERS} canVoid={false} onVoid={vi.fn()} onReprint={vi.fn()} onClose={vi.fn()} />);
+      fireEvent.click(screen.getByText("GTS-202609-000001"));
+      expect(screen.queryByRole("button", { name: /void order/i })).not.toBeInTheDocument();
+      expect(screen.getByText(/ask a manager to void/i)).toBeInTheDocument();
+    });
+
+    it("still offers Void when permitted (also the default for existing callers)", () => {
+      render(<TodaysOrdersPanel orders={ORDERS} canVoid onVoid={vi.fn()} onReprint={vi.fn()} onClose={vi.fn()} />);
+      fireEvent.click(screen.getByText("GTS-202609-000001"));
+      expect(screen.getByRole("button", { name: /void order/i })).toBeInTheDocument();
+    });
+  });
+
+  describe("reprint", () => {
+    it("reprints a completed order", () => {
+      const onReprint = vi.fn();
+      render(<TodaysOrdersPanel orders={ORDERS} canVoid onVoid={vi.fn()} onReprint={onReprint} onClose={vi.fn()} />);
+      fireEvent.click(screen.getByText("GTS-202609-000001"));
+      fireEvent.click(screen.getByRole("button", { name: /reprint receipt/i }));
+      expect(onReprint).toHaveBeenCalledWith("o1");
+    });
+
+    it("is offered even without the void permission", () => {
+      render(<TodaysOrdersPanel orders={ORDERS} canVoid={false} onVoid={vi.fn()} onReprint={vi.fn()} onClose={vi.fn()} />);
+      fireEvent.click(screen.getByText("GTS-202609-000001"));
+      expect(screen.getByRole("button", { name: /reprint receipt/i })).toBeInTheDocument();
+    });
+
+    it("isn't offered for a voided order", () => {
+      render(<TodaysOrdersPanel orders={ORDERS} canVoid onVoid={vi.fn()} onReprint={vi.fn()} onClose={vi.fn()} />);
+      fireEvent.click(screen.getByText("GTS-202609-000002"));
+      expect(screen.queryByRole("button", { name: /reprint receipt/i })).not.toBeInTheDocument();
+    });
+
+    it("shows a reprint error instead of failing silently", () => {
+      render(<TodaysOrdersPanel orders={ORDERS} canVoid onVoid={vi.fn()} onReprint={vi.fn()} reprintError="Could not load the receipt." onClose={vi.fn()} />);
+      expect(screen.getByRole("alert")).toHaveTextContent(/could not load the receipt/i);
+    });
+  });
 });

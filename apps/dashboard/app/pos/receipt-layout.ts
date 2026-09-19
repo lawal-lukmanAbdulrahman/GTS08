@@ -116,6 +116,7 @@ export function layoutReceipt(receipt: ReceiptData, paper: PaperSize): string[] 
   if (store.phone) lines.push(...centerWrapped(`Tel: ${store.phone}`, width));
   lines.push(heavy);
   lines.push(center("SALES RECEIPT", width));
+  if (receipt.duplicate) lines.push(center("*** DUPLICATE ***", width));
   lines.push(light);
 
   lines.push(...twoCol("Order:", receipt.orderNumber, width));

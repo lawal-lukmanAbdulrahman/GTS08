@@ -260,3 +260,22 @@ describe("parseWhatsAppContact", () => {
     expect(parseWhatsAppContact(null)).toBeNull();
   });
 });
+
+describe.each(PAPERS)("a reprinted receipt on %s paper", (paper) => {
+  it("is marked DUPLICATE, right under the title", () => {
+    const lines = layoutReceipt({ ...BASE, duplicate: true }, paper);
+    const title = lines.findIndex((l) => l.includes("SALES RECEIPT"));
+    expect(lines[title + 1]).toContain("DUPLICATE");
+  });
+
+  it("carries no marker on the original", () => {
+    expect(layoutReceipt(BASE, paper).join("\n")).not.toContain("DUPLICATE");
+  });
+
+  it("still fits the paper width", () => {
+    const width = PAPER_SIZES[paper].chars;
+    for (const line of layoutReceipt({ ...BASE, duplicate: true }, paper)) {
+      expect(line.length).toBeLessThanOrEqual(width);
+    }
+  });
+});

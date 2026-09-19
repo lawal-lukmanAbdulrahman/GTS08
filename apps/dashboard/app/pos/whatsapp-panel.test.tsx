@@ -130,3 +130,56 @@ describe("WhatsAppPanel cancel order", () => {
     expect(screen.queryByPlaceholderText(/reason for cancelling/i)).not.toBeInTheDocument();
   });
 });
+
+describe("pending WhatsApp orders on the Confirm tab", () => {
+  const PENDING = [
+    { id: "a", order_number: "GTS-202609-000010", total: 2500000, customer_name: "Ngozi", customer_phone: "08031234567", item_count: 3, created_at: "2026-09-19T09:00:00Z" },
+    { id: "b", order_number: "GTS-202609-000011", total: 900000, customer_name: null, customer_phone: null, item_count: 1, created_at: "2026-09-19T09:30:00Z" },
+  ];
+  const confirmProps = (over = {}) => baseProps({ mode: "confirm", pendingOrders: PENDING, onSelectPending: vi.fn(), onRefreshPending: vi.fn(), ...over });
+
+  it("lists orders waiting for payment, so the cashier needn't type the number", () => {
+    render(<WhatsAppPanel {...confirmProps()} />);
+    expect(screen.getByText("GTS-202609-000010")).toBeInTheDocument();
+    expect(screen.getByText(/Ngozi/)).toBeInTheDocument();
+    expect(screen.getByText("₦25,000")).toBeInTheDocument();
+    expect(screen.getByText(/3 items/)).toBeInTheDocument();
+    expect(screen.getByText(/1 item\b/)).toBeInTheDocument();
+  });
+
+  it("selecting one asks for that order by number", () => {
+    const onSelectPending = vi.fn();
+    render(<WhatsAppPanel {...confirmProps({ onSelectPending })} />);
+    fireEvent.click(screen.getByText("GTS-202609-000011"));
+    expect(onSelectPending).toHaveBeenCalledWith("GTS-202609-000011");
+  });
+
+  it("says when nothing is waiting", () => {
+    render(<WhatsAppPanel {...confirmProps({ pendingOrders: [] })} />);
+    expect(screen.getByText(/no whatsapp orders waiting/i)).toBeInTheDocument();
+  });
+
+  it("shows loading, and a refresh button", () => {
+    const onRefreshPending = vi.fn();
+    const { rerender } = render(<WhatsAppPanel {...confirmProps({ pendingOrders: [], pendingLoading: true })} />);
+    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    rerender(<WhatsAppPanel {...confirmProps({ onRefreshPending })} />);
+    fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    expect(onRefreshPending).toHaveBeenCalled();
+  });
+
+  it("hides the list once an order is looked up", () => {
+    render(<WhatsAppPanel {...confirmProps({ foundOrder: FOUND_ORDER })} />);
+    expect(screen.queryByText("GTS-202609-000010")).not.toBeInTheDocument();
+  });
+
+  it("is not shown on the Record tab", () => {
+    render(<WhatsAppPanel {...confirmProps({ mode: "create" })} />);
+    expect(screen.queryByText("GTS-202609-000010")).not.toBeInTheDocument();
+  });
+
+  it("still works without a list (typed lookup only)", () => {
+    render(<WhatsAppPanel {...baseProps({ mode: "confirm" })} />);
+    expect(screen.getByPlaceholderText(/order number/i)).toBeInTheDocument();
+  });
+});

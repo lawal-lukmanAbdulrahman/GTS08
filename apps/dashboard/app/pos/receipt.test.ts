@@ -63,3 +63,10 @@ describe("buildWhatsAppShareUrl (spec: receipt sent via WhatsApp)", () => {
     expect(url.startsWith("https://wa.me/2348031234567?text=")).toBe(true);
   });
 });
+
+describe("buildReceiptText for a reprint", () => {
+  it("says DUPLICATE so the shared copy can't pass as the original", () => {
+    expect(buildReceiptText({ ...SAMPLE_RECEIPT, duplicate: true })).toContain("DUPLICATE");
+    expect(buildReceiptText(SAMPLE_RECEIPT)).not.toContain("DUPLICATE");
+  });
+});
