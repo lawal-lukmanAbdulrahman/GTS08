@@ -42,6 +42,35 @@ singleton (`store_name`, `support_phone`) plus a new `store_address` column
 The POS falls back to name "GTS" with no address/phone if the settings can't
 be loaded, so a receipt can always be printed. The env vars were removed.
 
+### D003 — POS staff access, sub-admin records, product flags (2026-09-19)
+
+The POS is the point of sale for sub-admins (cashiers); their actions are
+recorded against their own profile. Decisions (reviewer: project owner):
+
+- **Separate permission flags:** `can_void_orders` and `can_apply_discounts`
+  (migration `00010`) alongside `can_process_pos`. Admins are implicitly
+  allowed both.
+- **Voids:** a cashier can void only sales they took payment for; admins can
+  void any. Requires `can_void_orders`.
+- **Manual discounts:** need `can_apply_discounts`; above 20% of the subtotal
+  only an admin may apply. Promo codes are NOT built (`/promos/validate` is an
+  unimplemented stub) and are out of scope here.
+- **Ownership of a sale:** the staff member who confirmed payment
+  (`transactions.confirmed_by`). For WhatsApp orders that can differ from who
+  recorded the order (`orders.cashier_id`).
+- **Audit:** every staff write action is written to `activity_logs`
+  (spec: employee portal Part 9.4). Cashiers see only their own; admins see
+  everyone's.
+- **Product flags:** cashiers raise issues on a product (wrong price/stock,
+  damaged, missing image, barcode, other) into a new `product_flags` table,
+  reviewed by admins. `support_tickets` is customer-facing and not reused.
+- **Session:** sign-out revokes the session and clears cookies; idle lock at
+  30 minutes keeps the cart; blocked accounts are signed out on the next call.
+- **Products on load:** the POS lists active products (best sellers first)
+  before any search. The WhatsApp confirm tab lists pending orders to pick
+  from (the reading of "same for orders" is unconfirmed by the owner and easy
+  to revert).
+
 ## Spec Corrections
 
 - `gts_03_cashier_spec.md` Part 9's documented paths (`/pos/orders`,
