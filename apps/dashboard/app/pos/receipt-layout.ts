@@ -193,9 +193,4 @@ export function paperCss(paper: PaperSize, lineCount: number): string {
 }`;
 }
 
-/** Pulls the customer's name and phone from an order's "WhatsApp customer: Name (phone)" note. */
-export function parseWhatsAppContact(notes: string | null | undefined): { name: string; phone: string } | null {
-  if (!notes) return null;
-  const match = notes.match(/^WhatsApp customer:\s*(.+?)\s*\(([^)]+)\)/m);
-  return match ? { name: match[1]!, phone: match[2]! } : null;
-}
+export { parseWhatsAppContact } from "@gts/utils";

@@ -54,22 +54,45 @@ function mapProduct(product: RawProduct) {
   };
 }
 
+/**
+ * The search text goes into a PostgREST filter string, where , ( ) and % have
+ * meaning. Strip them so text can't add clauses of its own.
+ */
+function cleanSearch(raw: string): string {
+  return raw.replace(/[,()%*\\"]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+const EMPTY_PAGE = (limit: number) => ({ data: [], meta: { total: 0, page: 1, limit, pages: 1 } });
+
 export async function GET(request: NextRequest) {
   const access = await requirePosAccess(request);
   if (!access.ok) return access.response;
 
   const { searchParams } = new URL(request.url);
-  const q = (searchParams.get("q") || "").trim();
+  const q = cleanSearch(searchParams.get("q") || "");
   const category = searchParams.get("category");
-  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-  const limit = Math.min(parseInt(searchParams.get("limit") || "30", 10), 60);
+  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
+  const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "30", 10) || 30), 60);
   const offset = (page - 1) * limit;
 
-  if (!q) {
-    return NextResponse.json({ data: [], meta: { total: 0, page: 1, limit, pages: 1 } });
+  const serviceClient = createServiceClient();
+
+  // A top-level category tab covers its sub-categories too.
+  let categoryIds: string[] | null = null;
+  if (category && category !== "all") {
+    const { data: cats, error: catError } = await serviceClient
+      .from("categories")
+      .select("id, parent_id, slug")
+      .eq("is_active", true);
+    if (catError) {
+      return NextResponse.json({ error: catError.message, code: "DATABASE_ERROR" }, { status: 500 });
+    }
+    const all = (cats || []) as Array<{ id: string; parent_id: string | null; slug: string }>;
+    const root = all.find((c) => c.slug === category);
+    if (!root) return NextResponse.json(EMPTY_PAGE(limit));
+    categoryIds = all.filter((c) => c.id === root.id || c.parent_id === root.id).map((c) => c.id);
   }
 
-  const serviceClient = createServiceClient();
   let query = serviceClient
     .from("products")
     .select(
@@ -82,13 +105,12 @@ export async function GET(request: NextRequest) {
       `,
       { count: "exact" }
     )
-    .eq("status", "active")
-    .or(`name.ilike.%${q}%,sku.ilike.%${q}%`);
+    .eq("status", "active");
 
-  if (category && category !== "all") {
-    query = query.eq("category.slug", category);
-  }
+  if (q) query = query.or(`name.ilike.%${q}%,sku.ilike.%${q}%`);
+  if (categoryIds) query = query.in("category_id", categoryIds);
 
+  // No search text: the POS opens on the catalogue, best sellers first.
   const { data, count, error } = await query
     .order("total_sold", { ascending: false })
     .range(offset, offset + limit - 1);

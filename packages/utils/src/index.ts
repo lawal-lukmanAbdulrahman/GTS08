@@ -1,5 +1,6 @@
 export { formatKobo, koboToNaira, nairaToKobo } from "./money";
 export { validateStoreSettings, type StoreSettingsInput, type StoreSettingsValidation } from "./store-settings";
+export { parseWhatsAppContact } from "./whatsapp-contact";
 export { computeCartTotals, type PosCartLine, type PosCartTotals } from "./pos";
 export { formatWAT, formatWATDate, toISOString } from "./date";
 export { isValidSlug, toSlug } from "./slug";

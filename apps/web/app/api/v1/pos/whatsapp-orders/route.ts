@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../_lib/access";
 import { sanitizeEmail, sanitizeSqlInput } from "../../auth/utils";
-import { computeCartTotals, type PosCartLine } from "@gts/utils";
+import { computeCartTotals, parseWhatsAppContact, type PosCartLine } from "@gts/utils";
 import { checkStockSufficiency } from "../_lib/stock-sufficiency";
 import { variantAvailable } from "../_lib/stock-status";
 import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
@@ -21,6 +21,54 @@ interface VariantRow {
   price_modifier: number;
   inventory: { quantity: number; reserved_quantity: number } | null;
   product: { id: string; name: string; base_price: number };
+}
+
+/**
+ * Orders waiting for payment, so a cashier picks one instead of typing its
+ * number. Any POS user can confirm any pending order (D001): the customer may
+ * arrive when a different cashier is on the till.
+ */
+export async function GET(request: NextRequest) {
+  const access = await requirePosAccess(request);
+  if (!access.ok) return access.response;
+
+  const { data, error } = await createServiceClient()
+    .from("orders")
+    .select("id, order_number, total, internal_notes, created_at, cashier_id, items:order_items(quantity)")
+    .eq("channel", "whatsapp")
+    .eq("status", "pending_payment")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+  }
+
+  const rows = (data || []) as unknown as Array<{
+    id: string;
+    order_number: string;
+    total: number;
+    internal_notes: string | null;
+    created_at: string;
+    cashier_id: string | null;
+    items: Array<{ quantity: number }> | null;
+  }>;
+
+  return NextResponse.json({
+    data: rows.map((o) => {
+      const contact = parseWhatsAppContact(o.internal_notes);
+      return {
+        id: o.id,
+        order_number: o.order_number,
+        total: o.total,
+        customer_name: contact?.name ?? null,
+        customer_phone: contact?.phone ?? null,
+        item_count: (o.items || []).reduce((sum, i) => sum + i.quantity, 0),
+        recorded_by: o.cashier_id,
+        created_at: o.created_at,
+      };
+    }),
+  });
 }
 
 /**
