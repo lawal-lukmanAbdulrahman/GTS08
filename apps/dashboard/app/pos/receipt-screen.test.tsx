@@ -96,6 +96,35 @@ describe("ReceiptScreen", () => {
     expect(pageRule()).toMatch(pageRe);
   });
 
+  it("prints the store details supplied by the admin's settings", () => {
+    render(
+      <ReceiptScreen
+        sale={SALE}
+        store={{ name: "Acme Stores", address: "5 Broad Street, Lagos", phone: "0801 234 5678" }}
+        onNewTransaction={vi.fn()}
+      />
+    );
+    const text = sheet().textContent!;
+    expect(text).toContain("ACME STORES");
+    expect(text).toContain("5 Broad Street, Lagos");
+    expect(text).toContain("Tel: 0801 234 5678");
+  });
+
+  it("still prints a plain 'GTS' header when no store details are available", () => {
+    render(<ReceiptScreen sale={SALE} onNewTransaction={vi.fn()} />);
+    const text = sheet().textContent!;
+    expect(text).toContain("GTS");
+    expect(text).not.toMatch(/Tel:/);
+  });
+
+  it("re-lays the header when the store details change", () => {
+    const { rerender } = render(<ReceiptScreen sale={SALE} store={{ name: "Old Name" }} onNewTransaction={vi.fn()} />);
+    expect(sheet().textContent).toContain("OLD NAME");
+    rerender(<ReceiptScreen sale={SALE} store={{ name: "New Name", address: "1 New Road" }} onNewTransaction={vi.fn()} />);
+    expect(sheet().textContent).toContain("NEW NAME");
+    expect(sheet().textContent).toContain("1 New Road");
+  });
+
   it("shrinks only the on-screen A4 preview so it fits a small screen, never the rolls", () => {
     render(<ReceiptScreen sale={SALE} onNewTransaction={vi.fn()} />);
     const preview = document.querySelector(".receipt-preview") as HTMLElement;

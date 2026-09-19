@@ -32,6 +32,16 @@ Decisions:
   WhatsApp send integration (none exists; would need a verified WhatsApp
   Business API account).
 
+### D002 — Receipt store details are admin-managed (2026-09-19)
+
+The receipt header (store name, address, phone) was first read from
+`NEXT_PUBLIC_STORE_*` env vars. It now comes from the existing `settings`
+singleton (`store_name`, `support_phone`) plus a new `store_address` column
+(migration `00009`), edited by admins at `/admin/settings` and served by
+`GET/PATCH /api/v1/settings` (PATCH is admin-only, re-verified server-side).
+The POS falls back to name "GTS" with no address/phone if the settings can't
+be loaded, so a receipt can always be printed. The env vars were removed.
+
 ## Spec Corrections
 
 - `gts_03_cashier_spec.md` Part 9's documented paths (`/pos/orders`,

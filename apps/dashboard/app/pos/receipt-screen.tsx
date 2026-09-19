@@ -3,17 +3,18 @@
 import { useMemo, useState } from "react";
 import { formatKobo } from "@gts/utils";
 import type { CompletedSale } from "./pos-types";
-import { buildWhatsAppShareUrl, type ReceiptData } from "./receipt";
-import { getReceiptStore } from "./receipt-config";
+import { buildWhatsAppShareUrl, type ReceiptData, type ReceiptStore } from "./receipt";
 import { PAPER_SIZES, layoutReceipt, paperCss, type PaperSize } from "./receipt-layout";
 import { loadPaperSize, savePaperSize } from "./receipt-paper";
 
 interface ReceiptScreenProps {
   sale: CompletedSale;
+  /** Header details from the admin's store settings; a bare "GTS" header if absent. */
+  store?: ReceiptStore;
   onNewTransaction: () => void;
 }
 
-function toReceiptData(sale: CompletedSale): ReceiptData {
+function toReceiptData(sale: CompletedSale, store?: ReceiptStore): ReceiptData {
   return {
     orderNumber: sale.orderNumber,
     items: sale.items.map((i) => ({
@@ -34,7 +35,7 @@ function toReceiptData(sale: CompletedSale): ReceiptData {
     customerName: sale.customerName,
     customerPhone: sale.customerPhone,
     cashReceived: sale.cashReceived,
-    store: getReceiptStore(),
+    store,
   };
 }
 
@@ -47,9 +48,9 @@ const PAPER_ORDER: PaperSize[] = ["58mm", "80mm", "a4"];
  * to the customer over WhatsApp. The preview and the printed page come from
  * the same layout, so what's on screen is what prints.
  */
-export default function ReceiptScreen({ sale, onNewTransaction }: ReceiptScreenProps) {
+export default function ReceiptScreen({ sale, store, onNewTransaction }: ReceiptScreenProps) {
   const [paper, setPaper] = useState<PaperSize>(() => loadPaperSize());
-  const receipt = useMemo(() => toReceiptData(sale), [sale]);
+  const receipt = useMemo(() => toReceiptData(sale, store), [sale, store]);
   const lines = useMemo(() => layoutReceipt(receipt, paper), [receipt, paper]);
 
   function choosePaper(next: PaperSize) {

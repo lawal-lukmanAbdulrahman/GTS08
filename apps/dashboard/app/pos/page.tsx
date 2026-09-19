@@ -10,6 +10,8 @@ import TodaysOrdersPanel from "./todays-orders-panel";
 import WhatsAppPanel from "./whatsapp-panel";
 import { nairaToKobo } from "@gts/utils";
 import { parseWhatsAppContact } from "./receipt-layout";
+import type { ReceiptStore } from "./receipt";
+import { loadStoreDetails, toReceiptStore } from "../lib/store-settings-api";
 import type { CartLine, CompletedSale, PaymentMethod, PosProduct } from "./pos-types";
 
 const API_BASE = "http://localhost:3000/api/v1";
@@ -34,6 +36,18 @@ export default function PosPage() {
   // server HTML ("Cashier") differ from the client's ("Admin User") and breaks hydration.
   const [cashierName, setCashierName] = useState("");
   useEffect(() => setCashierName(getCashierName()), []);
+
+  // Receipt header comes from the admin's store settings. Loaded up front and
+  // refreshed when a sale completes; if a refresh fails the last good details
+  // are kept, and before any load it's a bare "GTS" so a receipt always prints.
+  const [store, setStore] = useState<ReceiptStore>(() => toReceiptStore(null));
+  const refreshStore = useCallback(async () => {
+    const result = await loadStoreDetails();
+    if (result.ok) setStore(toReceiptStore(result.data));
+  }, []);
+  useEffect(() => {
+    refreshStore();
+  }, [refreshStore]);
 
   const [mode, setMode] = useState<"walkin" | "whatsapp">("walkin");
 
@@ -188,6 +202,7 @@ export default function PosPage() {
           paymentMethod === "cash" && Number(cashReceived) > 0 ? nairaToKobo(Number(cashReceived)) : undefined,
       });
       setShowPaymentConfirm(false);
+      refreshStore();
     } catch {
       setSaleError("Network error. Please try again.");
     }
@@ -315,10 +330,11 @@ export default function PosPage() {
     setFoundOrder(null);
     setLookupOrderNumber("");
     setWaPaymentMethod(null);
+    refreshStore();
   }
 
   if (completedSale) {
-    return <ReceiptScreen sale={completedSale} onNewTransaction={newTransaction} />;
+    return <ReceiptScreen sale={completedSale} store={store} onNewTransaction={newTransaction} />;
   }
 
   return (
