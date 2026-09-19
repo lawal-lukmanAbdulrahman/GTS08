@@ -408,22 +408,22 @@ export default function PosPage() {
   const banner = saleError ?? catalogue.error ?? session.error;
 
   return (
-    <div className="flex flex-col h-screen bg-[#F8F7F4] dark:bg-[#1C1C1C] font-sans">
+    <div className="flex flex-col h-full min-h-0 bg-[#F8F7F4] dark:bg-[#1C1C1C] font-sans">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#262626] bg-white dark:bg-[#1C1C1C]">
-        <h1 className="text-sm font-bold text-gray-900 dark:text-white">GTS POS</h1>
+        <h1 className="text-base font-bold text-gray-900 dark:text-white">GTS POS</h1>
         <div className="flex items-center gap-4">
           <div className="flex gap-1 bg-gray-100 dark:bg-[#242424] rounded-full p-0.5">
             <button
               type="button"
               onClick={() => setMode("walkin")}
-              className={`px-3 py-1 rounded-full text-xs font-semibold ${mode === "walkin" ? "bg-white dark:bg-[#1C1C1C] shadow-sm" : "text-gray-500"}`}
+              className={`px-3 py-1 rounded-full text-sm font-semibold ${mode === "walkin" ? "bg-white dark:bg-[#1C1C1C] shadow-sm" : "text-gray-500"}`}
             >
               Walk-in
             </button>
             <button
               type="button"
               onClick={() => setMode("whatsapp")}
-              className={`px-3 py-1 rounded-full text-xs font-semibold ${mode === "whatsapp" ? "bg-white dark:bg-[#1C1C1C] shadow-sm" : "text-gray-500"}`}
+              className={`px-3 py-1 rounded-full text-sm font-semibold ${mode === "whatsapp" ? "bg-white dark:bg-[#1C1C1C] shadow-sm" : "text-gray-500"}`}
             >
               WhatsApp
             </button>
@@ -431,7 +431,7 @@ export default function PosPage() {
           <button
             type="button"
             onClick={openTodaysOrders}
-            className="px-3 py-1.5 text-xs font-semibold rounded-[6px] bg-gray-100 dark:bg-[#242424]"
+            className="px-3 py-1.5 text-sm font-semibold rounded-[6px] bg-gray-100 dark:bg-[#242424]"
           >
             Today&apos;s Orders
           </button>
@@ -449,12 +449,12 @@ export default function PosPage() {
       </div>
 
       {banner && (
-        <div role="alert" className="px-4 py-2 bg-red-50 dark:bg-red-900/20 text-xs text-red-700 dark:text-red-300">
+        <div role="alert" className="px-4 py-2 bg-red-50 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300">
           {banner}
         </div>
       )}
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[60%_40%] overflow-hidden">
+      <div className="flex-1 min-h-0 grid grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[60%_40%] lg:grid-rows-[minmax(0,1fr)] overflow-hidden">
         <SearchPanel
           query={query}
           onQueryChange={setQuery}

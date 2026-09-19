@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../../lib/api-base";
 import { useEffect, useState } from "react";
 import { AdminTopStrip } from "../sidebar-context";
 import { idempotentFetch } from "@gts/utils";
@@ -37,8 +38,8 @@ export default function AdminOrdersPage() {
       const token = localStorage.getItem("gts_token");
       const url =
         selectedStatus === "all"
-          ? "http://localhost:3000/api/v1/orders"
-          : `http://localhost:3000/api/v1/orders?status=${selectedStatus}`;
+          ? `${API_BASE}/orders`
+          : `${API_BASE}/orders?status=${selectedStatus}`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -59,7 +60,7 @@ export default function AdminOrdersPage() {
 
     try {
       const token = localStorage.getItem("gts_token");
-      const res = await idempotentFetch(`http://localhost:3000/api/v1/orders/${activeOrder.id}/status`, {
+      const res = await idempotentFetch(`${API_BASE}/orders/${activeOrder.id}/status`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

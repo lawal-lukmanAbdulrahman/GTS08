@@ -70,13 +70,13 @@ export default function SearchPanel({
             if (e.key === "Escape") onQueryChange("");
           }}
           placeholder="Search by product name or SKU..."
-          className="w-full px-4 py-3 text-sm rounded-[8px] border border-gray-200 dark:border-[#383838] bg-white dark:bg-[#1C1C1C]"
+          className="w-full px-4 py-3 text-base rounded-[8px] border border-gray-200 dark:border-[#383838] bg-white dark:bg-[#1C1C1C]"
         />
         <div className="flex gap-2 overflow-x-auto pb-1">
           <button
             type="button"
             onClick={() => onCategoryChange("all")}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap ${
               category === "all"
                 ? "bg-[#EDCF5D] text-[#010101]"
                 : "bg-gray-100 dark:bg-[#242424] text-gray-600 dark:text-gray-300"
@@ -89,7 +89,7 @@ export default function SearchPanel({
               key={cat.id}
               type="button"
               onClick={() => onCategoryChange(cat.slug)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap ${
                 category === cat.slug
                   ? "bg-[#EDCF5D] text-[#010101]"
                   : "bg-gray-100 dark:bg-[#242424] text-gray-600 dark:text-gray-300"
@@ -103,14 +103,14 @@ export default function SearchPanel({
 
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         {loading && products.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center pt-10">Loading products...</p>
+          <p className="text-base text-gray-500 text-center pt-10">Loading products...</p>
         ) : products.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center pt-10">
+          <p className="text-base text-gray-500 text-center pt-10">
             {searching ? "No products found." : "No products available."}
           </p>
         ) : (
           <>
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
+            <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">
               {searching ? `Results for "${query.trim()}"` : "Best sellers"}
             </p>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
@@ -137,9 +137,9 @@ export default function SearchPanel({
                           />
                         )}
                       </div>
-                      <p className="text-xs font-semibold text-gray-900 dark:text-white line-clamp-2">{product.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{formatKobo(product.base_price)}</p>
-                      <span className={`inline-block mt-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${badge.className}`}>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-2">{product.name}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{formatKobo(product.base_price)}</p>
+                      <span className={`inline-block mt-1 px-1.5 py-0.5 rounded-full text-xs font-bold ${badge.className}`}>
                         {badge.label}
                       </span>
                     </button>
@@ -148,7 +148,7 @@ export default function SearchPanel({
                       aria-label={`Flag ${product.name}`}
                       title="Report a problem with this product"
                       onClick={() => onFlagProduct(product)}
-                      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 dark:bg-[#1C1C1C]/90 border border-gray-200 dark:border-[#383838] text-[11px] text-gray-500 hover:text-red-600 hover:border-red-300"
+                      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 dark:bg-[#1C1C1C]/90 border border-gray-200 dark:border-[#383838] text-xs text-gray-500 hover:text-red-600 hover:border-red-300"
                     >
                       ⚑
                     </button>
@@ -162,7 +162,7 @@ export default function SearchPanel({
                   type="button"
                   onClick={onLoadMore}
                   disabled={loadingMore}
-                  className="px-4 py-2 text-xs font-semibold rounded-[8px] bg-gray-100 dark:bg-[#242424] disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-semibold rounded-[8px] bg-gray-100 dark:bg-[#242424] disabled:opacity-50"
                 >
                   {loadingMore ? "Loading..." : "Load more"}
                 </button>

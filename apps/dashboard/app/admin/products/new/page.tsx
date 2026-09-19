@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../../../lib/api-base";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -244,7 +245,7 @@ export default function CreateProductPage() {
   useEffect(() => {
     const fetchBrands = async () => {
       try {
-        const res = await fetch("http://localhost:3000/api/v1/brands");
+        const res = await fetch(`${API_BASE}/brands`);
         if (res.ok) {
           const json = await res.json();
           if (json.data && Array.isArray(json.data) && json.data.length > 0) {
@@ -306,7 +307,7 @@ export default function CreateProductPage() {
           };
 
           const token = localStorage.getItem("gts_token");
-          const res = await fetch("http://localhost:3000/api/v1/products/drafts", {
+          const res = await fetch(`${API_BASE}/products/drafts`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -429,7 +430,7 @@ export default function CreateProductPage() {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const res = await fetch("http://localhost:3000/api/v1/categories");
+        const res = await fetch(`${API_BASE}/categories`);
         if (res.ok) {
           const json = await res.json();
           if (json.data && Array.isArray(json.data) && json.data.length > 0) {
@@ -456,7 +457,7 @@ export default function CreateProductPage() {
         .filter(Boolean);
 
       const token = localStorage.getItem("gts_token");
-      const res = await fetch("http://localhost:3000/api/v1/categories", {
+      const res = await fetch(`${API_BASE}/categories`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -519,7 +520,7 @@ export default function CreateProductPage() {
     setSavingNewBrand(true);
     try {
       const token = localStorage.getItem("gts_token");
-      const res = await fetch("http://localhost:3000/api/v1/brands", {
+      const res = await fetch(`${API_BASE}/brands`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -964,7 +965,7 @@ export default function CreateProductPage() {
 
       if (targetStatus === "draft") {
         // ── SAVE NEW DRAFT IN DEDICATED DRAFTS STORE ──────────────────────────
-        const res = await fetch("http://localhost:3000/api/v1/products/drafts", {
+        const res = await fetch(`${API_BASE}/products/drafts`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -993,7 +994,7 @@ export default function CreateProductPage() {
         }, 1200);
       } else {
         // ── PUBLISH LIVE PRODUCT TO PRODUCTS TABLE ────────────────────────────
-        const res = await fetch("http://localhost:3000/api/v1/products", {
+        const res = await fetch(`${API_BASE}/products`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1010,7 +1011,7 @@ export default function CreateProductPage() {
         // Clean up draft from product_drafts if it was auto-saved earlier
         if (cloudDraftId) {
           try {
-            await fetch(`http://localhost:3000/api/v1/products/drafts?id=${cloudDraftId}`, {
+            await fetch(`${API_BASE}/products/drafts?id=${cloudDraftId}`, {
               method: "DELETE",
               headers: token ? { Authorization: `Bearer ${token}` } : {},
             });

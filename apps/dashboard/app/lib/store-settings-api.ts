@@ -1,8 +1,9 @@
+import { API_BASE } from "./api-base";
 import type { ReceiptStore } from "../pos/receipt";
 import type { SaveResult, StoreDetails } from "../admin/settings/store-settings-form";
 
 // Same convention as the rest of the dashboard: the web app hosts the API.
-const SETTINGS_URL = "http://localhost:3000/api/v1/settings";
+const SETTINGS_URL = `${API_BASE}/settings`;
 const UNREACHABLE = "Couldn't reach the server. Check your connection and try again.";
 
 export type LoadResult = { ok: true; data: StoreDetails } | { ok: false; message: string };

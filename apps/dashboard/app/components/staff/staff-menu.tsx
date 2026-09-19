@@ -18,7 +18,7 @@ function initials(name: string): string {
   return (parts[0]![0]! + (parts.length > 1 ? parts[parts.length - 1]![0]! : "")).toUpperCase();
 }
 
-const ITEM = "block w-full text-left px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-[#242424]";
+const ITEM = "block w-full text-left px-3 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-[#242424]";
 
 /** The signed-in staff member's menu: profile, where else they can go, and sign out. */
 export default function StaffMenu({ name, role, isAdmin, canUsePos, current, onSignOut }: Props) {
@@ -49,11 +49,11 @@ export default function StaffMenu({ name, role, isAdmin, canUsePos, current, onS
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full hover:bg-gray-100 dark:hover:bg-[#242424]"
       >
-        <span className="w-7 h-7 rounded-full bg-[#EDCF5D] text-[#010101] text-[11px] font-bold flex items-center justify-center" aria-hidden>
+        <span className="w-7 h-7 rounded-full bg-[#EDCF5D] text-[#010101] text-xs font-bold flex items-center justify-center" aria-hidden>
           {initials(name)}
         </span>
-        <span className="text-xs font-semibold text-gray-900 dark:text-white">{displayName}</span>
-        <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-[#242424] text-gray-500 dark:text-gray-400">
+        <span className="text-sm font-semibold text-gray-900 dark:text-white">{displayName}</span>
+        <span className="text-xs font-bold uppercase px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-[#242424] text-gray-500 dark:text-gray-400">
           {role}
         </span>
       </button>

@@ -1,4 +1,6 @@
-export const API_BASE = "http://localhost:3000/api/v1";
+import { API_BASE } from "./api-base";
+
+export { API_BASE };
 
 const TOKEN_KEY = "gts_token";
 const USER_KEY = "gts_user";

@@ -1,3 +1,4 @@
+import { API_BASE } from "../../lib/api-base";
 /**
  * Helper to optimize image resolution/size, inspect transparency,
  * and upload to Cloudinary using unsigned upload preset or backend route.
@@ -209,7 +210,7 @@ export async function uploadToCloudinary(
     // Fallback: try backend proxy /api/v1/upload
     const proxyFormData = new FormData();
     proxyFormData.append("file", fileToUpload);
-    const backendRes = await fetch("http://localhost:3000/api/v1/upload", {
+    const backendRes = await fetch(`${API_BASE}/upload`, {
       method: "POST",
       body: proxyFormData,
     });

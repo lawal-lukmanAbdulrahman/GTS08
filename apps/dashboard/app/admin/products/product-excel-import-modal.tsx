@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../../lib/api-base";
 import { useState, useRef } from "react";
 import {
   parseProductsFromExcel,
@@ -114,7 +115,7 @@ export default function ProductExcelImportModal({
           ],
         };
 
-        const res = await fetch("http://localhost:3000/api/v1/products", {
+        const res = await fetch(`${API_BASE}/products`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

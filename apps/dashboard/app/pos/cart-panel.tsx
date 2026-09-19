@@ -59,7 +59,7 @@ export default function CartPanel({
     <div className="flex flex-col h-full bg-white dark:bg-[#1C1C1C] border-l border-gray-200 dark:border-[#262626]">
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {lines.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-center text-sm text-gray-500 dark:text-gray-400 px-6">
+          <div className="h-full flex items-center justify-center text-center text-base text-gray-500 dark:text-gray-400 px-6">
             Cart is empty. Add products from the left.
           </div>
         ) : (
@@ -74,14 +74,14 @@ export default function CartPanel({
                 className="flex items-center gap-3 p-2.5 rounded-[8px] border border-gray-200 dark:border-[#262626]"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                  <p className="text-base font-semibold text-gray-900 dark:text-white truncate">
                     {line.productName}
                   </p>
                   {variant && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{variant}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{variant}</p>
                   )}
                   {atStockLimit && (
-                    <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">
+                    <p className="text-sm text-red-600 dark:text-red-400 mt-0.5">
                       Only {line.available} left in stock.
                     </p>
                   )}
@@ -91,21 +91,21 @@ export default function CartPanel({
                       aria-label="-"
                       disabled={line.quantity <= 1}
                       onClick={() => onDecrement(line.variantId)}
-                      className="w-6 h-6 rounded-full border border-gray-300 dark:border-[#383838] text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="w-6 h-6 rounded-full border border-gray-300 dark:border-[#383838] text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       -
                     </button>
-                    <span className="text-sm font-mono w-5 text-center">{line.quantity}</span>
+                    <span className="text-base font-mono w-5 text-center">{line.quantity}</span>
                     <button
                       type="button"
                       aria-label="+"
                       disabled={atStockLimit}
                       onClick={() => onIncrement(line.variantId)}
-                      className="w-6 h-6 rounded-full border border-gray-300 dark:border-[#383838] text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="w-6 h-6 rounded-full border border-gray-300 dark:border-[#383838] text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       +
                     </button>
-                    <span className="text-sm font-semibold ml-1">{formatKobo(lineTotal)}</span>
+                    <span className="text-base font-semibold ml-1">{formatKobo(lineTotal)}</span>
                   </div>
                 </div>
                 {onFlagLine && (
@@ -114,7 +114,7 @@ export default function CartPanel({
                     aria-label={`Flag ${line.productName}`}
                     title="Report a problem with this product"
                     onClick={() => onFlagLine(line)}
-                    className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 text-sm leading-none px-1"
+                    className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 text-base leading-none px-1"
                   >
                     ⚑
                   </button>
@@ -136,7 +136,7 @@ export default function CartPanel({
       <div className="border-t border-gray-200 dark:border-[#262626] p-4 space-y-3">
         {(canDiscount || isAdmin) && onDiscountTextChange && (
           <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1" htmlFor="manual-discount">
+            <label className="block text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1" htmlFor="manual-discount">
               Discount (₦)
             </label>
             <input
@@ -146,17 +146,17 @@ export default function CartPanel({
               value={discountText}
               onChange={(e) => onDiscountTextChange(e.target.value)}
               placeholder="0"
-              className="w-full px-3 py-1.5 text-xs rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
+              className="w-full px-3 py-1.5 text-sm rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
             />
             {discount.error && (
-              <p role="alert" className="text-xs text-red-600 dark:text-red-400 mt-1">
+              <p role="alert" className="text-sm text-red-600 dark:text-red-400 mt-1">
                 {discount.error}
               </p>
             )}
           </div>
         )}
 
-        <div className="space-y-1 text-sm">
+        <div className="space-y-1 text-base">
           <div className="flex justify-between text-gray-600 dark:text-gray-300">
             <span>Subtotal</span>
             <span>{formatKobo(totals.subtotal)}</span>
@@ -167,21 +167,21 @@ export default function CartPanel({
               <span>-{formatKobo(totals.discountAmount)}</span>
             </div>
           )}
-          <div className="flex justify-between font-bold text-gray-900 dark:text-white text-base pt-1 border-t border-gray-100 dark:border-[#262626]">
+          <div className="flex justify-between font-bold text-gray-900 dark:text-white text-lg pt-1 border-t border-gray-100 dark:border-[#262626]">
             <span>Total</span>
             <span>{formatKobo(totals.total)}</span>
           </div>
         </div>
 
         <div className="space-y-1.5">
-          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Payment Method</p>
+          <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Payment Method</p>
           <div className="flex gap-2">
             {(["cash", "pos_terminal"] as PaymentMethod[]).map((method) => (
               <button
                 key={method}
                 type="button"
                 onClick={() => onPaymentMethodChange(method)}
-                className={`flex-1 py-2 rounded-[6px] text-xs font-semibold border transition-all ${
+                className={`flex-1 py-2 rounded-[6px] text-sm font-semibold border transition-all ${
                   paymentMethod === method
                     ? "bg-[#EDCF5D] border-[#EDCF5D] text-[#010101]"
                     : "border-gray-200 dark:border-[#383838] text-gray-700 dark:text-gray-200"
@@ -201,10 +201,10 @@ export default function CartPanel({
               value={cashReceived || ""}
               onChange={(e) => onCashReceivedChange(e.target.value)}
               placeholder="Cash received (₦)"
-              className="w-full px-3 py-1.5 text-xs rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
+              className="w-full px-3 py-1.5 text-sm rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
             />
             {changeDue !== null && (
-              <p className="text-xs text-gray-500 mt-1">Change due: {formatKobo(changeDue)}</p>
+              <p className="text-sm text-gray-500 mt-1">Change due: {formatKobo(changeDue)}</p>
             )}
           </div>
         )}
@@ -213,7 +213,7 @@ export default function CartPanel({
           type="button"
           disabled={!canConfirm}
           onClick={onConfirm}
-          className="w-full py-3 rounded-[8px] bg-emerald-600 text-white font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-700 transition-colors"
+          className="w-full py-3 rounded-[8px] bg-emerald-600 text-white font-bold text-base disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-700 transition-colors"
         >
           Confirm Payment — {formatKobo(totals.total)}
         </button>

@@ -70,7 +70,7 @@ export default function ReceiptScreen({ sale, store, onNewTransaction }: Receipt
           <div className="text-center md:text-left space-y-1">
             <div className="text-4xl text-emerald-600">✓</div>
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">Sale Complete!</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
+            <p className="text-base text-gray-600 dark:text-gray-300">
               Order #{sale.orderNumber}
               <br />
               {formatKobo(sale.total)} — {sale.paymentMethod === "cash" ? "Cash" : "Card Terminal"}
@@ -78,7 +78,7 @@ export default function ReceiptScreen({ sale, store, onNewTransaction }: Receipt
           </div>
 
           <div role="group" aria-label="Paper size" className="space-y-1.5">
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Paper size</p>
+            <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Paper size</p>
             <div className="flex gap-2">
               {PAPER_ORDER.map((id) => (
                 <button
@@ -86,7 +86,7 @@ export default function ReceiptScreen({ sale, store, onNewTransaction }: Receipt
                   type="button"
                   aria-pressed={paper === id}
                   onClick={() => choosePaper(id)}
-                  className={`flex-1 py-2 rounded-[6px] text-xs font-semibold border transition-all ${
+                  className={`flex-1 py-2 rounded-[6px] text-sm font-semibold border transition-all ${
                     paper === id
                       ? "bg-[#EDCF5D] border-[#EDCF5D] text-[#010101]"
                       : "border-gray-200 dark:border-[#383838] text-gray-700 dark:text-gray-200"
@@ -96,7 +96,7 @@ export default function ReceiptScreen({ sale, store, onNewTransaction }: Receipt
                 </button>
               ))}
             </div>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               Choose the paper loaded in your printer. In the print dialog, pick the receipt printer and turn
               off &quot;Headers and footers&quot;.
             </p>
@@ -106,21 +106,21 @@ export default function ReceiptScreen({ sale, store, onNewTransaction }: Receipt
             <button
               type="button"
               onClick={() => window.print()}
-              className="w-full py-2.5 rounded-[8px] bg-[#EDCF5D] text-[#010101] font-bold text-sm"
+              className="w-full py-2.5 rounded-[8px] bg-[#EDCF5D] text-[#010101] font-bold text-base"
             >
               Print Receipt
             </button>
             <button
               type="button"
               onClick={handleWhatsAppShare}
-              className="w-full py-2.5 rounded-[8px] bg-emerald-600 text-white font-bold text-sm"
+              className="w-full py-2.5 rounded-[8px] bg-emerald-600 text-white font-bold text-base"
             >
               Share via WhatsApp
             </button>
             <button
               type="button"
               onClick={onNewTransaction}
-              className="w-full py-2.5 rounded-[8px] border border-gray-200 dark:border-[#383838] text-sm font-semibold text-gray-700 dark:text-gray-200"
+              className="w-full py-2.5 rounded-[8px] border border-gray-200 dark:border-[#383838] text-base font-semibold text-gray-700 dark:text-gray-200"
             >
               New Transaction
             </button>

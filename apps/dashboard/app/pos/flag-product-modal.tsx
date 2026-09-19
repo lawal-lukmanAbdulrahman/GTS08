@@ -50,21 +50,21 @@ export default function FlagProductModal({ productName, onSubmit, onClose }: Pro
         {status === "sent" ? (
           <div className="space-y-4 text-center">
             <p className="text-3xl text-emerald-600">✓</p>
-            <p id="flag-title" className="text-sm font-bold text-gray-900 dark:text-white">
+            <p id="flag-title" className="text-base font-bold text-gray-900 dark:text-white">
               Thanks — flag sent
             </p>
-            <p className="text-xs text-gray-600 dark:text-gray-300">An admin will review the problem with {productName}. You can follow it on your profile.</p>
-            <button type="button" onClick={onClose} className="w-full py-2.5 rounded-[8px] bg-[#EDCF5D] text-[#010101] font-bold text-sm">
+            <p className="text-sm text-gray-600 dark:text-gray-300">An admin will review the problem with {productName}. You can follow it on your profile.</p>
+            <button type="button" onClick={onClose} className="w-full py-2.5 rounded-[8px] bg-[#EDCF5D] text-[#010101] font-bold text-base">
               Done
             </button>
           </div>
         ) : (
           <form onSubmit={send} noValidate className="space-y-4">
             <div>
-              <h2 id="flag-title" className="text-base font-bold text-gray-900 dark:text-white">
+              <h2 id="flag-title" className="text-lg font-bold text-gray-900 dark:text-white">
                 Flag a problem
               </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{productName}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{productName}</p>
             </div>
 
             <div role="radiogroup" aria-label="What's wrong?" className="grid grid-cols-1 gap-1.5">
@@ -79,7 +79,7 @@ export default function FlagProductModal({ productName, onSubmit, onClose }: Pro
                     setReason(r);
                     setError(null);
                   }}
-                  className={`text-left px-3 py-2 rounded-[6px] text-xs font-semibold border ${
+                  className={`text-left px-3 py-2 rounded-[6px] text-sm font-semibold border ${
                     reason === r ? "bg-[#EDCF5D] border-[#EDCF5D] text-[#010101]" : "border-gray-200 dark:border-[#383838] text-gray-700 dark:text-gray-200"
                   }`}
                 >
@@ -89,7 +89,7 @@ export default function FlagProductModal({ productName, onSubmit, onClose }: Pro
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="flag-note" className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+              <label htmlFor="flag-note" className="text-sm font-semibold text-gray-700 dark:text-gray-200">
                 Note {reason === "other" ? "(required)" : "(optional)"}
               </label>
               <textarea
@@ -98,25 +98,25 @@ export default function FlagProductModal({ productName, onSubmit, onClose }: Pro
                 maxLength={FLAG_NOTE_MAX}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
+                className="w-full px-3 py-2 text-base rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
               />
-              <p className="text-[11px] text-gray-400 text-right">{note.length}/{FLAG_NOTE_MAX}</p>
+              <p className="text-xs text-gray-400 text-right">{note.length}/{FLAG_NOTE_MAX}</p>
             </div>
 
             {error && (
-              <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
                 {error}
               </p>
             )}
 
             <div className="flex gap-2">
-              <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-[8px] border border-gray-200 dark:border-[#383838] text-sm font-semibold text-gray-700 dark:text-gray-200">
+              <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-[8px] border border-gray-200 dark:border-[#383838] text-base font-semibold text-gray-700 dark:text-gray-200">
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={!reason || status === "sending"}
-                className="flex-1 py-2.5 rounded-[8px] bg-[#EDCF5D] text-[#010101] font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 py-2.5 rounded-[8px] bg-[#EDCF5D] text-[#010101] font-bold text-base disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {status === "sending" ? "Sending..." : "Send flag"}
               </button>

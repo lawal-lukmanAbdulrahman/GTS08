@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../../lib/api-base";
 import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import { AdminTopStrip } from "../sidebar-context";
@@ -243,7 +244,7 @@ export default function AdminInventoryPage() {
     setLoading(true);
     try {
       const token = localStorage.getItem("gts_token");
-      const res = await fetch("http://localhost:3000/api/v1/inventory", {
+      const res = await fetch(`${API_BASE}/inventory`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.ok) {
@@ -437,8 +438,8 @@ export default function AdminInventoryPage() {
     setMovementsLoading(true);
     try {
       const url = variantId
-        ? `http://localhost:3000/api/v1/inventory/movements?variant_id=${variantId}`
-        : `http://localhost:3000/api/v1/inventory/movements`;
+        ? `${API_BASE}/inventory/movements?variant_id=${variantId}`
+        : `${API_BASE}/inventory/movements`;
       const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
@@ -531,7 +532,7 @@ export default function AdminInventoryPage() {
 
     try {
       const token = localStorage.getItem("gts_token");
-      await idempotentFetch(`http://localhost:3000/api/v1/inventory/${targetVariantId}`, {
+      await idempotentFetch(`${API_BASE}/inventory/${targetVariantId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -590,7 +591,7 @@ export default function AdminInventoryPage() {
 
     try {
       const token = localStorage.getItem("gts_token");
-      await idempotentFetch(`http://localhost:3000/api/v1/inventory/${targetVariantId}`, {
+      await idempotentFetch(`${API_BASE}/inventory/${targetVariantId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -656,7 +657,7 @@ export default function AdminInventoryPage() {
         const item = inventory.find((i) => i.id === itemId);
         if (item) {
           const targetVariantId = item.variant_id || item.id;
-          fetch(`http://localhost:3000/api/v1/inventory/${targetVariantId}`, {
+          fetch(`${API_BASE}/inventory/${targetVariantId}`, {
             method: "PUT",
             headers: {
               "Content-Type": "application/json",

@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../lib/api-base";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signOutMessage } from "../lib/session";
@@ -86,7 +87,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:3000/api/v1/auth/login", {
+      const res = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: cleanEmail, password: cleanPassword }),

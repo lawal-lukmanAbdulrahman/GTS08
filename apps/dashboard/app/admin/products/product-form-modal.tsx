@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../../lib/api-base";
 import { useEffect, useState } from "react";
 
 export interface VariantRow {
@@ -197,7 +198,7 @@ export default function ProductFormModal({
     try {
       const token = localStorage.getItem("gts_token");
       const isEdit = Boolean(initialData?.id);
-      const url = "http://localhost:3000/api/v1/products";
+      const url = `${API_BASE}/products`;
       const method = isEdit ? "PUT" : "POST";
 
       const payload: any = {

@@ -30,9 +30,9 @@ export default function PaymentConfirmModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-sm rounded-[12px] bg-white dark:bg-[#1C1C1C] p-5 space-y-4">
-        <h2 className="text-base font-bold text-gray-900 dark:text-white">Confirm Walk-in Order</h2>
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Confirm Walk-in Order</h2>
 
-        <div className="space-y-1 text-sm">
+        <div className="space-y-1 text-base">
           <div className="flex justify-between">
             <span className="text-gray-500 dark:text-gray-400">Total</span>
             <span className="font-bold text-gray-900 dark:text-white">{formatKobo(total)}</span>
@@ -48,7 +48,7 @@ export default function PaymentConfirmModal({
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+          <label className="text-sm font-semibold text-gray-500 dark:text-gray-400">
             Customer email (optional)
           </label>
           <input
@@ -56,7 +56,7 @@ export default function PaymentConfirmModal({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Customer email for receipt"
-            className="w-full mt-1 px-3 py-2 text-sm rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
+            className="w-full mt-1 px-3 py-2 text-base rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
           />
         </div>
 
@@ -64,14 +64,14 @@ export default function PaymentConfirmModal({
           <button
             type="button"
             onClick={onCancel}
-            className="flex-1 py-2.5 rounded-[8px] border border-gray-200 dark:border-[#383838] text-sm font-semibold text-gray-700 dark:text-gray-200"
+            className="flex-1 py-2.5 rounded-[8px] border border-gray-200 dark:border-[#383838] text-base font-semibold text-gray-700 dark:text-gray-200"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={() => onConfirm(email)}
-            className="flex-1 py-2.5 rounded-[8px] bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700"
+            className="flex-1 py-2.5 rounded-[8px] bg-emerald-600 text-white text-base font-bold hover:bg-emerald-700"
           >
             Confirm Sale
           </button>

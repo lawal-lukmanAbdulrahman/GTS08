@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../lib/api-base";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -74,7 +75,7 @@ export default function AdminPage() {
 
     async function fetchOverview() {
       try {
-        const res = await fetch("http://localhost:3000/api/v1/analytics/overview", {
+        const res = await fetch(`${API_BASE}/analytics/overview`, {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,

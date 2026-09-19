@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../../lib/api-base";
 import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -172,7 +173,7 @@ export default function AdminProductsPage() {
   const fetchDrafts = async () => {
     try {
       const token = localStorage.getItem("gts_token");
-      const res = await fetch("http://localhost:3000/api/v1/products/drafts", {
+      const res = await fetch(`${API_BASE}/products/drafts`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.ok) {
@@ -185,7 +186,7 @@ export default function AdminProductsPage() {
   const handleDeleteDraft = async (draftId: string) => {
     try {
       const token = localStorage.getItem("gts_token");
-      await fetch(`http://localhost:3000/api/v1/products/drafts?id=${draftId}`, {
+      await fetch(`${API_BASE}/products/drafts?id=${draftId}`, {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -228,7 +229,7 @@ export default function AdminProductsPage() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:3000/api/v1/products?include_all_status=true&limit=100");
+      const res = await fetch(`${API_BASE}/products?include_all_status=true&limit=100`);
       if (res.ok) {
         const json = await res.json();
         setProducts(json.data || []);
@@ -282,7 +283,7 @@ export default function AdminProductsPage() {
 
     try {
       const token = localStorage.getItem("gts_token");
-      await fetch("http://localhost:3000/api/v1/products", {
+      await fetch(`${API_BASE}/products`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -311,7 +312,7 @@ export default function AdminProductsPage() {
       const token = localStorage.getItem("gts_token");
       await Promise.all(
         idsToArchive.map((id) =>
-          fetch("http://localhost:3000/api/v1/products", {
+          fetch(`${API_BASE}/products`, {
             method: "PUT",
             headers: {
               "Content-Type": "application/json",
@@ -336,7 +337,7 @@ export default function AdminProductsPage() {
       const token = localStorage.getItem("gts_token");
       await Promise.all(
         idsToDelete.map((id) =>
-          fetch(`http://localhost:3000/api/v1/products?id=${id}`, {
+          fetch(`${API_BASE}/products?id=${id}`, {
             method: "DELETE",
             headers: { Authorization: `Bearer ${token}` },
           })
@@ -372,7 +373,7 @@ export default function AdminProductsPage() {
     const id = deletingProductItem.id;
     try {
       const token = localStorage.getItem("gts_token");
-      await fetch(`http://localhost:3000/api/v1/products?id=${id}`, {
+      await fetch(`${API_BASE}/products?id=${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

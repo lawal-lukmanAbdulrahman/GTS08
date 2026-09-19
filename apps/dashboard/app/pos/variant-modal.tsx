@@ -72,12 +72,12 @@ export default function VariantModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-sm rounded-[12px] bg-white dark:bg-[#1C1C1C] p-5 space-y-4">
         <div>
-          <h2 className="text-base font-bold text-gray-900 dark:text-white">{product.name}</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{formatKobo(displayPrice)}</p>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">{product.name}</h2>
+          <p className="text-base text-gray-500 dark:text-gray-400">{formatKobo(displayPrice)}</p>
         </div>
 
         <div>
-          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Select Size</p>
+          <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Select Size</p>
           <div className="flex flex-wrap gap-2">
             {sizes.map((size) => {
               const outOfStock = isSizeOutOfStock(size);
@@ -92,7 +92,7 @@ export default function VariantModal({
                   aria-label={size}
                   disabled={outOfStock}
                   onClick={() => selectSize(size)}
-                  className={`px-3 py-1.5 rounded-[6px] text-xs font-semibold border transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
+                  className={`px-3 py-1.5 rounded-[6px] text-sm font-semibold border transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
                     selectedSize === size
                       ? "bg-[#EDCF5D] border-[#EDCF5D] text-[#010101]"
                       : "border-gray-300 dark:border-[#383838] text-gray-700 dark:text-gray-200"
@@ -108,7 +108,7 @@ export default function VariantModal({
 
         {colorsForSize.length > 1 && (
           <div>
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Select Color</p>
+            <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Select Color</p>
             <div className="flex flex-wrap gap-2">
               {colorsForSize.map((color) => (
                 <button
@@ -116,7 +116,7 @@ export default function VariantModal({
                   type="button"
                   aria-label={color}
                   onClick={() => setSelectedColor(color)}
-                  className={`px-3 py-1.5 rounded-[6px] text-xs font-semibold border ${
+                  className={`px-3 py-1.5 rounded-[6px] text-sm font-semibold border ${
                     selectedColor === color
                       ? "bg-[#EDCF5D] border-[#EDCF5D] text-[#010101]"
                       : "border-gray-300 dark:border-[#383838] text-gray-700 dark:text-gray-200"
@@ -130,7 +130,7 @@ export default function VariantModal({
         )}
 
         <div>
-          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Quantity</p>
+          <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Quantity</p>
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -161,14 +161,14 @@ export default function VariantModal({
             type="button"
             disabled={!selectedVariant}
             onClick={() => selectedVariant && onAddToCart(product, selectedVariant.id, quantity)}
-            className="w-full py-2.5 rounded-[8px] bg-[#EDCF5D] text-[#010101] font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full py-2.5 rounded-[8px] bg-[#EDCF5D] text-[#010101] font-bold text-base disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Add to Cart — {formatKobo(displayPrice * quantity)}
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="w-full py-2.5 rounded-[8px] border border-gray-200 dark:border-[#383838] text-sm font-semibold text-gray-700 dark:text-gray-200"
+            className="w-full py-2.5 rounded-[8px] border border-gray-200 dark:border-[#383838] text-base font-semibold text-gray-700 dark:text-gray-200"
           >
             Cancel
           </button>

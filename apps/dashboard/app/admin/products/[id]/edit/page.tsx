@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE } from "../../../../lib/api-base";
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -165,7 +166,7 @@ export default function EditProductPage() {
       initialLoadSettled.current = false;
       try {
         const token = localStorage.getItem("gts_token");
-        const res = await fetch(`http://localhost:3000/api/v1/products/${productId}`, {
+        const res = await fetch(`${API_BASE}/products/${productId}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (res.ok) {
@@ -364,7 +365,7 @@ export default function EditProductPage() {
   useEffect(() => {
     const fetchBrands = async () => {
       try {
-        const res = await fetch("http://localhost:3000/api/v1/brands");
+        const res = await fetch(`${API_BASE}/brands`);
         if (res.ok) {
           const json = await res.json();
           if (json.data && Array.isArray(json.data) && json.data.length > 0) {
@@ -447,7 +448,7 @@ export default function EditProductPage() {
           };
 
           const token = localStorage.getItem("gts_token");
-          await fetch("http://localhost:3000/api/v1/products/drafts", {
+          await fetch(`${API_BASE}/products/drafts`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -566,7 +567,7 @@ export default function EditProductPage() {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const res = await fetch("http://localhost:3000/api/v1/categories");
+        const res = await fetch(`${API_BASE}/categories`);
         if (res.ok) {
           const json = await res.json();
           if (json.data && Array.isArray(json.data) && json.data.length > 0) {
@@ -593,7 +594,7 @@ export default function EditProductPage() {
         .filter(Boolean);
 
       const token = localStorage.getItem("gts_token");
-      const res = await fetch("http://localhost:3000/api/v1/categories", {
+      const res = await fetch(`${API_BASE}/categories`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -656,7 +657,7 @@ export default function EditProductPage() {
     setSavingNewBrand(true);
     try {
       const token = localStorage.getItem("gts_token");
-      const res = await fetch("http://localhost:3000/api/v1/brands", {
+      const res = await fetch(`${API_BASE}/brands`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1117,7 +1118,7 @@ export default function EditProductPage() {
       if (targetStatus === "draft") {
         // ── SAVE WORKING REVISION TO DEDICATED DRAFTS STORE ───────────────────
         // Leaves live product Active and published on storefront
-        const res = await fetch("http://localhost:3000/api/v1/products/drafts", {
+        const res = await fetch(`${API_BASE}/products/drafts`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1141,7 +1142,7 @@ export default function EditProductPage() {
         setTimeout(() => setSuccessMsg(""), 5000);
       } else {
         // ── PUBLISH LIVE CHANGES TO PRODUCTS TABLE ────────────────────────────
-        const res = await fetch("http://localhost:3000/api/v1/products", {
+        const res = await fetch(`${API_BASE}/products`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
@@ -1157,7 +1158,7 @@ export default function EditProductPage() {
 
         // Clean up any working draft revision since it is now published live
         try {
-          await fetch(`http://localhost:3000/api/v1/products/drafts?product_id=${productId}`, {
+          await fetch(`${API_BASE}/products/drafts?product_id=${productId}`, {
             method: "DELETE",
             headers: token ? { Authorization: `Bearer ${token}` } : {},
           });
