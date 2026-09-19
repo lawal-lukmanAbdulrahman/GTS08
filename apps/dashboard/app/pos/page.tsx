@@ -66,6 +66,7 @@ export default function PosPage() {
     items: Array<{ id: string; quantity: number; unit_price: number; product_snapshot: { name: string } }>;
   } | null>(null);
   const [waPaymentMethod, setWaPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [cancelledOrderNumber, setCancelledOrderNumber] = useState<string | null>(null);
 
   const activeCart = mode === "walkin" ? cart : waCart;
   const setActiveCart = mode === "walkin" ? setCart : setWaCart;
@@ -230,6 +231,7 @@ export default function PosPage() {
 
   async function lookupWhatsAppOrder() {
     setLookupError(null);
+    setCancelledOrderNumber(null);
     setFoundOrder(null);
     const res = await fetch(`${API_BASE}/pos/whatsapp-orders/${lookupOrderNumber}`, {
       headers: authHeaders(),
@@ -240,6 +242,25 @@ export default function PosPage() {
       return;
     }
     setFoundOrder(body.data);
+  }
+
+  async function cancelWhatsAppOrder(reason: string) {
+    if (!foundOrder) return;
+    const res = await fetch(`${API_BASE}/pos/whatsapp-orders/${foundOrder.id}/cancel`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ reason }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      setSaleError(body.error || "Failed to cancel order.");
+      return;
+    }
+    setSaleError(null);
+    setCancelledOrderNumber(foundOrder.order_number);
+    setFoundOrder(null);
+    setLookupOrderNumber("");
+    setWaPaymentMethod(null);
   }
 
   async function confirmWhatsAppPayment() {
@@ -367,6 +388,8 @@ export default function PosPage() {
             paymentMethod={waPaymentMethod}
             onPaymentMethodChange={setWaPaymentMethod}
             onConfirmPayment={confirmWhatsAppPayment}
+            onCancelOrder={cancelWhatsAppOrder}
+            cancelledOrderNumber={cancelledOrderNumber}
           />
         )}
       </div>

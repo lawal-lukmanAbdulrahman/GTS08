@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { formatKobo } from "@gts/utils";
 import type { CartLine, PaymentMethod } from "./pos-types";
 
@@ -41,6 +42,8 @@ interface WhatsAppPanelProps {
   paymentMethod: PaymentMethod | null;
   onPaymentMethodChange: (method: PaymentMethod) => void;
   onConfirmPayment: () => void;
+  onCancelOrder: (reason: string) => void;
+  cancelledOrderNumber: string | null;
 }
 
 /**
@@ -70,7 +73,11 @@ export default function WhatsAppPanel({
   paymentMethod,
   onPaymentMethodChange,
   onConfirmPayment,
+  onCancelOrder,
+  cancelledOrderNumber,
 }: WhatsAppPanelProps) {
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
   const canCreate = cartLines.length > 0 && customerName.trim() !== "" && customerPhone.trim() !== "";
 
   return (
@@ -169,6 +176,12 @@ export default function WhatsAppPanel({
 
           {lookupError && <p className="text-xs text-red-600">{lookupError}</p>}
 
+          {cancelledOrderNumber && (
+            <p className="text-xs text-emerald-700 dark:text-emerald-300">
+              Order {cancelledOrderNumber} was cancelled and its reserved stock released.
+            </p>
+          )}
+
           {foundOrder && (
             <div className="space-y-3">
               <div className="space-y-1">
@@ -211,6 +224,50 @@ export default function WhatsAppPanel({
               >
                 Confirm Payment — {formatKobo(foundOrder.total)}
               </button>
+
+              {cancelling ? (
+                <div className="space-y-2 pt-1">
+                  <input
+                    type="text"
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    placeholder="Reason for cancelling"
+                    className="w-full px-3 py-2 text-xs rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCancelling(false);
+                        setCancelReason("");
+                      }}
+                      className="flex-1 py-2 text-xs font-semibold rounded-[6px] border border-gray-200 dark:border-[#383838]"
+                    >
+                      Keep Order
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!cancelReason.trim()}
+                      onClick={() => {
+                        onCancelOrder(cancelReason.trim());
+                        setCancelling(false);
+                        setCancelReason("");
+                      }}
+                      className="flex-1 py-2 text-xs font-bold rounded-[6px] bg-red-600 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Confirm Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setCancelling(true)}
+                  className="w-full py-1.5 text-xs font-semibold text-red-600 dark:text-red-400"
+                >
+                  Cancel Order
+                </button>
+              )}
             </div>
           )}
         </div>
