@@ -22,8 +22,8 @@ interface Options {
 export function useIdleLock({ warnAfterMs = 25 * 60_000, lockAfterMs = 30 * 60_000, enabled = true }: Options = {}) {
   const [state, setState] = useState<IdleState>("active");
   const stateRef = useRef<IdleState>("active");
-  const warnTimer = useRef<ReturnType<typeof setTimeout>>();
-  const lockTimer = useRef<ReturnType<typeof setTimeout>>();
+  const warnTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const lockTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const set = useCallback((next: IdleState) => {
     stateRef.current = next;
