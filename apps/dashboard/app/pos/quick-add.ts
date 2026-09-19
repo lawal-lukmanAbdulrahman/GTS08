@@ -7,7 +7,7 @@ import type { PosProduct } from "./pos-types";
  */
 export function resolveQuickAddVariant(product: PosProduct): string | null {
   if (product.variants.length !== 1) return null;
-  const [only] = product.variants;
+  const only = product.variants[0]!;
   if (only.available <= 0) return null;
   return only.id;
 }
