@@ -38,10 +38,10 @@ vi.mock("@gts/database", () => ({
 }));
 
 import { NextRequest } from "next/server";
-import { POST } from "../app/api/v1/pos/whatsapp-orders/[id]/confirm/route";
+import { POST } from "../app/api/v1/pos/whatsapp-orders/[ref]/confirm/route";
 
 function ctx(id: string) {
-  return { params: Promise.resolve({ id }) };
+  return { params: Promise.resolve({ ref: id }) };
 }
 function makeRequest(body: unknown) {
   return new NextRequest("http://localhost:3000/x", { method: "POST", body: JSON.stringify(body) });

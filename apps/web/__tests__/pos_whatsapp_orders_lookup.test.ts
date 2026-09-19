@@ -20,10 +20,10 @@ vi.mock("@gts/database", () => ({
 }));
 
 import { NextRequest } from "next/server";
-import { GET } from "../app/api/v1/pos/whatsapp-orders/[orderNumber]/route";
+import { GET } from "../app/api/v1/pos/whatsapp-orders/[ref]/route";
 
 function ctx(orderNumber: string) {
-  return { params: Promise.resolve({ orderNumber }) };
+  return { params: Promise.resolve({ ref: orderNumber }) };
 }
 
 describe("GET /api/v1/pos/whatsapp-orders/:orderNumber (cashier lookup, D001)", () => {

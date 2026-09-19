@@ -12,11 +12,11 @@ type PaymentMethod = (typeof PAYMENT_METHODS)[number];
  * (gts_03_cashier_spec.md Part 5.2) — except stock was already reserved at
  * creation, so this releases the reservation instead of a fresh decrement.
  */
-export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, context: { params: Promise<{ ref: string }> }) {
   const access = await requirePosAccess(request);
   if (!access.ok) return access.response;
 
-  const { id } = await context.params;
+  const { ref: id } = await context.params;
 
   let body: { payment_method?: string };
   try {

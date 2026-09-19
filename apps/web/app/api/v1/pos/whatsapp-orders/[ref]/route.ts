@@ -9,12 +9,12 @@ import { requirePosAccess } from "../../_lib/access";
  */
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ orderNumber: string }> }
+  context: { params: Promise<{ ref: string }> }
 ) {
   const access = await requirePosAccess(request);
   if (!access.ok) return access.response;
 
-  const { orderNumber } = await context.params;
+  const { ref } = await context.params;
   const serviceClient = createServiceClient();
 
   const { data, error } = await serviceClient
@@ -25,7 +25,7 @@ export async function GET(
       items:order_items(id, quantity, unit_price, line_total, product_snapshot)
       `
     )
-    .eq("order_number", orderNumber)
+    .eq("order_number", ref)
     .eq("channel", "whatsapp")
     .maybeSingle();
 
@@ -35,7 +35,7 @@ export async function GET(
 
   if (!data) {
     return NextResponse.json(
-      { error: `No WhatsApp order found for number: ${orderNumber}`, code: "ORDER_NOT_FOUND" },
+      { error: `No WhatsApp order found for number: ${ref}`, code: "ORDER_NOT_FOUND" },
       { status: 404 }
     );
   }

@@ -33,7 +33,9 @@ export async function requirePosAccess(request: NextRequest): Promise<PosAccessR
   const serviceClient = createServiceClient();
   const { data, error } = await serviceClient
     .from("users")
-    .select("role, employee_permissions(can_process_pos)")
+    // employee_permissions has two FKs to users (user_id, granted_by) so the
+    // embed must be disambiguated or PostgREST rejects the query (PGRST201).
+    .select("role, employee_permissions!employee_permissions_user_id_fkey(can_process_pos)")
     .eq("id", user.id)
     .maybeSingle();
 
