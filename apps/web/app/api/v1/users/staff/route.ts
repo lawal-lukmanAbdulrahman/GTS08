@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../../auth/utils";
+import { effectivePermissions } from "../../_lib/staff-access";
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,19 +34,13 @@ export async function GET(request: NextRequest) {
       (staffList || []).map(async (s: any) => {
         const { data: perms } = await serviceClient
           .from("employee_permissions")
-          .select("can_process_pos, can_manage_inventory, can_view_all_orders, can_manage_products, can_handle_tickets")
+          .select("*") // includes the void/discount grants once migration 00010 is applied
           .eq("user_id", s.id)
           .single();
 
         return {
           ...s,
-          permissions: perms || {
-            can_process_pos: false,
-            can_manage_inventory: false,
-            can_view_all_orders: false,
-            can_manage_products: false,
-            can_handle_tickets: false,
-          },
+          permissions: effectivePermissions((perms as Record<string, unknown>) || null, s.role === "admin"),
         };
       })
     );

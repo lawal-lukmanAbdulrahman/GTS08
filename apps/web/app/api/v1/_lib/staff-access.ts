@@ -29,6 +29,16 @@ export interface StaffContext {
 
 export type StaffResult = ({ ok: true } & StaffContext) | { ok: false; response: NextResponse };
 
+export const PERMISSION_KEYS = [
+  "can_process_pos",
+  "can_manage_inventory",
+  "can_view_all_orders",
+  "can_manage_products",
+  "can_handle_tickets",
+  "can_void_orders",
+  "can_apply_discounts",
+] as const;
+
 const NO_PERMISSIONS: StaffPermissions = {
   can_process_pos: false,
   can_manage_inventory: false,
@@ -48,7 +58,7 @@ function deny(status: number, error: string, code: string): { ok: false; respons
   return { ok: false, response: NextResponse.json({ error, code }, { status }) };
 }
 
-function effectivePermissions(row: Record<string, unknown> | null, isAdmin: boolean): StaffPermissions {
+export function effectivePermissions(row: Record<string, unknown> | null, isAdmin: boolean): StaffPermissions {
   const out = { ...NO_PERMISSIONS };
   for (const key of Object.keys(out) as PermissionKey[]) {
     // A column that doesn't exist yet (migration pending) reads as not granted.

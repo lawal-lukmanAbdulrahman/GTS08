@@ -3,6 +3,7 @@ export { validateStoreSettings, type StoreSettingsInput, type StoreSettingsValid
 export { parseWhatsAppContact } from "./whatsapp-contact";
 export { checkManualDiscount, MAX_CASHIER_DISCOUNT_PERCENT, type ManualDiscountCheck } from "./manual-discount";
 export { validatePhoneNumber, validatePasswordChange, type PhoneResult, type PasswordChangeResult } from "./staff-input";
+export { validateProductFlag, validateFlagUpdate, FLAG_REASONS, FLAG_REASON_LABELS, FLAG_STATUSES, FLAG_STATUS_LABELS, FLAG_NOTE_MAX, type FlagReason, type FlagStatus, type ProductFlagInput, type ProductFlagValidation, type FlagUpdateValidation } from "./product-flag";
 export { computeCartTotals, type PosCartLine, type PosCartTotals } from "./pos";
 export { startOfWATDay, rangeStart, type SalesRange } from "./wat-day";
 export { formatWAT, formatWATDate, toISOString } from "./date";
