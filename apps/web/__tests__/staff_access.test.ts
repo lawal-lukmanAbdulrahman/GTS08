@@ -35,6 +35,7 @@ function profile(overrides: Record<string, unknown> = {}, perms: Record<string, 
       id: "u1",
       email: "cashier@gts.ng",
       full_name: "Ada Cashier",
+      phone: "0803 123 4567",
       role: "cashier",
       is_blocked: false,
       employee_permissions: perms,
@@ -90,6 +91,7 @@ describe("requireStaff", () => {
     expect(r.role).toBe("cashier");
     expect(r.isAdmin).toBe(false);
     expect(r.fullName).toBe("Ada Cashier");
+    expect(r.phone).toBe("0803 123 4567");
     expect(r.permissions).toMatchObject({
       can_process_pos: true,
       can_void_orders: false,

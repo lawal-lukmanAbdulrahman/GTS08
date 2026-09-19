@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockRequirePosAccess = vi.fn();
 vi.mock("../app/api/v1/pos/_lib/access", () => ({
@@ -6,12 +6,13 @@ vi.mock("../app/api/v1/pos/_lib/access", () => ({
 }));
 
 let queryResult: { data: unknown; error: unknown } = { data: [], error: null };
+const gteSpy = vi.fn();
 function makeQueryStub() {
   const stub: any = {
     select: vi.fn(() => stub),
     eq: vi.fn(() => stub),
     in: vi.fn(() => stub),
-    gte: vi.fn(() => stub),
+    gte: vi.fn((...a: unknown[]) => { gteSpy(...a); return stub; }),
     order: vi.fn(() => stub),
     then: (resolve: (v: typeof queryResult) => void) => resolve(queryResult),
   };
@@ -66,4 +67,23 @@ describe("GET /api/v1/pos/orders/today (spec Part 6)", () => {
     expect(body.data).toHaveLength(1);
     expect(body.data[0].order_number).toBe("GTS-202609-000001");
   });
+
+  describe("'today' is a Lagos day, whatever timezone the server runs in", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it("starts at midnight WAT (23:00 UTC the evening before)", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-09-19T00:10:00Z")); // 01:10 in Lagos, still the 19th there
+      await GET(new NextRequest("http://localhost:3000/api/v1/pos/orders/today"));
+      expect(gteSpy).toHaveBeenCalledWith("created_at", "2026-09-18T23:00:00.000Z");
+    });
+
+    it("is not thrown off by a 23:30 Lagos sale (22:30 UTC) when it's already the next UTC day", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-09-19T22:30:00Z")); // 23:30 in Lagos on the 19th
+      await GET(new NextRequest("http://localhost:3000/api/v1/pos/orders/today"));
+      expect(gteSpy).toHaveBeenLastCalledWith("created_at", "2026-09-18T23:00:00.000Z");
+    });
+  });
 });
+

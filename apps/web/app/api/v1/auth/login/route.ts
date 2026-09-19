@@ -4,6 +4,7 @@ import { createServerClient, createServiceClient } from "@gts/database";
 import { sanitizeEmail } from "../utils";
 import { validateSqlSafe } from "@gts/utils";
 import { withIdempotency } from "@/lib/idempotency";
+import { clientIp, logActivity } from "../../_lib/activity";
 
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
@@ -85,6 +86,17 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
         .eq("user_id", userProfile.id)
         .single();
       permissions = permData;
+    }
+
+    // Staff sign-ins are audited (customers use this route too and aren't).
+    if (userProfile.role !== "customer") {
+      await logActivity(serviceClient, {
+        actorId: userProfile.id,
+        action: "auth.login",
+        targetType: "user",
+        targetId: userProfile.id,
+        ip: clientIp(request),
+      });
     }
 
     return NextResponse.json({

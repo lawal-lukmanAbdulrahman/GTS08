@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockRequirePosAccess = vi.fn();
 vi.mock("../app/api/v1/pos/_lib/access", () => ({
@@ -247,4 +247,31 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
       changes: expect.objectContaining({ reason: "customer changed mind" }),
     });
   });
+
+  describe("'same day' is a Lagos day", () => {
+    afterEach(() => vi.useRealTimers());
+    const orderAt = (created_at: string) => {
+      tableConfig.orders = () => ({
+        data: { id: "order-1", status: "completed", created_at, cashier_id: "cashier-1", items: [{ variant_id: "v1", quantity: 1 }] },
+        error: null,
+      });
+    };
+
+    it("allows voiding a sale from 00:30 Lagos time at 01:10 Lagos time, even though UTC is on a different date", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-09-19T00:10:00Z"));
+      orderAt("2026-09-18T23:30:00Z");
+      expect((await PUT(makeRequest({ reason: "x" }), ctx("order-1"))).status).toBe(200);
+    });
+
+    it("refuses a sale from 23:30 the previous Lagos day", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-09-19T00:10:00Z"));
+      orderAt("2026-09-18T22:30:00Z");
+      const res = await PUT(makeRequest({ reason: "x" }), ctx("order-1"));
+      expect(res.status).toBe(409);
+      expect((await res.json()).code).toBe("NOT_TODAYS_ORDER");
+    });
+  });
 });
+

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
+import { startOfWATDay } from "@gts/utils";
 import { requirePosPermission } from "../../../_lib/access";
 import { clientIp, logActivity } from "../../../../_lib/activity";
 import { adjustAll, type InventoryChange } from "../../../_lib/inventory";
@@ -8,13 +9,7 @@ import { transitionOrderStatus } from "../../../_lib/order-status";
 import { sanitizeSqlInput } from "../../../../auth/utils";
 
 function isToday(isoDate: string): boolean {
-  const date = new Date(isoDate);
-  const now = new Date();
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  );
+  return new Date(isoDate).getTime() >= startOfWATDay(new Date()).getTime();
 }
 
 /**

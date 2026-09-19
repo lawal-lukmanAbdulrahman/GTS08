@@ -22,6 +22,7 @@ export interface StaffContext {
   role: string;
   isAdmin: boolean;
   fullName: string;
+  phone: string | null;
   /** Effective permissions: an admin has every one implicitly. */
   permissions: StaffPermissions;
 }
@@ -68,7 +69,7 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
 
   const { data, error } = await createServiceClient()
     .from("users")
-    .select("id, email, full_name, role, is_blocked, employee_permissions!employee_permissions_user_id_fkey(*)")
+    .select("id, email, full_name, phone, role, is_blocked, employee_permissions!employee_permissions_user_id_fkey(*)")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -76,6 +77,7 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
 
   const row = data as unknown as {
     full_name?: string | null;
+    phone?: string | null;
     role: string;
     is_blocked?: boolean;
     employee_permissions?: Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -95,6 +97,7 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
     role: row.role,
     isAdmin,
     fullName: row.full_name ?? "",
+    phone: row.phone ?? null,
     permissions: effectivePermissions(permissionRow, isAdmin),
   };
 }

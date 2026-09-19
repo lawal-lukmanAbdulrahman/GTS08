@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
+import { startOfWATDay } from "@gts/utils";
 import { requirePosAccess } from "../../_lib/access";
 
 /**
@@ -11,8 +12,7 @@ export async function GET(request: NextRequest) {
   const access = await requirePosAccess(request);
   if (!access.ok) return access.response;
 
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
+  const startOfDay = startOfWATDay(new Date());
 
   const serviceClient = createServiceClient();
   const { data, error } = await serviceClient
