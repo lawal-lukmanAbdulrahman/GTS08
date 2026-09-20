@@ -18,6 +18,8 @@ export interface InventoryChange {
   deltaReserved?: number;
   /** Minimum available (quantity - reserved) that must exist before applying. */
   requireAvailable?: number;
+  /** Releasing more reservation than exists leaves it at zero instead of failing (online checkout doesn't reserve yet). */
+  clampReserved?: boolean;
 }
 
 export type AdjustResult =
@@ -58,14 +60,15 @@ export async function adjustInventory(
     }
 
     const nextQuantity = current.quantity + deltaQuantity;
-    const nextReserved = current.reserved_quantity + deltaReserved;
+    const rawReserved = current.reserved_quantity + deltaReserved;
+    const nextReserved = change.clampReserved ? Math.max(0, rawReserved) : rawReserved;
     if (nextQuantity < 0 || nextReserved < 0) {
       return { ok: false, reason: "INSUFFICIENT_STOCK", available };
     }
 
     const patch: Record<string, number | string> = { updated_at: new Date().toISOString() };
     if (deltaQuantity !== 0) patch.quantity = nextQuantity;
-    if (deltaReserved !== 0) patch.reserved_quantity = nextReserved;
+    if (nextReserved !== current.reserved_quantity) patch.reserved_quantity = nextReserved;
     if (deltaQuantity < 0) patch.last_sold_at = new Date().toISOString();
 
     const { data: updated, error: writeError } = await client

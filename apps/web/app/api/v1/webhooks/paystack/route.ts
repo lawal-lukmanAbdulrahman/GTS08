@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
             const { data: items } = await serviceClient.from("order_items").select("variant_id, quantity").eq("order_id", orderId);
             const changes: InventoryChange[] = ((items as Array<{ variant_id: string | null; quantity: number }>) || [])
               .filter((i) => i.variant_id)
-              .map((i) => ({ variantId: i.variant_id as string, deltaQuantity: -i.quantity, deltaReserved: -i.quantity }));
+              .map((i) => ({ variantId: i.variant_id as string, deltaQuantity: -i.quantity, deltaReserved: -i.quantity, clampReserved: true }));
 
             const stock = await adjustAll(serviceClient, changes);
             if (!stock.ok) {
@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     // A real failure must not look like success, or Paystack stops retrying and the payment is lost.
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Webhook processing failed.", code: "WEBHOOK_FAILED" },
+      { error: "Webhook processing failed.", code: "WEBHOOK_FAILED" },
       { status: 500 }
     );
   }
