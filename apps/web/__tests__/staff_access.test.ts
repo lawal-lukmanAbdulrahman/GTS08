@@ -26,6 +26,8 @@ import {
   requirePosAccess,
   requirePosPermission,
   requireSuperAdmin,
+  requirePermission,
+  optionalStaff,
 } from "../app/api/v1/_lib/staff-access";
 
 const req = () => new NextRequest("http://localhost:3000/api/v1/x");
@@ -248,5 +250,72 @@ describe("requireSuperAdmin", () => {
   it("still refuses a blocked super admin", async () => {
     profile({ role: "admin", is_super_admin: true, is_blocked: true }, null);
     await denied(requireSuperAdmin(req()), 403, "ACCOUNT_BLOCKED");
+  });
+});
+
+
+describe("requirePermission (any grant, any route)", () => {
+  beforeEach(() => {
+    mockGetUser.mockReset();
+    mockGetUser.mockResolvedValue({ id: "u1", email: "x@gts.ng" });
+  });
+
+  it("refuses an anonymous caller with 401", async () => {
+    mockGetUser.mockResolvedValue(null);
+    await denied(requirePermission(req(), "can_manage_inventory"), 401, "UNAUTHORIZED");
+  });
+
+  it("refuses a staff member without that grant, with a 403 that names the action", async () => {
+    profile({ role: "cashier" }, { can_process_pos: true });
+    const r: any = await requirePermission(req(), "can_manage_inventory");
+    expect(r.ok).toBe(false);
+    expect(r.response.status).toBe(403);
+    expect((await r.response.json()).code).toBe("PERMISSION_DENIED");
+  });
+
+  it("lets a staff member with the grant through", async () => {
+    profile({ role: "inventory_staff" }, { can_manage_inventory: true });
+    expect((await requirePermission(req(), "can_manage_inventory")).ok).toBe(true);
+  });
+
+  it("lets an admin through without any grant row", async () => {
+    profile({ role: "admin" }, null);
+    expect((await requirePermission(req(), "can_manage_products")).ok).toBe(true);
+  });
+
+  it("refuses a blocked account even with the grant", async () => {
+    profile({ role: "inventory_staff", is_blocked: true }, { can_manage_inventory: true });
+    await denied(requirePermission(req(), "can_manage_inventory"), 403, "ACCOUNT_BLOCKED");
+  });
+
+  it("refuses a customer", async () => {
+    profile({ role: "customer" }, null);
+    await denied(requirePermission(req(), "can_view_all_orders"), 403, "FORBIDDEN");
+  });
+});
+
+describe("optionalStaff (public routes that show more to staff)", () => {
+  beforeEach(() => {
+    mockGetUser.mockReset();
+  });
+
+  it("is null for an anonymous caller", async () => {
+    mockGetUser.mockResolvedValue(null);
+    expect(await optionalStaff(req())).toBeNull();
+  });
+
+  it("is null for a customer or a blocked account", async () => {
+    mockGetUser.mockResolvedValue({ id: "u1", email: "x@gts.ng" });
+    profile({ role: "customer" }, null);
+    expect(await optionalStaff(req())).toBeNull();
+    profile({ role: "admin", is_blocked: true }, null);
+    expect(await optionalStaff(req())).toBeNull();
+  });
+
+  it("is the staff context for a signed-in staff member", async () => {
+    mockGetUser.mockResolvedValue({ id: "u1", email: "x@gts.ng" });
+    profile({ role: "admin" }, null);
+    const s = await optionalStaff(req());
+    expect(s?.isAdmin).toBe(true);
   });
 });

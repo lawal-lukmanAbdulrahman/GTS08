@@ -54,6 +54,11 @@ const NO_PERMISSIONS: StaffPermissions = {
 const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
   can_void_orders: "void sales",
   can_apply_discounts: "apply manual discounts",
+  can_manage_inventory: "manage inventory",
+  can_view_all_orders: "view all orders",
+  can_manage_products: "manage products",
+  can_handle_tickets: "handle support tickets",
+  can_process_pos: "use the point of sale",
 };
 
 function deny(status: number, error: string, code: string): { ok: false; response: NextResponse } {
@@ -130,6 +135,29 @@ export async function requireSuperAdmin(request: NextRequest): Promise<StaffResu
   if (!staff.ok) return staff;
   if (!staff.isSuperAdmin) return deny(403, "Only the super admin can do this.", "SUPER_ADMIN_ONLY");
   return staff;
+}
+
+/**
+ * Signed in as staff and holding one specific grant (admins hold every grant).
+ * The general form of requirePosPermission, for inventory, orders, products and the rest.
+ */
+export async function requirePermission(request: NextRequest, key: PermissionKey): Promise<StaffResult> {
+  const staff = await requireStaff(request);
+  if (!staff.ok) return staff;
+  if (!staff.permissions[key]) {
+    const what = PERMISSION_LABELS[key] ?? "do this";
+    return deny(403, `You don't have permission to ${what}. Ask an admin to grant it.`, "PERMISSION_DENIED");
+  }
+  return staff;
+}
+
+/**
+ * For routes anyone may call that show more to staff (e.g. cost price). A caller
+ * who isn't valid staff is simply "not staff": no error, no extra data.
+ */
+export async function optionalStaff(request: NextRequest): Promise<StaffContext | null> {
+  const staff = await requireStaff(request);
+  return staff.ok ? staff : null;
 }
 
 /** Every /pos/* route: role + can_process_pos, re-verified server-side (cashier spec Part 1). */
