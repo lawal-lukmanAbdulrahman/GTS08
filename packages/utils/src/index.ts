@@ -28,3 +28,4 @@ export {
 } from "./rate-limiter";
 export { validateNewStaff, defaultGrants, STAFF_ROLES, STAFF_ROLE_LABELS, PERMISSION_GRANTS, type NewStaffInput, type NewStaffRole, type NewStaffValidation, type PermissionGrant } from "./new-staff";
 export { validateOrderItems, isUuid, MAX_LINE_QUANTITY, MAX_ORDER_LINES, type OrderItem, type OrderItemsValidation } from "./order-items";
+export { consume, memoryStore, upstashStore, createRateLimitStore, planBuckets, userIdFromAuthHeader, type Bucket, type Caller, type RateLimitStore, type ConsumeResult } from "./rate-limit";

@@ -140,9 +140,9 @@ describe("Pillar 3 & 6: Edge Middleware Security Headers & CORS Protection", () 
     clearRateLimitStore();
   });
 
-  it("injects complete OWASP security headers (CSP, HSTS, X-Frame-Options, nosniff)", () => {
+  it("injects complete OWASP security headers (CSP, HSTS, X-Frame-Options, nosniff)", async () => {
     const req = new NextRequest("http://localhost:3000/shop");
-    const res = middleware(req);
+    const res = await middleware(req);
 
     expect(res.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
     expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
@@ -152,12 +152,12 @@ describe("Pillar 3 & 6: Edge Middleware Security Headers & CORS Protection", () 
     expect(res.headers.get("Content-Security-Policy")).toContain("default-src 'self'");
   });
 
-  it("strictly whitelists CORS origins and rejects unknown cross-origins", () => {
+  it("strictly whitelists CORS origins and rejects unknown cross-origins", async () => {
     // 1. Whitelisted local dev dashboard
     const reqAllowed = new NextRequest("http://localhost:3000/api/v1/products", {
       headers: { origin: "http://localhost:3001" },
     });
-    const resAllowed = middleware(reqAllowed);
+    const resAllowed = await middleware(reqAllowed);
     expect(resAllowed.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:3001");
     expect(resAllowed.headers.get("Access-Control-Allow-Credentials")).toBe("true");
 
@@ -165,14 +165,14 @@ describe("Pillar 3 & 6: Edge Middleware Security Headers & CORS Protection", () 
     const reqBlocked = new NextRequest("http://localhost:3000/api/v1/products", {
       headers: { origin: "https://evil-hacker-site.com" },
     });
-    const resBlocked = middleware(reqBlocked);
+    const resBlocked = await middleware(reqBlocked);
     expect(resBlocked.headers.get("Access-Control-Allow-Origin")).toBeNull();
     expect(resBlocked.headers.get("Access-Control-Allow-Credentials")).toBeNull();
   });
 
-  it("WAF query filter blocks malicious URL requests with HTTP 400 Bad Request", () => {
+  it("WAF query filter blocks malicious URL requests with HTTP 400 Bad Request", async () => {
     const reqAttack = new NextRequest("http://localhost:3000/api/v1/products?cat=../../etc/passwd");
-    const res = middleware(reqAttack);
+    const res = await middleware(reqAttack);
 
     expect(res.status).toBe(400);
   });
@@ -180,20 +180,20 @@ describe("Pillar 3 & 6: Edge Middleware Security Headers & CORS Protection", () 
   it("middleware rate limits brute-force attempts to /api/v1/auth/ routes with HTTP 429", async () => {
     const ipHeaders = { "x-forwarded-for": "203.0.113.45" };
 
-    // Fire 5 allowed attempts
-    for (let i = 0; i < 5; i++) {
+    // Fire 20 allowed attempts (a whole shop can sign in from one address)
+    for (let i = 0; i < 20; i++) {
       const req = new NextRequest("http://localhost:3000/api/v1/auth/login", {
         headers: ipHeaders,
       });
-      const res = middleware(req);
+      const res = await middleware(req);
       expect(res.status).toBe(200);
     }
 
-    // 6th attempt breaches limit
+    // 21st attempt breaches the limit
     const breachReq = new NextRequest("http://localhost:3000/api/v1/auth/login", {
       headers: ipHeaders,
     });
-    const breachRes = middleware(breachReq);
+    const breachRes = await middleware(breachReq);
 
     expect(breachRes.status).toBe(429);
     const body = await breachRes.json();

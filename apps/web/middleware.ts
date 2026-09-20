@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { checkRateLimit, detectAttackPayload } from "@gts/utils";
+import { consume, createRateLimitStore, detectAttackPayload, planBuckets, userIdFromAuthHeader } from "@gts/utils";
+
+const rateLimitStore = createRateLimitStore({
+  UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+  UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 
 // Allowed origins for CORS (Storefront, Staff Dashboard, & Staging/Production GTS domains)
 const ALLOWED_ORIGIN_PATTERNS = [
@@ -46,7 +51,7 @@ function applySecurityHeaders(headers: Headers, isEditor = false) {
   headers.set("X-XSS-Protection", "1; mode=block");
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const origin = request.headers.get("origin");
   const isAllowed = isOriginAllowed(origin);
   const allowOriginValue = isAllowed && origin ? origin : "";
@@ -95,7 +100,9 @@ export function middleware(request: NextRequest) {
   }
 
   // ── 3. Edge Rate Limiting for /api/* ──
-  let rateLimitResult: ReturnType<typeof checkRateLimit> | null = null;
+  // Signed-in callers are counted per person (a shop's tills share one address);
+  // every caller also sits under a per-address ceiling. See @gts/utils rate-limit.
+  let rateLimitResult: Awaited<ReturnType<typeof consume>> | null = null;
   if (pathname.startsWith("/api/")) {
     const rawIp =
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -103,26 +110,11 @@ export function middleware(request: NextRequest) {
       request.headers.get("cf-connecting-ip") ||
       "127.0.0.1";
 
-    let limit = 100;
-    let windowMs = 60_000;
-    let tier = "general";
-
-    if (pathname.startsWith("/api/v1/auth/")) {
-      limit = 5; // Strict: 5 req/min for auth/login/pin/password brute-force protection
-      tier = "auth";
-    } else if (pathname === "/api/v1/checkout" || pathname.startsWith("/api/v1/pos/")) {
-      limit = 15; // 15 req/min for checkouts and sales
-      tier = "checkout";
-    } else if (
-      pathname.startsWith("/api/v1/inquiries") ||
-      pathname.startsWith("/api/v1/reviews") ||
-      pathname.startsWith("/api/v1/broadcast")
-    ) {
-      limit = 20; // 20 req/min for inquiries, reviews, broadcast mutations
-      tier = "content";
-    }
-
-    rateLimitResult = checkRateLimit(`rl:${tier}:${rawIp}`, { limit, windowMs });
+    const buckets = planBuckets(request.method, pathname, {
+      ip: rawIp,
+      userId: userIdFromAuthHeader(request.headers.get("authorization")),
+    });
+    rateLimitResult = await consume(rateLimitStore, buckets);
 
     if (!rateLimitResult.allowed) {
       const res = NextResponse.json(
