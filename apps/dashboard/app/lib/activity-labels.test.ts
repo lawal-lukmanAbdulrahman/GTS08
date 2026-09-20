@@ -94,4 +94,24 @@ describe("describeActivity: staff.create", () => {
     expect(d.detail).toMatch(/ada@x\.com/);
     expect(d.detail).toMatch(/cashier/i);
   });
+
+  describe("admin actions", () => {
+    it.each([
+      ["category.create", "Created a category"], ["category.update", "Edited a category"], ["category.delete", "Deleted a category"], ["category.reorder", "Reordered categories"],
+      ["order.update", "Edited an order's notes or courier"], ["promo.update", "Changed a promo code"], ["promo.delete", "Deleted a promo code"],
+      ["ticket.update", "Updated a support ticket"], ["size_guide.update", "Edited a size guide"], ["content_slot.update", "Edited homepage content"],
+      ["campaign.create", "Created an email campaign"], ["campaign.update", "Edited an email campaign"], ["campaign.delete", "Deleted an email campaign"], ["campaign.send", "Sent or scheduled an email campaign"],
+    ])("%s reads as a sentence", (action, title) => {
+      expect(describeActivity(entry(action)).title).toBe(title);
+    });
+    it("says how an order moved", () => {
+      expect(describeActivity(entry("order.status", { from: "paid", to: "confirmed" }))).toEqual({ title: "Moved an order", detail: "paid to confirmed" });
+    });
+    it("names a new promo code", () => {
+      expect(describeActivity(entry("promo.create", { code: "WELCOME10" })).title).toBe("Created promo code WELCOME10");
+    });
+    it("never shows a raw action name for an unknown one it can tidy", () => {
+      expect(describeActivity(entry("something.new")).title).toBe("something.new");
+    });
+  });
 });

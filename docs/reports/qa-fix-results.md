@@ -1,7 +1,7 @@
 # QA Fix Results (Phases 0–5)
 
 Companion to `qa-report.md` (what was found) and `qa-fix-plan.md` (what was planned).
-**Branch:** `store-front` · **Verified:** 1,160 web + 534 dashboard unit tests, both typechecks clean, lint ratchet clean, live API regression (see §5).
+**Branch:** `store-front` · **Verified:** 1,434 web + 568 dashboard unit tests, both typechecks clean, lint ratchet clean, live API regression (see §5).
 
 ## 1. Every issue in the QA report
 
@@ -20,7 +20,7 @@ Companion to `qa-report.md` (what was found) and `qa-fix-plan.md` (what was plan
 | M3 | No cron | ✅ Fixed | `cleanup-reservations`, `expire-orders` (unpaid WhatsApp 24 h / online 60 min), `CRON_SECRET`-protected, `vercel.json` schedules |
 | M4 | "28 dead image paths" | ✅ Corrected & fixed | **The original finding was wrong**: the `/products/*.png` files exist in both apps. The real fault was the POS image resolver rejecting local paths, so those products showed placeholders. It now accepts `/products/...` and https URLs (and still refuses `javascript:`/`data:`/`//` and `..`). Products whose image field is genuinely empty still show a placeholder. |
 | M5 | One-time password never forced to change | ✅ Fixed | `must_change_password` (migration 00012): server refuses everything but the change until done; app redirects; profile shows only the password form |
-| M6 | Stub routes | ➖ Not built | unbuilt backlog features, each `stub` in the policy manifest: analytics, categories/[id], size-guides, content-slots, cart, promos, wishlist, orders/[id], inventory/adjustments, tickets, email-campaigns, notifications, users. They return 501 and are not reachable from any screen; building them is feature work, not a fix. |
+| M6 | Stub routes | ✅ Built | All 13 groups are real, tested and policy-declared: orders/[id] (+ a real status machine), promos (+ validate, activate, real discounts at checkout), cart, wishlist, tickets, notifications, analytics (+6 endpoints), categories/[id] + reorder, inventory/adjustments, size-guides, content-slots, email-campaigns (+ cron), users (list). `users` POST was dropped: adding a person is `POST /users/staff` (super admin). No route returns 501 any more. |
 | Low | tsbuildinfo tracked · missing `@supabase/supabase-js` · flaky benchmark | ✅ Fixed | untracked; dependency added (web typecheck now fully clean); benchmark is an opt-in `test:perf` job |
 | UX §6.1 | 13 POS items | ✅ All 13 | Enter-to-scan, compact view, "N left", short-cash guard, hold/resume sales, discount % chips (+ cap hint), dismissible/auto-clearing errors, WhatsApp totals, **find-a-sale + reprint** (new `GET /pos/orders`), 44 px flag button, no-access screen, tablet layout, units in confirm modal (+ double-tap guard) |
 | UX §6.2 | Staff/admin | ✅ | login copy; Inventory-staff role hidden until its portal exists; staff list search, filters, paging; login labels linked (a11y) |
@@ -65,11 +65,33 @@ Companion to `qa-report.md` (what was found) and `qa-fix-plan.md` (what was plan
 
 | Check | Result |
 |---|---|
-| Web unit/route/component tests | 1,160 pass (6 perf benchmarks are the opt-in `test:perf` job) |
-| Dashboard tests | 534 pass |
+| Web unit/route/component tests | 1,434 pass (6 perf benchmarks are the opt-in `test:perf` job) |
+| Dashboard tests | 568 pass |
 | Typecheck, web and dashboard | clean (web was previously failing on a missing dependency) |
 | Lint ratchet | no new errors (132 legacy errors recorded in `.lint-baseline.json`) |
 | **Live API regression** — last run *before* the email, checkout and upload changes; re-run `node scripts/qa/api-e2e.cjs` (with `QA_ADMIN_EMAIL`/`QA_ADMIN_PASSWORD`) to confirm. Earlier result: (`scripts/qa/api-e2e.cjs`, 219 checks incl. auth, authorization, security fixes, POS rules, concurrency races, WhatsApp, flags, staff, public/security, rate limiting) | **219 / 219 pass**, 0 rate-limit retries (the first full run needed 17) |
 
 A first attempt at this run showed a burst of 500s: that was the Next dev server's own corrupted build cache after many edits, not an application fault. A clean restart (`rm -rf .next`) cleared it.
 
+
+## 6. Production tidy (this round)
+
+| Area | Result |
+|---|---|
+| Dependencies | `pnpm audit --prod`: **no known vulnerabilities** (was 2 critical, 10 high, 7 moderate). Next 15.5.25, xlsx 0.20.3 from SheetJS, postcss override. |
+| Lint | **0 errors** (was 126); the ratchet baseline is empty. |
+| Builds | `next build` passes for both apps. It had been failing: the storefront header, the dashboard login form and the storefront preview header read the URL without a Suspense boundary. |
+| Error leaks | 32 routes echoed raw database messages. All now use `dbError` (logs the real message, returns a generic one), and a static test fails if one comes back. |
+| Categories | `POST /categories` returned success even when the insert failed; it now validates and reports failures, and the product forms show them. |
+| Order status | The old route let any order be set to any status, including `paid`, and never returned stock on cancel. Now forward-only, never `paid`, CAS-claimed, restocks or releases on cancel, flags refunds. |
+| Inventory | A free-text reason made the movement insert fail, leaving stock changes with no audit row. Reasons are now mapped to the allowed set. |
+| Rate limits | Tickets 3/10 min, promo validate 20/min, cart add 30/min (per address). |
+| Live smoke | The new public endpoints were exercised against the real database (cart add/over-stock/validate/clear, quote, promo, ticket); the test rows were removed afterwards. |
+
+## 7. Known limits
+
+- **Storefront** still keeps the cart and wishlist in the browser; the APIs exist but the storefront doesn't call them yet.
+- **Email campaigns** have no admin screen yet, and there is no opt-in or suppression list: unsubscribing is by replying to the address in the footer. `opted_in_only` is refused until consent is recorded.
+- **Promo codes** count on payment, so a limited code can be slightly over-used by orders placed before the last payment lands.
+- **Realtime** is polling (10 to 15 seconds), not Supabase Realtime.
+- **Not run by me:** Playwright flows, pgTAP RLS tests, Lighthouse, the Paystack sandbox script, and the authenticated API regression (needs the admin password).

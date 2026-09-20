@@ -85,6 +85,38 @@ export function describeActivity(entry: ActivityLike): { title: string; detail?:
       return withDetail("Flagged a product", FLAG_REASON_LABELS[str(c.reason) as FlagReason]);
     case "product_flag.update":
       return withDetail("Reviewed a product flag", str(c.status) ? `Marked ${String(c.status).replace("_", " ")}` : undefined);
+    case "category.create":
+      return { title: "Created a category" };
+    case "category.update":
+      return { title: "Edited a category" };
+    case "category.delete":
+      return { title: "Deleted a category" };
+    case "category.reorder":
+      return { title: "Reordered categories" };
+    case "order.update":
+      return { title: "Edited an order's notes or courier" };
+    case "order.status":
+      return withDetail("Moved an order", str(c.from) && str(c.to) ? `${String(c.from).replace("_", " ")} to ${String(c.to).replace("_", " ")}` : undefined);
+    case "promo.create":
+      return { title: str(c.code) ? `Created promo code ${c.code}` : "Created a promo code" };
+    case "promo.update":
+      return { title: "Changed a promo code" };
+    case "promo.delete":
+      return { title: "Deleted a promo code" };
+    case "ticket.update":
+      return { title: "Updated a support ticket" };
+    case "size_guide.update":
+      return { title: "Edited a size guide" };
+    case "content_slot.update":
+      return { title: "Edited homepage content" };
+    case "campaign.create":
+      return { title: "Created an email campaign" };
+    case "campaign.update":
+      return { title: "Edited an email campaign" };
+    case "campaign.delete":
+      return { title: "Deleted an email campaign" };
+    case "campaign.send":
+      return { title: "Sent or scheduled an email campaign" };
     default:
       return { title: entry.action };
   }
