@@ -62,14 +62,13 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "products/drafts": { GET: "permission:can_manage_products", POST: "permission:can_manage_products", DELETE: "permission:can_manage_products" },
   "products/search": { GET: "public" },
   "reviews": { GET: "public", POST: "session" },
-  "size-guides": stub("GET", "POST"),
-  "size-guides/[id]": stub("GET", "PATCH", "DELETE"),
+  "size-guides/[categorySlug]": { GET: "public", PUT: "permission:can_manage_products" },
 
   // ── storefront content
   "broadcast": { GET: "public", DELETE: "admin", POST: "admin" }, // GET: the banner the storefront shows
   "broadcast/analytics": { POST: "public" }, // visitor impression events; rate limited
-  "content-slots": stub("GET", "POST"),
-  "content-slots/[id]": stub("GET", "PATCH", "DELETE"),
+  "content-slots": { GET: "public" }, // live slots for the homepage
+  "content-slots/[key]": { GET: "public", PUT: "admin" },
   "settings": { GET: "public", PATCH: "admin" },
   "storefront/sections": { GET: "public", PUT: "admin" },
 
@@ -131,7 +130,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "staff/me/password": { POST: "staff" },
   "staff/me/sales": { GET: "staff" },
   "upload": { POST: "permission:can_manage_products" },
-  "users": stub("GET", "POST"),
+  "users": { GET: "admin" },
   "users/[id]": { GET: "admin", PATCH: "admin" },
   "users/staff": { GET: "admin", POST: "super_admin" },
 
