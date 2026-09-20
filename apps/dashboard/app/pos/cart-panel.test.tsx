@@ -204,4 +204,76 @@ describe("CartPanel (spec Part 4)", () => {
       expect(onFlagLine).toHaveBeenCalledWith(LINE);
     });
   });
+
+  describe("discount quick-picks", () => {
+    const base = { lines: [LINE], paymentMethod: "cash" as const, onIncrement: noop, onDecrement: noop, onRemove: noop, onPaymentMethodChange: noop, onConfirm: noop, isAdmin: false, canDiscount: true, discountText: "" };
+
+    it("offers 5, 10 and 20 percent, filling the exact amount", () => {
+      const onDiscountTextChange = vi.fn();
+      render(<CartPanel {...base} onDiscountTextChange={onDiscountTextChange} />);
+      fireEvent.click(screen.getByRole("button", { name: "10%" }));
+      expect(onDiscountTextChange).toHaveBeenLastCalledWith("3000"); // 10% of ₦30,000
+      fireEvent.click(screen.getByRole("button", { name: "20%" }));
+      expect(onDiscountTextChange).toHaveBeenLastCalledWith("6000");
+    });
+
+    it("tells a cashier the ceiling", () => {
+      render(<CartPanel {...base} onDiscountTextChange={noop} />);
+      expect(screen.getByText(/up to 20%/i)).toBeInTheDocument();
+    });
+
+    it("doesn't show the ceiling to an admin", () => {
+      render(<CartPanel {...base} isAdmin onDiscountTextChange={noop} />);
+      expect(screen.queryByText(/up to 20%/i)).not.toBeInTheDocument();
+    });
+
+    it("has a Clear button once a discount is entered", () => {
+      const onDiscountTextChange = vi.fn();
+      render(<CartPanel {...base} discountText="500" onDiscountTextChange={onDiscountTextChange} />);
+      fireEvent.click(screen.getByRole("button", { name: /clear discount/i }));
+      expect(onDiscountTextChange).toHaveBeenCalledWith("");
+    });
+  });
+
+  describe("cash tendered", () => {
+    const base = { lines: [LINE], paymentMethod: "cash" as const, onIncrement: noop, onDecrement: noop, onRemove: noop, onPaymentMethodChange: noop, onCashReceivedChange: noop, onConfirm: noop }; // total ₦30,000
+
+    it("says how short the customer is, and blocks Confirm", () => {
+      render(<CartPanel {...base} cashReceived="25,000" />);
+      expect(screen.getByRole("status")).toHaveTextContent(/short by ₦5,000/i);
+      expect(screen.getByRole("button", { name: /confirm payment/i })).toBeDisabled();
+    });
+
+    it("is fine with the exact amount or more", () => {
+      const { rerender } = render(<CartPanel {...base} cashReceived="30,000" />);
+      expect(screen.getByRole("button", { name: /confirm payment/i })).toBeEnabled();
+      expect(screen.queryByText(/short by/i)).not.toBeInTheDocument();
+      rerender(<CartPanel {...base} cashReceived="50,000" />);
+      expect(screen.getByRole("button", { name: /confirm payment/i })).toBeEnabled();
+    });
+
+    it("doesn't insist on a tendered amount (it's optional)", () => {
+      render(<CartPanel {...base} cashReceived="" />);
+      expect(screen.getByRole("button", { name: /confirm payment/i })).toBeEnabled();
+    });
+
+    it("ignores the tendered box for card payments", () => {
+      render(<CartPanel {...base} paymentMethod="pos_terminal" cashReceived="10" />);
+      expect(screen.getByRole("button", { name: /confirm payment/i })).toBeEnabled();
+    });
+  });
+
+  describe("holding a sale", () => {
+    it("offers Hold while there are items, and holds it", () => {
+      const onHold = vi.fn();
+      render(<CartPanel lines={[LINE]} paymentMethod="cash" onIncrement={noop} onDecrement={noop} onRemove={noop} onPaymentMethodChange={noop} onConfirm={noop} onHold={onHold} />);
+      fireEvent.click(screen.getByRole("button", { name: /hold sale/i }));
+      expect(onHold).toHaveBeenCalled();
+    });
+
+    it("has nothing to hold on an empty cart", () => {
+      render(<CartPanel lines={[]} paymentMethod={null} onIncrement={noop} onDecrement={noop} onRemove={noop} onPaymentMethodChange={noop} onConfirm={noop} onHold={vi.fn()} />);
+      expect(screen.queryByRole("button", { name: /hold sale/i })).not.toBeInTheDocument();
+    });
+  });
 });

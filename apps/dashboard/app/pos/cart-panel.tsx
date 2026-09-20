@@ -1,7 +1,7 @@
 "use client";
 
 import { formatKobo, computeCartTotals, parseNairaInput } from "@gts/utils";
-import { resolveManualDiscount } from "./manual-discount-input";
+import { percentToNairaText, resolveManualDiscount } from "./manual-discount-input";
 import type { CartLine, PaymentMethod } from "./pos-types";
 
 interface CartPanelProps {
@@ -21,6 +21,8 @@ interface CartPanelProps {
   onCashReceivedChange?: (value: string) => void;
   onDiscountTextChange?: (value: string) => void;
   onFlagLine?: (line: CartLine) => void;
+  /** Park this cart to serve someone else. */
+  onHold?: () => void;
   onConfirm: () => void;
 }
 
@@ -38,6 +40,7 @@ export default function CartPanel({
   onCashReceivedChange,
   onDiscountTextChange,
   onFlagLine,
+  onHold,
   onConfirm,
 }: CartPanelProps) {
   const rawSubtotal = lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
@@ -50,10 +53,12 @@ export default function CartPanel({
         )
       : { subtotal: 0, discountAmount: 0, total: 0 };
 
-  // A discount that was typed but refused must not be silently dropped at the till.
-  const canConfirm = lines.length > 0 && paymentMethod !== null && discount.error === null;
   const received = paymentMethod === "cash" && cashReceived ? parseNairaInput(cashReceived) : null;
   const changeDue = received === null ? null : Math.max(0, received - totals.total);
+  // A cashier who has typed what the customer handed over shouldn't be able to complete an underpaid sale.
+  const shortBy = received !== null && received < totals.total ? totals.total - received : null;
+  // A discount that was typed but refused must not be silently dropped at the till.
+  const canConfirm = lines.length > 0 && paymentMethod !== null && discount.error === null && shortBy === null;
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#1C1C1C] border-l border-gray-200 dark:border-[#262626]">
@@ -134,6 +139,15 @@ export default function CartPanel({
       </div>
 
       <div className="border-t border-gray-200 dark:border-[#262626] p-4 space-y-3">
+        {onHold && lines.length > 0 && (
+          <button
+            type="button"
+            onClick={onHold}
+            className="w-full py-2 text-sm font-semibold rounded-[6px] border border-gray-200 dark:border-[#383838] text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-[#242424]"
+          >
+            Hold sale
+          </button>
+        )}
         {(canDiscount || isAdmin) && onDiscountTextChange && (
           <div>
             <label className="block text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1" htmlFor="manual-discount">
@@ -148,6 +162,24 @@ export default function CartPanel({
               placeholder="0"
               className="w-full px-3 py-1.5 text-sm rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
             />
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              {[5, 10, 20].map((pct) => (
+                <button
+                  key={pct}
+                  type="button"
+                  onClick={() => onDiscountTextChange(percentToNairaText(rawSubtotal, pct))}
+                  className="px-3 min-h-[36px] text-sm font-semibold rounded-full bg-gray-100 dark:bg-[#242424] text-gray-700 dark:text-gray-200"
+                >
+                  {pct}%
+                </button>
+              ))}
+              {discountText && (
+                <button type="button" onClick={() => onDiscountTextChange("")} className="px-2 text-sm text-gray-500 underline" aria-label="Clear discount">
+                  Clear
+                </button>
+              )}
+              {!isAdmin && <span className="text-xs text-gray-500 dark:text-gray-400">Up to 20% of the sale</span>}
+            </div>
             {discount.error && (
               <p role="alert" className="text-sm text-red-600 dark:text-red-400 mt-1">
                 {discount.error}
@@ -203,8 +235,12 @@ export default function CartPanel({
               placeholder="Cash received (₦)"
               className="w-full px-3 py-1.5 text-sm rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
             />
-            {changeDue !== null && (
-              <p className="text-sm text-gray-500 mt-1">Change due: {formatKobo(changeDue)}</p>
+            {shortBy !== null ? (
+              <p role="status" className="text-sm font-semibold text-red-600 dark:text-red-400 mt-1">
+                Short by {formatKobo(shortBy)}
+              </p>
+            ) : (
+              changeDue !== null && <p className="text-sm text-gray-500 mt-1">Change due: {formatKobo(changeDue)}</p>
             )}
           </div>
         )}

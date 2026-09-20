@@ -275,4 +275,62 @@ describe("SearchPanel (spec Part 3)", () => {
       expect(screen.getByTestId("no-image")).toBeInTheDocument();
     });
   });
+
+  describe("scanning a barcode (Enter)", () => {
+    const shell = (over = {}) =>
+      render(<SearchPanel query="GTS-TEE-1" onQueryChange={vi.fn()} category="all" onCategoryChange={vi.fn()} categories={[]} products={[]} loading={false} onQuickAdd={vi.fn()} onOpenVariantModal={vi.fn()} {...DEFAULTS} {...over} />);
+
+    it("reports the text when Enter is pressed in the search box", () => {
+      const onSubmitQuery = vi.fn();
+      shell({ onSubmitQuery });
+      fireEvent.keyDown(screen.getByPlaceholderText(/search by product name or sku/i), { key: "Enter" });
+      expect(onSubmitQuery).toHaveBeenCalledWith("GTS-TEE-1");
+    });
+
+    it("does nothing on Enter for an empty box", () => {
+      const onSubmitQuery = vi.fn();
+      shell({ query: "  ", onSubmitQuery });
+      fireEvent.keyDown(screen.getByPlaceholderText(/search by product name or sku/i), { key: "Enter" });
+      expect(onSubmitQuery).not.toHaveBeenCalled();
+    });
+
+    it("shows a scan message when there is one", () => {
+      shell({ scanMessage: "Added Plain Tee" });
+      expect(screen.getByRole("status")).toHaveTextContent("Added Plain Tee");
+    });
+  });
+
+  describe("stock and density", () => {
+    const only = (p: PosProduct) =>
+      render(<SearchPanel query="" onQueryChange={vi.fn()} category="all" onCategoryChange={vi.fn()} categories={[]} products={[p]} loading={false} onQuickAdd={vi.fn()} onOpenVariantModal={vi.fn()} {...DEFAULTS} />);
+
+    it("says how many are left on a low-stock product", () => {
+      only(MULTI_VARIANT_PRODUCT); // 2 + 2 available
+      expect(screen.getByText(/4 left/i)).toBeInTheDocument();
+    });
+
+    it("doesn't clutter healthy stock with a number", () => {
+      only(SINGLE_VARIANT_PRODUCT);
+      expect(screen.queryByText(/\d+ left/i)).not.toBeInTheDocument();
+    });
+
+    it("switches between comfortable and compact, and remembers the choice", () => {
+      localStorage.clear();
+      const { unmount } = render(<SearchPanel query="" onQueryChange={vi.fn()} category="all" onCategoryChange={vi.fn()} categories={[]} products={[SINGLE_VARIANT_PRODUCT]} loading={false} onQuickAdd={vi.fn()} onOpenVariantModal={vi.fn()} {...DEFAULTS} />);
+      expect(screen.getByRole("button", { name: /compact view/i })).toHaveAttribute("aria-pressed", "false");
+      fireEvent.click(screen.getByRole("button", { name: /compact view/i }));
+      expect(screen.getByRole("button", { name: /compact view/i })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByTestId("product-grid").className).toMatch(/grid-cols-3|grid-cols-4|grid-cols-5/);
+      unmount();
+      render(<SearchPanel query="" onQueryChange={vi.fn()} category="all" onCategoryChange={vi.fn()} categories={[]} products={[SINGLE_VARIANT_PRODUCT]} loading={false} onQuickAdd={vi.fn()} onOpenVariantModal={vi.fn()} {...DEFAULTS} />);
+      expect(screen.getByRole("button", { name: /compact view/i })).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("the flag button has a visible label and a touch-sized target", () => {
+      only(SINGLE_VARIANT_PRODUCT);
+      const flag = screen.getByRole("button", { name: /flag plain tee/i });
+      expect(flag).toHaveTextContent(/flag/i);
+      expect(flag.className).toMatch(/min-h-\[44px\]/);
+    });
+  });
 });

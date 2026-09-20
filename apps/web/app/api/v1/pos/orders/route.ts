@@ -3,11 +3,54 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../_lib/access";
 import { sanitizeEmail } from "../../auth/utils";
-import { checkManualDiscount, computeCartTotals, type PosCartLine, validateOrderItems } from "@gts/utils";
+import { checkManualDiscount, computeCartTotals, startOfWATDay, type PosCartLine, validateOrderItems } from "@gts/utils";
 import { checkStockSufficiency } from "../_lib/stock-sufficiency";
 import { variantAvailable } from "../_lib/stock-status";
 import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
 import { clientIp, logActivity } from "../../_lib/activity";
+import { serverError } from "../../_lib/http";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A YYYY-MM-DD from the query as the start of that day in Lagos, or null if it isn't a real date. */
+function lagosDay(text: string | null): Date | null {
+  if (!text || !DATE_ONLY.test(text)) return null;
+  const noon = new Date(`${text}T12:00:00+01:00`);
+  return Number.isNaN(noon.getTime()) ? null : startOfWATDay(noon);
+}
+
+/**
+ * Find past walk-in and WhatsApp sales by order number and/or date, so a receipt
+ * can be reprinted for a customer who comes back later. A cashier finds only the
+ * sales they took payment for; an admin can find any. Newest first, at most 30.
+ */
+export async function GET(request: NextRequest) {
+  const access = await requirePosAccess(request);
+  if (!access.ok) return access.response;
+
+  const params = new URL(request.url).searchParams;
+  const q = (params.get("q") || "").replace(/[^A-Za-z0-9-]/g, "").replace(/-{2,}/g, "-").slice(0, 30);
+  const from = lagosDay(params.get("from")) ?? new Date(startOfWATDay(new Date()).getTime() - 29 * DAY_MS);
+  const toDay = lagosDay(params.get("to"));
+  const limit = Math.min(Math.max(1, parseInt(params.get("limit") || "20", 10) || 20), 30);
+
+  const owned = !access.isAdmin;
+  let query = createServiceClient()
+    .from("orders")
+    .select(`id, order_number, channel, status, total, created_at${owned ? ", transactions!inner(confirmed_by)" : ""}`)
+    .in("channel", ["walk_in", "whatsapp"])
+    .gte("created_at", from.toISOString());
+  if (toDay) query = query.lt("created_at", new Date(toDay.getTime() + DAY_MS).toISOString());
+  if (owned) query = query.eq("transactions.confirmed_by", access.user.id);
+  if (q) query = query.ilike("order_number", `%${q}%`);
+
+  const { data, error } = await query.order("created_at", { ascending: false }).limit(limit);
+  if (error) return serverError(new Error(error.message));
+
+  const rows = ((data || []) as unknown as Array<Record<string, unknown>>).map(({ transactions: _t, ...order }) => order);
+  return NextResponse.json({ data: rows });
+}
 
 const PAYMENT_METHODS = ["cash", "pos_terminal"] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];

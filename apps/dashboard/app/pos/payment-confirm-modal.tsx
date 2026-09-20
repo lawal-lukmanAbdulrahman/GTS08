@@ -8,6 +8,10 @@ interface PaymentConfirmModalProps {
   total: number;
   paymentMethod: PaymentMethod;
   itemCount: number;
+  /** Total units across all lines (shown in place of the line count). */
+  unitCount?: number;
+  /** Kobo taken off the sale, if any. */
+  discountAmount?: number;
   onCancel: () => void;
   onConfirm: (customerEmail: string) => void;
 }
@@ -22,10 +26,13 @@ export default function PaymentConfirmModal({
   total,
   paymentMethod,
   itemCount,
+  unitCount,
+  discountAmount = 0,
   onCancel,
   onConfirm,
 }: PaymentConfirmModalProps) {
   const [email, setEmail] = useState("");
+  const [confirming, setConfirming] = useState(false); // one tap, one sale
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -37,13 +44,19 @@ export default function PaymentConfirmModal({
             <span className="text-gray-500 dark:text-gray-400">Total</span>
             <span className="font-bold text-gray-900 dark:text-white">{formatKobo(total)}</span>
           </div>
+          {discountAmount > 0 && (
+            <div className="flex justify-between">
+              <span className="text-gray-500 dark:text-gray-400">Discount</span>
+              <span className="text-emerald-600 dark:text-emerald-400">-{formatKobo(discountAmount)}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-gray-500 dark:text-gray-400">Payment</span>
             <span className="text-gray-900 dark:text-white">{PAYMENT_LABEL[paymentMethod]}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-500 dark:text-gray-400">Items</span>
-            <span className="text-gray-900 dark:text-white">{itemCount}</span>
+            <span className="text-gray-900 dark:text-white">{unitCount === undefined ? itemCount : `${unitCount} unit${unitCount === 1 ? "" : "s"}`}</span>
           </div>
         </div>
 
@@ -70,10 +83,15 @@ export default function PaymentConfirmModal({
           </button>
           <button
             type="button"
-            onClick={() => onConfirm(email)}
-            className="flex-1 py-2.5 rounded-[8px] bg-emerald-600 text-white text-base font-bold hover:bg-emerald-700"
+            disabled={confirming}
+            onClick={() => {
+              if (confirming) return;
+              setConfirming(true);
+              onConfirm(email);
+            }}
+            className="flex-1 py-2.5 rounded-[8px] bg-emerald-600 text-white text-base font-bold hover:bg-emerald-700 disabled:opacity-60"
           >
-            Confirm Sale
+            {confirming ? "Confirming..." : "Confirm Sale"}
           </button>
         </div>
       </div>

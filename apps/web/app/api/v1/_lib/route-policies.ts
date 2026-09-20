@@ -118,7 +118,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   // ── point of sale
   "pos/categories": { GET: "pos" },
   "pos/flags": { POST: "pos", GET: "pos" },
-  "pos/orders": { POST: "pos" },
+  "pos/orders": { POST: "pos", GET: "pos" },
   "pos/orders/[id]/receipt": { GET: "pos" },
   "pos/orders/[id]/void": { PUT: "pos-permission:can_void_orders" },
   "pos/orders/today": { GET: "pos" },

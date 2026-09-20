@@ -253,7 +253,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     <div className="h-screen w-screen overflow-hidden flex flex-col lg:flex-row bg-[#F8F7F4] dark:bg-[#1C1C1C] text-[#010101] dark:text-[#FFFFFF] font-sans antialiased selection:bg-[#EDCF5D] selection:text-[#010101]">
       
       {/* ────── MOBILE TOP BAR (Visible on < lg screens) ────── */}
-      <header className="lg:hidden flex items-center justify-between px-4 py-3 bg-white dark:bg-[#151515] border-b border-gray-200 dark:border-[#262626] shrink-0 z-30">
+      <header className={`${pathname.startsWith("/pos") ? "hidden" : ""} lg:hidden flex items-center justify-between px-4 py-3 bg-white dark:bg-[#151515] border-b border-gray-200 dark:border-[#262626] shrink-0 z-30`}>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setMobileOpen(true)}

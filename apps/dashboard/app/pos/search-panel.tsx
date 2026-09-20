@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatKobo } from "@gts/utils";
 import { resolveProductImageUrl } from "./product-image";
 import type { PosProduct } from "./pos-types";
@@ -26,7 +26,13 @@ interface SearchPanelProps {
   onQuickAdd: (product: PosProduct, variantId: string) => void;
   onOpenVariantModal: (product: PosProduct) => void;
   onFlagProduct: (product: PosProduct) => void;
+  /** Enter pressed in the search box (a barcode scanner types a SKU then Enter). */
+  onSubmitQuery?: (text: string) => void;
+  /** Outcome of the last scan, e.g. "Added Plain Tee". */
+  scanMessage?: string | null;
 }
+
+const DENSITY_KEY = "gts_pos_density";
 
 const STOCK_BADGE: Record<PosProduct["stock_status"], { label: string; className: string }> = {
   in_stock: { label: "In Stock", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" },
@@ -64,8 +70,29 @@ export default function SearchPanel({
   onQuickAdd,
   onOpenVariantModal,
   onFlagProduct,
+  onSubmitQuery,
+  scanMessage,
 }: SearchPanelProps) {
   const searching = query.trim() !== "";
+
+  // Compact view fits more products on screen for a busy till; the choice is remembered on this device.
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    try {
+      setCompact(localStorage.getItem(DENSITY_KEY) === "compact");
+    } catch {
+      // storage blocked: stay on the default
+    }
+  }, []);
+  function toggleDensity() {
+    const next = !compact;
+    setCompact(next);
+    try {
+      localStorage.setItem(DENSITY_KEY, next ? "compact" : "comfortable");
+    } catch {
+      // not remembered, still works
+    }
+  }
   function handleProductTap(product: PosProduct) {
     if (product.stock_status === "out_of_stock") return;
     const quickVariantId = resolveQuickAddVariant(product);
@@ -86,11 +113,18 @@ export default function SearchPanel({
           onChange={(e) => onQueryChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Escape") onQueryChange("");
+            if (e.key === "Enter" && query.trim() && onSubmitQuery) onSubmitQuery(query.trim());
           }}
           placeholder="Search by product name or SKU..."
           className="w-full px-4 py-3 text-base rounded-[8px] border border-gray-200 dark:border-[#383838] bg-white dark:bg-[#1C1C1C]"
         />
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        {scanMessage && (
+          <p role="status" className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+            {scanMessage}
+          </p>
+        )}
+        <div className="flex items-center gap-2">
+          <div className="flex flex-1 gap-2 overflow-x-auto pb-1">
           <button
             type="button"
             onClick={() => onCategoryChange("all")}
@@ -116,6 +150,16 @@ export default function SearchPanel({
               {cat.name}
             </button>
           ))}
+          </div>
+          <button
+            type="button"
+            onClick={toggleDensity}
+            aria-label="Compact view"
+            aria-pressed={compact}
+            className={`shrink-0 px-3 min-h-[44px] rounded-[8px] text-sm font-semibold border ${compact ? "bg-[#010101] text-white border-[#010101] dark:bg-[#EDCF5D] dark:text-[#010101]" : "border-gray-200 dark:border-[#383838] text-gray-700 dark:text-gray-200"}`}
+          >
+            Compact
+          </button>
         </div>
       </div>
 
@@ -131,7 +175,7 @@ export default function SearchPanel({
             <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">
               {searching ? `Results for "${query.trim()}"` : "Best sellers"}
             </p>
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            <div data-testid="product-grid" className={`grid gap-3 ${compact ? "grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "grid-cols-2 lg:grid-cols-3"}`}>
               {products.map((product) => {
                 const badge = STOCK_BADGE[product.stock_status];
                 const outOfStock = product.stock_status === "out_of_stock";
@@ -145,7 +189,7 @@ export default function SearchPanel({
                         outOfStock ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
                       }`}
                     >
-                      <div className="aspect-square rounded-[8px] bg-gray-100 dark:bg-[#242424] mb-2 overflow-hidden">
+                      <div className={`${compact ? "aspect-[4/3]" : "aspect-square"} rounded-[8px] bg-gray-100 dark:bg-[#242424] mb-2 overflow-hidden`}>
                         <Thumb image={product.primary_image} />
                       </div>
                       <p className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-2">{product.name}</p>
@@ -153,15 +197,20 @@ export default function SearchPanel({
                       <span className={`inline-block mt-1 px-1.5 py-0.5 rounded-full text-xs font-bold ${badge.className}`}>
                         {badge.label}
                       </span>
+                      {product.stock_status === "low_stock" && (
+                        <span className="ml-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                          {product.variants.reduce((n, v) => n + Math.max(0, v.available), 0)} left
+                        </span>
+                      )}
                     </button>
                     <button
                       type="button"
                       aria-label={`Flag ${product.name}`}
                       title="Report a problem with this product"
                       onClick={() => onFlagProduct(product)}
-                      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 dark:bg-[#1C1C1C]/90 border border-gray-200 dark:border-[#383838] text-xs text-gray-500 hover:text-red-600 hover:border-red-300"
+                      className="absolute bottom-1.5 right-1.5 min-h-[44px] min-w-[44px] px-2 rounded-[8px] bg-white/90 dark:bg-[#1C1C1C]/90 border border-gray-200 dark:border-[#383838] text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-red-600 hover:border-red-300"
                     >
-                      ⚑
+                      ⚑ Flag
                     </button>
                   </div>
                 );

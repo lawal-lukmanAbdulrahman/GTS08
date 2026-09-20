@@ -56,6 +56,12 @@ export function clearSession(): void {
   } catch {
     // storage blocked: nothing to clear
   }
+  try {
+    // Parked sales belong to the person who parked them, not to whoever uses this till next.
+    for (const key of Object.keys(localStorage)) if (key.startsWith("gts_held_sales:")) localStorage.removeItem(key);
+  } catch {
+    // storage blocked: nothing was kept
+  }
   for (const name of COOKIES) {
     document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
   }

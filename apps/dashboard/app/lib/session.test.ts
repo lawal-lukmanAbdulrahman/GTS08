@@ -157,6 +157,18 @@ describe("reauthenticate (unlocking an idle till)", () => {
   });
 });
 
+describe("clearSession also clears parked sales", () => {
+  it("removes every held-sales key", () => {
+    localStorage.setItem("gts_held_sales:a", "[]");
+    localStorage.setItem("gts_held_sales:b", "[]");
+    localStorage.setItem("unrelated", "keep");
+    clearSession();
+    expect(localStorage.getItem("gts_held_sales:a")).toBeNull();
+    expect(localStorage.getItem("gts_held_sales:b")).toBeNull();
+    expect(localStorage.getItem("unrelated")).toBe("keep");
+  });
+});
+
 describe("authFetch", () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response("{}"));
   beforeEach(() => {

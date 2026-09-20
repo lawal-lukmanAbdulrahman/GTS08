@@ -54,4 +54,25 @@ describe("PaymentConfirmModal (spec Part 5.1)", () => {
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
     expect(onCancel).toHaveBeenCalled();
   });
+
+  it("counts units, not lines, and shows the discount when there is one", () => {
+    render(<PaymentConfirmModal total={2500000} paymentMethod="cash" itemCount={2} unitCount={5} discountAmount={500000} onCancel={vi.fn()} onConfirm={vi.fn()} />);
+    expect(screen.getByText(/5 units/i)).toBeInTheDocument();
+    expect(screen.getByText("-₦5,000")).toBeInTheDocument();
+  });
+
+  it("shows no discount row when there isn't one", () => {
+    render(<PaymentConfirmModal total={2500000} paymentMethod="cash" itemCount={1} unitCount={1} onCancel={vi.fn()} onConfirm={vi.fn()} />);
+    expect(screen.queryByText(/discount/i)).not.toBeInTheDocument();
+  });
+
+  it("can only be confirmed once (a double tap must not ring up two sales)", () => {
+    const onConfirm = vi.fn();
+    render(<PaymentConfirmModal total={100} paymentMethod="cash" itemCount={1} unitCount={1} onCancel={vi.fn()} onConfirm={onConfirm} />);
+    const button = screen.getByRole("button", { name: /confirm sale/i });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: /confirming/i })).toBeDisabled();
+  });
 });

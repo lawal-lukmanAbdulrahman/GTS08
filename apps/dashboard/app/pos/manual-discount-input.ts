@@ -27,3 +27,17 @@ export function resolveManualDiscount(
   const limit = check.maxAmount === undefined ? "" : ` (most: ${formatKobo(check.maxAmount)})`;
   return { kobo: 0, error: `${check.message}${limit}` };
 }
+
+/**
+ * The Naira text for "N% of the subtotal", for the discount quick-pick chips.
+ * Whole kobo, rounded DOWN so it never exceeds the percentage; built with integer
+ * math so no float can creep in. Empty when there's nothing to discount.
+ */
+export function percentToNairaText(subtotalKobo: number, percent: number): string {
+  const kobo = Math.floor((subtotalKobo * percent) / 100);
+  if (kobo < 1) return "";
+  const naira = Math.floor(kobo / 100);
+  const rest = kobo % 100;
+  if (rest === 0) return String(naira);
+  return `${naira}.${String(rest).padStart(2, "0").replace(/0$/, "")}`;
+}

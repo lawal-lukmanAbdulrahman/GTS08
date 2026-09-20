@@ -183,3 +183,16 @@ describe("pending WhatsApp orders on the Confirm tab", () => {
     expect(screen.getByPlaceholderText(/order number/i)).toBeInTheDocument();
   });
 });
+
+describe("Record tab running total", () => {
+  it("shows the total of what has been added so the customer can be quoted", () => {
+    render(<WhatsAppPanel {...baseProps({ cartLines: [{ ...LINE, quantity: 2 }, { ...LINE, variantId: "v2", unitPrice: 500000, quantity: 1 }] })} />);
+    expect(screen.getByText(/order total/i)).toBeInTheDocument();
+    expect(screen.getByText("₦35,000")).toBeInTheDocument(); // 2 x 15,000 + 5,000
+  });
+
+  it("shows no total for an empty list", () => {
+    render(<WhatsAppPanel {...baseProps()} />);
+    expect(screen.queryByText(/order total/i)).not.toBeInTheDocument();
+  });
+});

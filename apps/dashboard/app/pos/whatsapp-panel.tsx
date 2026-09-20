@@ -162,6 +162,13 @@ export default function WhatsAppPanel({
             )}
           </div>
 
+          {cartLines.length > 0 && (
+            <div className="flex justify-between text-base font-bold text-gray-900 dark:text-white border-t border-gray-100 dark:border-[#262626] pt-2">
+              <span>Order total</span>
+              <span>{formatKobo(cartLines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0))}</span>
+            </div>
+          )}
+
           <button
             type="button"
             disabled={!canCreate}

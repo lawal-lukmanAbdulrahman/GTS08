@@ -9,6 +9,13 @@ import ReceiptScreen from "./receipt-screen";
 import TodaysOrdersPanel from "./todays-orders-panel";
 import WhatsAppPanel, { type PendingWhatsAppOrder } from "./whatsapp-panel";
 import FlagProductModal from "./flag-product-modal";
+import ErrorBanner from "./error-banner";
+import FindSalePanel, { type FoundSale, type SaleQuery } from "./find-sale-panel";
+import { useSidebar } from "../admin/sidebar-context";
+import NoPosAccess from "./no-pos-access";
+import HeldSalesBar from "./held-sales-bar";
+import { discardHeldSale, holdSale, loadHeldSales, type HeldSale } from "./held-sales";
+import { looksLikeSku, skuLookupToProduct } from "./sku-scan";
 import { usePosCatalogue } from "./use-pos-catalogue";
 import { resolveManualDiscount } from "./manual-discount-input";
 import { parseNairaInput, type FlagReason } from "@gts/utils";
@@ -96,6 +103,10 @@ export default function PosPage() {
   const [showPaymentConfirm, setShowPaymentConfirm] = useState(false);
   const [completedSale, setCompletedSale] = useState<CompletedSale | null>(null);
   const [saleError, setSaleError] = useState<string | null>(null);
+  const [showFindSale, setShowFindSale] = useState(false);
+  const { setMobileOpen } = useSidebar(); // opens the admin menu on tablets (a no-op outside the admin shell)
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
+  const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
 
   // Flagging a product for an admin to review
   const [flagTarget, setFlagTarget] = useState<FlagTarget | null>(null);
@@ -123,6 +134,17 @@ export default function PosPage() {
 
   const subtotal = cart.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
   const discount = resolveManualDiscount(discountText, { subtotal, isAdmin, canApply: canDiscount });
+
+  // An error is about the sale as it was; once the cart, discount or payment changes it's stale.
+  useEffect(() => {
+    setSaleError(null);
+  }, [cart, discountText, paymentMethod]);
+
+  // Sales parked on this till by this person
+  const staffId = profile?.id ?? null;
+  useEffect(() => {
+    if (staffId) setHeldSales(loadHeldSales(staffId));
+  }, [staffId]);
 
   const refreshPending = useCallback(async () => {
     setPendingLoading(true);
@@ -225,6 +247,58 @@ export default function PosPage() {
     refreshStore();
   }
 
+  function holdCurrentSale() {
+    if (!staffId) return;
+    const held = holdSale(staffId, { lines: cart, discountText });
+    if (!held) {
+      setSaleError("Couldn't hold this sale on this device. Finish it or clear it instead.");
+      return;
+    }
+    setHeldSales(loadHeldSales(staffId));
+    setCart([]);
+    setPaymentMethod(null);
+    setCashReceived("");
+    setDiscountText("");
+  }
+
+  function resumeHeldSale(id: string) {
+    if (!staffId) return;
+    const target = heldSales.find((h) => h.id === id);
+    if (!target) return;
+    // Swap: whatever is on the till now is parked, so nothing is lost.
+    if (cart.length > 0) holdSale(staffId, { lines: cart, discountText });
+    discardHeldSale(staffId, id);
+    setHeldSales(loadHeldSales(staffId));
+    setMode("walkin");
+    setCart(target.lines);
+    setDiscountText(target.discountText);
+    setPaymentMethod(null);
+    setCashReceived("");
+  }
+
+  function discardHeld(id: string) {
+    if (!staffId) return;
+    discardHeldSale(staffId, id);
+    setHeldSales(loadHeldSales(staffId));
+  }
+
+  // A barcode scanner types the SKU then presses Enter: add that exact variant.
+  async function submitSearchText(text: string) {
+    setScanMessage(null);
+    if (!looksLikeSku(text)) return; // an ordinary word: the search results already show
+    const result = await apiCall<Parameters<typeof skuLookupToProduct>[0]>(`/pos/products/${encodeURIComponent(text)}`);
+    if (!result.ok) return; // not a SKU: leave the search as it is
+    const product = skuLookupToProduct(result.data);
+    if (product.variants[0]!.available <= 0) {
+      setScanMessage(`${product.name} is out of stock`);
+    } else {
+      addToCart(product, product.variants[0]!.id, 1);
+      setScanMessage(`Added ${product.name}`);
+      setQuery("");
+    }
+    setTimeout(() => setScanMessage(null), 3000);
+  }
+
   function newTransaction() {
     // Closing a reprint must not wipe the sale being built behind it.
     if (completedSale?.duplicate) {
@@ -256,6 +330,15 @@ export default function PosPage() {
     if (!result.ok) setReprintError(result.message);
     else setReprintError(null);
     setTodaysOrders(await fetchTodaysOrders());
+  }
+
+  async function searchSales(query: SaleQuery): Promise<{ ok: true; data: FoundSale[] } | { ok: false; message: string }> {
+    const params = new URLSearchParams();
+    if (query.q) params.set("q", query.q);
+    if (query.from) params.set("from", query.from);
+    if (query.to) params.set("to", query.to);
+    const result = await apiCall<FoundSale[]>(`/pos/orders${params.size ? `?${params}` : ""}`);
+    return result.ok ? { ok: true, data: result.data } : { ok: false, message: result.message };
   }
 
   async function reprintReceipt(orderId: string) {
@@ -290,6 +373,7 @@ export default function PosPage() {
       duplicate: true,
     });
     setShowTodaysOrders(false);
+    setShowFindSale(false);
   }
 
   const createWhatsAppOrder = useCallback(async () => {
@@ -407,10 +491,22 @@ export default function PosPage() {
 
   const banner = saleError ?? catalogue.error ?? session.error;
 
+  // Signed in but not allowed to take sales: say so, instead of an empty till full of errors.
+  if (profile && !session.canUsePos) {
+    return <NoPosAccess name={cashierName} isAdmin={isAdmin} onSignOut={session.signOut} />;
+  }
+
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#F8F7F4] dark:bg-[#1C1C1C] font-sans">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#262626] bg-white dark:bg-[#1C1C1C]">
-        <h1 className="text-base font-bold text-gray-900 dark:text-white">GTS POS</h1>
+        <div className="flex items-center gap-3">
+          {isAdmin && (
+            <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open menu" className="lg:hidden min-w-[44px] min-h-[44px] -ml-2 text-xl text-gray-600 dark:text-gray-300">
+              ☰
+            </button>
+          )}
+          <h1 className="text-base font-bold text-gray-900 dark:text-white">GTS POS</h1>
+        </div>
         <div className="flex items-center gap-4">
           <div className="flex gap-1 bg-gray-100 dark:bg-[#242424] rounded-full p-0.5">
             <button
@@ -435,6 +531,16 @@ export default function PosPage() {
           >
             Today&apos;s Orders
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setReprintError(null);
+              setShowFindSale(true);
+            }}
+            className="px-3 py-1.5 text-xs font-semibold rounded-[6px] bg-gray-100 dark:bg-[#242424]"
+          >
+            Find a sale
+          </button>
           {profile && (
             <StaffMenu
               name={cashierName}
@@ -448,11 +554,8 @@ export default function PosPage() {
         </div>
       </div>
 
-      {banner && (
-        <div role="alert" className="px-4 py-2 bg-red-50 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300">
-          {banner}
-        </div>
-      )}
+      <ErrorBanner message={banner} onDismiss={() => setSaleError(null)} />
+      <HeldSalesBar sales={heldSales} onResume={resumeHeldSale} onDiscard={discardHeld} />
 
       <div className="flex-1 min-h-0 grid grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[60%_40%] lg:grid-rows-[minmax(0,1fr)] overflow-hidden">
         <SearchPanel
@@ -469,6 +572,8 @@ export default function PosPage() {
           onQuickAdd={(product, variantId) => addToCart(product, variantId, 1)}
           onOpenVariantModal={setVariantModalProduct}
           onFlagProduct={(product) => setFlagTarget({ productId: product.id, variantId: null, name: product.name })}
+          onSubmitQuery={submitSearchText}
+          scanMessage={scanMessage}
         />
 
         {mode === "walkin" ? (
@@ -486,6 +591,7 @@ export default function PosPage() {
             onCashReceivedChange={setCashReceived}
             onDiscountTextChange={setDiscountText}
             onFlagLine={(line) => setFlagTarget({ productId: line.productId, variantId: line.variantId, name: line.productName })}
+            onHold={holdCurrentSale}
             onConfirm={() => setShowPaymentConfirm(true)}
           />
         ) : (
@@ -536,6 +642,8 @@ export default function PosPage() {
           total={subtotal - discount.kobo}
           paymentMethod={paymentMethod}
           itemCount={cart.length}
+          unitCount={cart.reduce((n, l) => n + l.quantity, 0)}
+          discountAmount={discount.kobo}
           onCancel={() => setShowPaymentConfirm(false)}
           onConfirm={confirmWalkInSale}
         />
@@ -550,6 +658,10 @@ export default function PosPage() {
           onReprint={reprintReceipt}
           onClose={() => setShowTodaysOrders(false)}
         />
+      )}
+
+      {showFindSale && (
+        <FindSalePanel onSearch={searchSales} onReprint={reprintReceipt} reprintError={reprintError} onClose={() => setShowFindSale(false)} />
       )}
 
       {flagTarget && (
