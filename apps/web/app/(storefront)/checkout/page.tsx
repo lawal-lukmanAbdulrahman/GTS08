@@ -8,7 +8,7 @@ import { useAuth } from "../_components/auth-context";
 import { useAuthModal } from "../_components/auth-modal-context";
 import { Footer } from "../_components/landing/footer";
 import { idempotentFetch } from "@gts/utils";
-import { toCheckoutLines } from "../_lib/checkout-client";
+import { toCheckoutLines, checkPromo } from "../_lib/checkout-client";
 import { useCheckoutQuote } from "../_lib/use-checkout-quote";
 
 import { NIGERIAN_STATES, NIGERIAN_LOCATIONS } from "../_data/nigerian-locations";
@@ -737,7 +737,7 @@ export default function CheckoutPage() {
 
   // ── Promo code ──
   const [promoCode, setPromoCode] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPercent: number } | null>(null);
+  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number } | null>(null);  // discount in kobo, from the server
   const [promoError, setPromoError] = useState("");
 
   // ── Submission & Order Success State ──
@@ -768,14 +768,39 @@ export default function CheckoutPage() {
     }
   }, [customer, user, savedAddresses]);
 
-  const handleApplyPromo = (e: React.FormEvent) => {
+  const handleApplyPromo = async (e: React.FormEvent) => {
     e.preventDefault();
     setPromoError("");
-    if (!promoCode.trim()) return;
-    // The server prices the order and applies no client-side discount, so a code that only
-    // changed this page's total would promise a saving the customer is never given.
-    setPromoError("Promo codes can't be applied at checkout yet.");
+    if (!quote) {
+      setPromoError("Please wait while we check your cart.");
+      return;
+    }
+    const result = await checkPromo(promoCode, quote.subtotal);
+    if (result.ok) {
+      setAppliedPromo({ code: result.code, discount: result.discount });
+      setPromoCode("");
+    } else {
+      setPromoError(result.message);
+    }
   };
+
+  // The discount follows the cart: if the subtotal changes, ask the server again, and drop the code if it no longer fits.
+  useEffect(() => {
+    if (!appliedPromo || !quote) return;
+    let cancelled = false;
+    checkPromo(appliedPromo.code, quote.subtotal).then((r) => {
+      if (cancelled) return;
+      if (!r.ok) {
+        setAppliedPromo(null);
+        setPromoError(r.message);
+      } else if (r.discount !== appliedPromo.discount) {
+        setAppliedPromo({ code: r.code, discount: r.discount });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [quote?.subtotal]);
 
   // ── Order math ──
   const selectedStation =
@@ -786,7 +811,7 @@ export default function CheckoutPage() {
   // the order can't be placed until the server has confirmed every item is available.
   const estimatedSubtotal = cartItems.reduce((sum, i) => sum + i.product.priceNum * i.quantity, 0);
   const rawSubtotal = quote ? quote.subtotal / 100 : estimatedSubtotal;
-  const discountAmount = appliedPromo ? Math.round((rawSubtotal * appliedPromo.discountPercent) / 100) : 0;
+  const discountAmount = appliedPromo ? appliedPromo.discount / 100 : 0;
   const localDeliveryFee = selectedDelivery === "express" ? 4500 : selectedDelivery === "pickup" ? selectedStation.fee : 1500;
   const deliveryFeeNum = quote ? quote.delivery_fees[selectedDelivery as "door" | "pickup" | "express"] / 100 : localDeliveryFee;
   const grandTotal = Math.max(0, rawSubtotal - discountAmount + deliveryFeeNum);
@@ -910,6 +935,7 @@ export default function CheckoutPage() {
       items: toCheckoutLines(cartItems),
       deliveryOption: selectedDelivery,
       paymentMethod: selectedPayment,
+      promoCode: appliedPromo?.code,
     };
 
     setSubmitError(null);
@@ -1483,7 +1509,7 @@ export default function CheckoutPage() {
                 <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 mb-4">
                   <span className="text-xs font-bold text-emerald-700 flex items-center gap-2">
                     <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                      {appliedPromo.discountPercent}% OFF
+                      -₦{(appliedPromo.discount / 100).toLocaleString()}
                     </span>
                     Code <strong>{appliedPromo.code}</strong> applied
                   </span>
@@ -1523,7 +1549,7 @@ export default function CheckoutPage() {
                 </div>
                 {appliedPromo && (
                   <div className="flex justify-between text-emerald-700 font-medium">
-                    <span>Promo Discount ({appliedPromo.discountPercent}%)</span>
+                    <span>Promo Discount ({appliedPromo.code})</span>
                     <span className="font-bold">-₦{discountAmount.toLocaleString()}</span>
                   </div>
                 )}

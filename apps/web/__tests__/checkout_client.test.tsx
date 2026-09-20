@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { toCheckoutLines } from "../app/(storefront)/_lib/checkout-client";
+import { toCheckoutLines, checkPromo } from "../app/(storefront)/_lib/checkout-client";
 import { useCheckoutQuote } from "../app/(storefront)/_lib/use-checkout-quote";
 import { usePaymentStatus } from "../app/(storefront)/_lib/use-payment-status";
 
@@ -16,6 +16,35 @@ describe("toCheckoutLines", () => {
       { product_slug: "toaster", size: undefined, color: undefined, quantity: 1 },
     ]);
     expect(JSON.stringify(toCheckoutLines(cart))).not.toMatch(/price/i);
+  });
+});
+
+describe("checkPromo", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("asks the server, with the server's subtotal, and returns the discount in kobo", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: { code: "WELCOME10", discount: 310000, total_after_discount: 2790000 } }), { status: 200 }));
+    expect(await checkPromo("welcome10", 3100000)).toEqual({ ok: true, code: "WELCOME10", discount: 310000 });
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toEqual({ code: "welcome10", cart_total: 3100000 });
+  });
+  it("gives the server's message when a code doesn't work, and says how much more to spend for a minimum", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: "That promo code isn't valid.", code: "INVALID_PROMO" }), { status: 400 }));
+    expect(await checkPromo("nope", 100)).toEqual({ ok: false, message: "That promo code isn't valid." });
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: "A little under the minimum.", code: "MIN_ORDER", details: { short_by: 200000 } }), { status: 400 }));
+    expect(await checkPromo("big", 100)).toEqual({ ok: false, message: "Add ₦2,000 more to use this code." });
+  });
+  it("reports an unreachable server", async () => {
+    fetchMock.mockRejectedValue(new TypeError("offline"));
+    expect(await checkPromo("x1y", 100)).toMatchObject({ ok: false });
+  });
+  it("doesn't call the server for a blank code", async () => {
+    expect(await checkPromo("  ", 100)).toMatchObject({ ok: false });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

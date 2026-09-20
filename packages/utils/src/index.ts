@@ -31,3 +31,4 @@ export { validateOrderItems, isUuid, MAX_LINE_QUANTITY, MAX_ORDER_LINES, type Or
 export { consume, memoryStore, upstashStore, createRateLimitStore, planBuckets, userIdFromAuthHeader, type Bucket, type Caller, type RateLimitStore, type ConsumeResult } from "./rate-limit";
 export { receiptBrand, RECEIPT_THANKS, RECEIPT_WEBSITE, type ReceiptBrand } from "./receipt-brand";
 export { canTransition, nextStatuses, stockEffectOfCancel } from "./order-machine";
+export { normalizePromoCode, computePromoDiscount, validatePromoInput, type PromoRow, type PromoResult, type PromoInput, type PromoInputResult } from "./promo";

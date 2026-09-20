@@ -151,6 +151,40 @@ describe("POST /api/v1/checkout is decided by the server, not the browser", () =
     expect(mockAdjustAll).not.toHaveBeenCalled();
   });
 
+  describe("promo codes", () => {
+    const PROMO = { id: "pr1", code: "WELCOME10", discount_type: "percentage", discount_value: 10, min_order_amount: 0, max_uses: null, used_count: 0, starts_at: "2020-01-01T00:00:00Z", expires_at: null, is_active: true };
+    it("applies a real code from the database's own rules, off the server's subtotal", async () => {
+      db.results.promos = { data: PROMO, error: null };
+      const res = await post({ ...BASE, promoCode: "welcome10", discountPercent: 90 });
+      expect(res.status).toBe(200);
+      // subtotal 31,000 naira; 10% off = 3,100; delivery 1,500
+      expect(inserted("orders")[0]).toMatchObject({ subtotal: 3100000, discount_amount: 310000, total: 2940000, promo_code: "WELCOME10" });
+      expect(inserted("transactions")[0]).toMatchObject({ amount: 2940000 });
+      expect(mockInit).toHaveBeenCalledWith(expect.objectContaining({ amountKobo: 2940000 }));
+    });
+    it("refuses an unknown or unusable code before holding any stock, without saying which", async () => {
+      db.results.promos = { data: null, error: null };
+      const unknown = await post({ ...BASE, promoCode: "NOPE1" });
+      db.results.promos = { data: { ...PROMO, is_active: false }, error: null };
+      const off = await post({ ...BASE, promoCode: "WELCOME10" });
+      expect(unknown.status).toBe(400);
+      expect((await unknown.json()).code).toBe("INVALID_PROMO");
+      expect((await off.json()).code).toBe("INVALID_PROMO");
+      expect(mockAdjustAll).not.toHaveBeenCalled();
+      expect(inserted("orders")).toHaveLength(0);
+    });
+    it("refuses a code when the cart is under its minimum", async () => {
+      db.results.promos = { data: { ...PROMO, min_order_amount: 99999999 }, error: null };
+      const res = await post({ ...BASE, promoCode: "WELCOME10" });
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe("MIN_ORDER");
+    });
+    it("charges full price with no code, whatever percentage the browser claims", async () => {
+      await post({ ...BASE, discountPercent: 50 });
+      expect(inserted("orders")[0]).toMatchObject({ discount_amount: 0, promo_code: null });
+    });
+  });
+
   it("only takes prepaid methods, since the webhook is what marks an order paid", async () => {
     for (const method of ["cash", "pay_on_delivery", "", undefined]) {
       const res = await post({ ...BASE, paymentMethod: method });

@@ -48,3 +48,25 @@ export interface PaidOrder {
   created_at?: string;
   items: Array<{ name: string; size: string | null; color: string | null; quantity: number; unit_price: number; line_total: number }>;
 }
+
+export type PromoCheck = { ok: true; code: string; discount: number } | { ok: false; message: string };
+
+/** Asks the server what a code takes off the server's own subtotal (kobo). Advice for the display; checkout re-checks it. */
+export async function checkPromo(code: string, subtotalKobo: number): Promise<PromoCheck> {
+  if (!code.trim()) return { ok: false, message: "Enter a promo code." };
+  try {
+    const res = await fetch("/api/v1/promos/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, cart_total: subtotalKobo }),
+    });
+    const body = await res.json().catch(() => null);
+    if (res.ok && body?.data) return { ok: true, code: body.data.code, discount: body.data.discount };
+    if (body?.code === "MIN_ORDER" && typeof body?.details?.short_by === "number") {
+      return { ok: false, message: `Add ₦${(body.details.short_by / 100).toLocaleString()} more to use this code.` };
+    }
+    return { ok: false, message: body?.error || "That promo code isn't valid." };
+  } catch {
+    return { ok: false, message: "We couldn't check that code. Please try again." };
+  }
+}

@@ -8,6 +8,7 @@ import { serverError } from "../_lib/http";
 import { adjustAll, rollback, type InventoryChange } from "../pos/_lib/inventory";
 import { DELIVERY_FEE_KOBO, resolveCartLines } from "../_lib/checkout-cart";
 import { initializePayment } from "../_lib/paystack";
+import { computePromoDiscount, normalizePromoCode, type PromoRow } from "@gts/utils";
 
 /** Every one of these is paid through Paystack, whose webhook is the only thing that marks an order paid. */
 const PREPAID_METHODS = ["paystack", "card-transfer", "palmpay", "opay"];
@@ -230,8 +231,24 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
         },
       };
     });
-    // No discount is applied here until promo codes are checked against real, server-side rules.
-    const discountAmountKobo = 0;
+    // A discount comes only from a promo code the server has checked against its own rules and subtotal.
+    let discountAmountKobo = 0;
+    let appliedCode: string | null = null;
+    if (body.promoCode !== undefined && body.promoCode !== null && body.promoCode !== "") {
+      const code = normalizePromoCode(body.promoCode);
+      const { data: promo, error: promoError } = code
+        ? await serviceClient.from("promos").select("code, discount_type, discount_value, min_order_amount, max_uses, used_count, starts_at, expires_at, is_active").eq("code", code).maybeSingle()
+        : { data: null, error: null };
+      if (promoError) return serverError(new Error(promoError.message));
+      const result = promo ? computePromoDiscount(promo as unknown as PromoRow, subtotalKobo) : ({ ok: false, reason: "INVALID_PROMO" } as const);
+      if (!result.ok) {
+        return result.reason === "MIN_ORDER"
+          ? NextResponse.json({ error: "Your order is a little under the minimum for this code.", code: "MIN_ORDER", details: { short_by: result.shortBy } }, { status: 400 })
+          : NextResponse.json({ error: "That promo code isn't valid.", code: "INVALID_PROMO" }, { status: 400 });
+      }
+      discountAmountKobo = result.discount;
+      appliedCode = code;
+    }
     const grandTotalKobo = subtotalKobo - discountAmountKobo + deliveryFeeKobo;
 
     // 4. Hold the stock. This refuses the whole order if any line isn't available.
@@ -259,7 +276,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
         status: "pending_payment",
         customer_id: customerId,
         address_id: addressId,
-        promo_code: null,
+        promo_code: appliedCode,
         subtotal: subtotalKobo,
         delivery_fee: deliveryFeeKobo,
         discount_amount: discountAmountKobo,

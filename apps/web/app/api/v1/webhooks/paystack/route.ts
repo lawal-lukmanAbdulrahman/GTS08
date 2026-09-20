@@ -6,6 +6,7 @@ import { adjustAll, type InventoryChange } from "../../pos/_lib/inventory";
 import { transitionOrderStatus } from "../../pos/_lib/order-status";
 import { afterResponse } from "../../_lib/email/after";
 import { notifyOrderPaid } from "../../_lib/email/events";
+import { consumePromo } from "../../_lib/promo-use";
 
 /** True only when the signature is the HMAC-SHA512 of the raw body under our secret. Constant-time. */
 function signatureMatches(rawBody: string, signature: string | null, secret: string): boolean {
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
       if (orderId) {
         const { data: order } = await serviceClient
           .from("orders")
-          .select("id, status, total")
+          .select("id, status, total, promo_code")
           .eq("id", orderId)
           .maybeSingle();
 
@@ -150,6 +151,7 @@ export async function POST(request: NextRequest) {
               );
             }
 
+            await consumePromo(serviceClient, { code: (order as { promo_code?: string | null }).promo_code ?? null, orderId });
             afterResponse(() => notifyOrderPaid(serviceClient, orderId));
           }
         }

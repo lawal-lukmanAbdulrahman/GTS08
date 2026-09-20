@@ -22,7 +22,10 @@ export type ActivityAction =
   | "category.delete"
   | "category.reorder"
   | "order.update"
-  | "order.status";
+  | "order.status"
+  | "promo.create"
+  | "promo.update"
+  | "promo.delete";
 
 export interface ActivityEntry {
   actorId: string;
