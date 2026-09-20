@@ -11,7 +11,10 @@ import { reauthenticate, getSessionUser, signOut } from "../lib/session";
 import { useStaffSession } from "../lib/use-staff-session";
 import type { ActivityEntryView, SalesRangeId, SalesRecordView } from "../lib/staff-types";
 import MyFlags, { type MyFlag } from "./my-flags";
+import Link from "next/link";
 import MustChangeNotice from "./must-change-notice";
+import ProfileOverview from "./profile-overview";
+import ProfileSidebar, { PROFILE_SECTIONS, type ProfileSection } from "./profile-sidebar";
 import PasswordForm, { type PasswordChangeInput, type PasswordChangeOutcome } from "./password-form";
 import PermissionList from "./permission-list";
 import PhoneForm, { type PhoneSaveResult } from "./phone-form";
@@ -20,10 +23,10 @@ const ACTIVITY_PAGE = 30;
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section className="space-y-3">
+    <section className="rounded-[16px] border border-gray-200 dark:border-[#262626] bg-white dark:bg-[#1C1C1C] p-6 space-y-5">
       <div>
-        <h2 className="text-base font-bold text-gray-900 dark:text-white">{title}</h2>
-        {hint && <p className="text-xs text-gray-500 dark:text-gray-400">{hint}</p>}
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h2>
+        {hint && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{hint}</p>}
       </div>
       {children}
     </section>
@@ -37,6 +40,17 @@ export default function ProfilePage() {
   const mustChange = !!profile?.must_change_password;
 
   const idle = useIdleLock({ enabled: !!profile });
+
+  // Which part of the profile is showing; kept in the address (#sales) so it can be linked to and survives a refresh.
+  const [section, setSection] = useState<ProfileSection>("overview");
+  useEffect(() => {
+    const fromHash = window.location.hash.replace("#", "") as ProfileSection;
+    if (PROFILE_SECTIONS.some((x) => x.id === fromHash)) setSection(fromHash);
+  }, []);
+  function goTo(next: ProfileSection) {
+    setSection(next);
+    window.history.replaceState(null, "", `#${next}`);
+  }
 
   // Sales
   const [range, setRange] = useState<SalesRangeId>("today");
@@ -125,76 +139,114 @@ export default function ProfilePage() {
     );
   }
 
+  const openFlags = flags.filter((f) => f.status === "open" || f.status === "in_review").length;
+  const showFlags = !!profile.permissions.can_process_pos;
+
+  function content() {
+    switch (section) {
+      case "overview":
+        return <ProfileOverview name={profile!.full_name ?? ""} sales={sales} salesError={salesError} openFlags={openFlags} recentActivity={activity} onOpen={goTo} />;
+      case "access":
+        return (
+          <div className="space-y-6">
+            <Section title="Your details">
+              <dl className="grid grid-cols-[7rem_1fr] gap-y-2 text-base">
+                <dt className="text-gray-500">Name</dt>
+                <dd className="font-semibold text-gray-900 dark:text-white">{profile!.full_name || "—"}</dd>
+                <dt className="text-gray-500">Email</dt>
+                <dd className="font-semibold text-gray-900 dark:text-white">{profile!.email}</dd>
+                <dt className="text-gray-500">Role</dt>
+                <dd className="font-semibold text-gray-900 dark:text-white capitalize">{profile!.role.replace("_", " ")}</dd>
+              </dl>
+              <PhoneForm initialPhone={profile!.phone} onSave={savePhone} />
+            </Section>
+            <Section title="What you can do" hint="Set by an admin. If something's missing, ask them.">
+              <PermissionList permissions={profile!.permissions} isAdmin={profile!.is_admin} />
+            </Section>
+          </div>
+        );
+      case "sales":
+        return (
+          <Section title="My sales" hint="Sales you took payment for, in Lagos time.">
+            <SalesPanel range={range} onRangeChange={setRange} record={sales} loading={salesLoading} error={salesError} />
+          </Section>
+        );
+      case "activity":
+        return (
+          <Section title="My activity" hint="Everything you've done in the system. Only you and admins can see this.">
+            <ActivityList
+              entries={activity}
+              loading={activityLoading}
+              error={activityError}
+              hasMore={activityMore}
+              onLoadMore={() => activity.length && void loadActivity(activity[activity.length - 1]!.created_at)}
+            />
+          </Section>
+        );
+      case "flags":
+        return (
+          <Section title="My product flags" hint="Problems you've reported on products, and what the admin said.">
+            <MyFlags flags={flags} loading={flagsLoading} error={flagsError} />
+          </Section>
+        );
+      case "security":
+        return (
+          <Section title="Change password" hint="Choose something only you know. You'll stay signed in on this device.">
+            <PasswordForm onSubmit={changePassword} />
+          </Section>
+        );
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#F8F7F4] dark:bg-[#1C1C1C] font-sans">
-      <header className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#262626] bg-white dark:bg-[#1C1C1C]">
-        <div className="flex items-center gap-4">
-          <h1 className="text-sm font-bold text-gray-900 dark:text-white">My profile</h1>
-          {session.canUsePos && (
-            <a href="/pos" className="text-xs font-semibold text-gray-500 hover:text-gray-900 dark:hover:text-white">
-              ← Back to POS
-            </a>
-          )}
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-4 px-6 lg:px-10 py-4 border-b border-gray-200 dark:border-[#262626] bg-white/95 dark:bg-[#1C1C1C]/95 backdrop-blur">
+        <div className="flex items-center gap-4 min-w-0">
+          <span className="text-lg font-black tracking-tight text-gray-900 dark:text-white">GTS</span>
+          <span className="hidden sm:block h-5 w-px bg-gray-200 dark:bg-[#383838]" aria-hidden="true" />
+          <h1 className="text-base font-bold text-gray-900 dark:text-white truncate">My profile</h1>
         </div>
-        <StaffMenu
-          name={profile.full_name ?? ""}
-          role={profile.role}
-          isAdmin={session.isAdmin}
-          canUsePos={session.canUsePos}
-          current="profile"
-          onSignOut={session.signOut}
-        />
+        <div className="flex items-center gap-4">
+          {session.canUsePos && (
+            <Link href="/pos" className="px-4 py-2 text-sm font-semibold rounded-[8px] bg-[#EDCF5D] text-[#010101]">
+              ← Back to POS
+            </Link>
+          )}
+          <StaffMenu
+            name={profile.full_name ?? ""}
+            role={profile.role}
+            isAdmin={session.isAdmin}
+            canUsePos={session.canUsePos}
+            current="profile"
+            onSignOut={session.signOut}
+          />
+        </div>
       </header>
 
       {mustChange ? (
-        <main className="mx-auto max-w-xl p-4 lg:p-6 space-y-6">
+        <main className="mx-auto max-w-xl px-6 py-8 space-y-6">
           <MustChangeNotice name={profile.full_name ?? ""} />
           <Section title="Choose a new password">
             <PasswordForm onSubmit={changePassword} />
           </Section>
         </main>
       ) : (
-      <main className="mx-auto max-w-4xl p-4 lg:p-6 space-y-10">
-        <Section title="Your details">
-          <dl className="grid grid-cols-[7rem_1fr] gap-y-1.5 text-sm">
-            <dt className="text-gray-500">Name</dt>
-            <dd className="font-semibold text-gray-900 dark:text-white">{profile.full_name || "—"}</dd>
-            <dt className="text-gray-500">Email</dt>
-            <dd className="font-semibold text-gray-900 dark:text-white">{profile.email}</dd>
-            <dt className="text-gray-500">Role</dt>
-            <dd className="font-semibold text-gray-900 dark:text-white capitalize">{profile.role.replace("_", " ")}</dd>
-          </dl>
-          <PhoneForm initialPhone={profile.phone} onSave={savePhone} />
-        </Section>
-
-        <Section title="What you can do" hint="Set by an admin. If something's missing, ask them.">
-          <PermissionList permissions={profile.permissions} isAdmin={profile.is_admin} />
-        </Section>
-
-        <Section title="My sales" hint="Sales you took payment for, in Lagos time.">
-          <SalesPanel range={range} onRangeChange={setRange} record={sales} loading={salesLoading} error={salesError} />
-        </Section>
-
-        {profile.permissions.can_process_pos && (
-          <Section title="My product flags" hint="Problems you've reported on products, and what the admin said.">
-            <MyFlags flags={flags} loading={flagsLoading} error={flagsError} />
-          </Section>
-        )}
-
-        <Section title="My activity" hint="Everything you've done in the system. Only you and admins can see this.">
-          <ActivityList
-            entries={activity}
-            loading={activityLoading}
-            error={activityError}
-            hasMore={activityMore}
-            onLoadMore={() => activity.length && void loadActivity(activity[activity.length - 1]!.created_at)}
+        <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-8 flex flex-col lg:flex-row gap-8">
+          <ProfileSidebar
+            name={profile.full_name ?? ""}
+            email={profile.email}
+            phone={profile.phone}
+            role={profile.role}
+            section={section}
+            onSelect={goTo}
+            onSignOut={session.signOut}
+            todayTotal={range === "today" && sales ? sales.summary.sales.total : null}
+            todayCount={range === "today" && sales ? sales.summary.sales.count : null}
+            openFlags={openFlags}
+            showFlags={showFlags}
           />
-        </Section>
-
-        <Section title="Change password">
-          <PasswordForm onSubmit={changePassword} />
-        </Section>
-      </main>
+          <main className="flex-1 min-w-0">{content()}</main>
+        </div>
       )}
 
       <IdleLockScreen
