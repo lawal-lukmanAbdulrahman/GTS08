@@ -25,8 +25,13 @@ export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 const stub = (...m: Method[]) => Object.fromEntries(m.map((x) => [x, "stub"])) as Partial<Record<Method, string>>;
 
 export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
-  "analytics": stub("GET"),
   "analytics/overview": { GET: "admin" },
+  "analytics/sales": { GET: "admin" },
+  "analytics/channel-split": { GET: "admin" },
+  "analytics/products/top": { GET: "admin" },
+  "analytics/inventory/alerts": { GET: "admin" },
+  "analytics/customers/new": { GET: "admin" },
+  "analytics/orders/average-value": { GET: "admin" },
 
   // ── auth
   "auth/delete-account": { POST: "session" },
