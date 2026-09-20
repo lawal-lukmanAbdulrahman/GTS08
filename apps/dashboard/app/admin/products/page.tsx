@@ -9,6 +9,7 @@ import ProductFormModal, { ProductFormData } from "./product-form-modal";
 import ProductInfoDrawer from "./product-info-drawer";
 import { exportProductsToExcel } from "./product-excel-service";
 import ProductExcelImportModal from "./product-excel-import-modal";
+import { authFetch } from "../../lib/session";
 
 export interface ProductItem {
   id: string;
@@ -229,7 +230,7 @@ export default function AdminProductsPage() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/products?include_all_status=true&limit=100`);
+      const res = await authFetch(`${API_BASE}/products?include_all_status=true&limit=100`);
       if (res.ok) {
         const json = await res.json();
         setProducts(json.data || []);

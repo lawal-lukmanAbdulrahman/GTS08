@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { clearSession, getSessionUser, reauthenticate, signOut, signOutMessage } from "./session";
+import { authFetch, authHeader, clearSession, getSessionUser, reauthenticate, signOut, signOutMessage } from "./session";
 
 function setCookie(name: string) {
   document.cookie = `${name}=x; path=/`;
@@ -154,5 +154,46 @@ describe("reauthenticate (unlocking an idle till)", () => {
     const r = await reauthenticate("ada@gts.ng", "x");
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.message).toMatch(/reach the server/i);
+  });
+});
+
+describe("authFetch", () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response("{}"));
+  beforeEach(() => {
+    fetchMock.mockClear();
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.clear();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("adds the bearer token and keeps the caller's other headers and options", async () => {
+    localStorage.setItem("gts_token", "tok9");
+    await authFetch("/api/v1/x", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/v1/x");
+    expect(init.method).toBe("POST");
+    const h = new Headers(init.headers);
+    expect(h.get("authorization")).toBe("Bearer tok9");
+    expect(h.get("content-type")).toBe("application/json");
+  });
+
+  it("sends no Authorization header when signed out", async () => {
+    await authFetch("/api/v1/x");
+    expect(new Headers(fetchMock.mock.calls[0]![1].headers).has("authorization")).toBe(false);
+  });
+
+  it("does not overwrite an Authorization header the caller chose", async () => {
+    localStorage.setItem("gts_token", "tok9");
+    await authFetch("/api/v1/x", { headers: { Authorization: "Bearer other" } });
+    expect(new Headers(fetchMock.mock.calls[0]![1].headers).get("authorization")).toBe("Bearer other");
+  });
+});
+
+describe("authHeader", () => {
+  beforeEach(() => localStorage.clear());
+  it("is the bearer header when signed in, and empty when not", () => {
+    expect(authHeader()).toEqual({});
+    localStorage.setItem("gts_token", "t1");
+    expect(authHeader()).toEqual({ Authorization: "Bearer t1" });
   });
 });

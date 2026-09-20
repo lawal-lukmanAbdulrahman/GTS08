@@ -8,6 +8,8 @@ import { createClient } from "@gts/database/client";
 import { AdminTopStrip } from "../../sidebar-context";
 import { markAdminInquiryViewed } from "../../../../lib/notifications";
 import { idempotentFetch } from "@gts/utils";
+import { authFetch } from "../../../lib/session";
+import { authHeader } from "../../../lib/session";
 
 interface TicketMessage {
   id: string;
@@ -88,7 +90,7 @@ export default function AdminQuestionDetailPage() {
     const fetchTicket = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/v1/inquiries/${ticketId}/messages`);
+        const res = await authFetch(`/api/v1/inquiries/${ticketId}/messages`);
         if (res.ok) {
           const json = await res.json();
           const tData: TicketDetail = json.data;
@@ -182,7 +184,7 @@ export default function AdminQuestionDetailPage() {
     // Silent background sync fallback (no loading spinner, no flicker)
     const syncInterval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/v1/inquiries/${ticketId}/messages`);
+        const res = await authFetch(`/api/v1/inquiries/${ticketId}/messages`);
         if (res.ok) {
           const json = await res.json();
           if (json.data?.messages) {
@@ -379,7 +381,7 @@ export default function AdminQuestionDetailPage() {
     try {
       const res = await idempotentFetch(`/api/v1/inquiries/${ticketId}/messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader() },
         body: JSON.stringify({
           message: replyText.trim(),
           senderType: "staff",
@@ -424,7 +426,7 @@ export default function AdminQuestionDetailPage() {
     try {
       const res = await idempotentFetch(`/api/v1/inquiries/${ticketId}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader() },
         body: JSON.stringify({ status: nextStatus }),
       });
 

@@ -14,6 +14,7 @@ import {
 } from "../../../lib/notifications";
 import BroadcastAnalyticsDrawer from "./broadcast-analytics-drawer";
 import { idempotentFetch } from "@gts/utils";
+import { authHeader } from "../../lib/session";
 
 const CURATED_GRAPHIC_PRESETS = [
   {
@@ -152,7 +153,7 @@ export default function AdminBroadcastPage() {
       if (activeLocal) {
         idempotentFetch("/api/v1/broadcast", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeader() },
           body: JSON.stringify({
             ...activeLocal,
             action: "rebroadcast",
@@ -343,7 +344,7 @@ export default function AdminBroadcastPage() {
       try {
         await idempotentFetch("/api/v1/broadcast", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeader() },
           body: JSON.stringify({ action: "toggle_status", id, status: "archived" }),
         });
       } catch (e) {
@@ -364,7 +365,7 @@ export default function AdminBroadcastPage() {
       try {
         await idempotentFetch("/api/v1/broadcast", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeader() },
           body: JSON.stringify({ action: "toggle_status", id, status: "disabled" }),
         });
       } catch (e) {
@@ -421,7 +422,7 @@ export default function AdminBroadcastPage() {
     try {
       await idempotentFetch("/api/v1/broadcast", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader() },
         body: JSON.stringify({
           action: "toggle_status",
           id: target.id,
@@ -462,7 +463,7 @@ export default function AdminBroadcastPage() {
     try {
       await idempotentFetch("/api/v1/broadcast", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader() },
         body: JSON.stringify({
           action: "toggle_status",
           id: target.id,
@@ -501,7 +502,7 @@ export default function AdminBroadcastPage() {
     try {
       const res = await idempotentFetch("/api/v1/broadcast", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader() },
         body: JSON.stringify({
           action: "rebroadcast",
           id: target.id,

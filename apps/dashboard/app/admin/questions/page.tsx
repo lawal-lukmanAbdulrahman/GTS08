@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@gts/database/client";
 import { AdminTopStrip } from "../sidebar-context";
+import { authFetch } from "../../lib/session";
 import {
   getAdminViewedInquiries,
   markAdminInquiryViewed,
@@ -70,7 +71,7 @@ export default function AdminQuestionsPage() {
   const fetchInquiries = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const res = await fetch("/api/v1/inquiries?all=true");
+      const res = await authFetch("/api/v1/inquiries?all=true");
       if (res.ok) {
         const json = await res.json();
         setInquiries(json.data || []);

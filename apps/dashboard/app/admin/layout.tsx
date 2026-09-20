@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import React, { useEffect, useState, useCallback } from "react";
 import { SidebarProvider, useSidebar } from "./sidebar-context";
 import { isAdminInquiryUnread } from "../../lib/notifications";
+import { authFetch } from "../lib/session";
 
 function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -39,7 +40,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const fetchInquiryCount = async () => {
       try {
-        const res = await fetch("/api/v1/inquiries?all=true");
+        const res = await authFetch("/api/v1/inquiries?all=true");
         if (res.ok) {
           const json = await res.json();
           const pending = (json.data || []).filter(

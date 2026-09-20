@@ -21,6 +21,20 @@ export function getToken(): string | null {
   }
 }
 
+/** {Authorization} for the signed-in staff member, or nothing when signed out. Spread into a headers object. */
+export function authHeader(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/** fetch that adds the staff bearer token (never overriding an Authorization header the caller set). */
+export function authFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  const token = getToken();
+  if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+  return fetch(input, { ...init, headers });
+}
+
 export function getSessionUser(): SessionUser | null {
   try {
     const raw = typeof window === "undefined" ? null : localStorage.getItem(USER_KEY);
