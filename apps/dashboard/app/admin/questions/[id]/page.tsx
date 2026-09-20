@@ -450,7 +450,7 @@ export default function AdminQuestionDetailPage() {
 
   if (loading) {
     return (
-      <div className="px-4 pt-3.5 pb-6 lg:px-5 lg:pt-3.5 space-y-4 max-w-[1600px] mx-auto font-sans">
+      <div className="px-4 pt-3.5 pb-6 sm:px-6 lg:px-8 lg:pt-3.5 space-y-4 max-w-[1600px] mx-auto font-sans">
         <div className="p-16 text-center space-y-3 bg-white dark:bg-[#181818] rounded-[16px] border border-gray-200 dark:border-[#262626]">
           <div className="w-8 h-8 border-2 border-gray-900 dark:border-white border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-xs text-gray-500 font-mono">Loading inquiry and product details...</p>
@@ -461,7 +461,7 @@ export default function AdminQuestionDetailPage() {
 
   if (!ticket) {
     return (
-      <div className="px-4 pt-3.5 pb-6 lg:px-5 lg:pt-3.5 space-y-4 max-w-[1600px] mx-auto font-sans">
+      <div className="px-4 pt-3.5 pb-6 sm:px-6 lg:px-8 lg:pt-3.5 space-y-4 max-w-[1600px] mx-auto font-sans">
         <div className="p-16 text-center space-y-4 bg-white dark:bg-[#181818] rounded-[16px] border border-gray-200 dark:border-[#262626]">
           <h3 className="text-base font-bold text-gray-900 dark:text-white">Inquiry thread not found</h3>
           <Link
@@ -678,7 +678,7 @@ export default function AdminQuestionDetailPage() {
   };
 
   return (
-    <div className="px-4 pt-2.5 pb-1.5 lg:px-5 lg:pt-2.5 lg:pb-1.5 max-w-[1600px] mx-auto font-sans transition-colors duration-200 h-full flex flex-col overflow-hidden">
+    <div className="px-4 pt-2.5 pb-1.5 sm:px-6 lg:px-8 lg:pt-2.5 lg:pb-1.5 max-w-[1600px] mx-auto font-sans transition-colors duration-200 h-full flex flex-col overflow-hidden">
       {/* ────── STICKY TOP PAGE HEADER ────── */}
       <div className="shrink-0 pb-3 space-y-2 border-b border-gray-200/80 dark:border-[#262626]">
         {/* Top Metadata Strip */}

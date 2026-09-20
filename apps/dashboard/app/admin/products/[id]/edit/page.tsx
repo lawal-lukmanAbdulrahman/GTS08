@@ -1250,7 +1250,7 @@ export default function EditProductPage() {
       
       {/* ────── STICKY PAGE HEADER ────── */}
       <div className="sticky top-0 z-30 bg-white/90 dark:bg-[#181818]/90 backdrop-blur-md border-b border-gray-200 dark:border-[#262626] px-4 pt-3 pb-3 lg:px-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
             <SidebarToggle className="-ml-1" />
             <button
@@ -1342,7 +1342,7 @@ export default function EditProductPage() {
       </div>
 
       {/* ────── MAIN EDITING CONTENT GRID ────── */}
-      <div className="max-w-7xl mx-auto px-4 pt-6 lg:px-6 lg:flex-1 lg:flex lg:flex-col lg:min-h-0 pb-6">
+      <div className="max-w-[1600px] mx-auto px-4 pt-6 lg:px-6 lg:flex-1 lg:flex lg:flex-col lg:min-h-0 pb-6">
         
         {/* Error / Success Notifications */}
         {errorMsg && (

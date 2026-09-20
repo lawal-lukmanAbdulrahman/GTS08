@@ -626,7 +626,7 @@ export default function AdminBroadcastPage() {
   }, [openActionMenuId]);
 
   return (
-    <div className="px-4 pt-3.5 pb-12 lg:px-5 lg:pt-3.5 space-y-4 max-w-[1600px] mx-auto font-sans transition-colors duration-200 relative">
+    <div className="px-4 pt-3.5 pb-12 sm:px-6 lg:px-8 lg:pt-3.5 space-y-4 max-w-[1600px] mx-auto font-sans transition-colors duration-200 relative">
       {/* ────── TOAST NOTIFICATION ────── */}
       {toast && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[200] max-w-md w-full px-4 animate-in fade-in slide-in-from-top-4 duration-300">
@@ -670,7 +670,7 @@ export default function AdminBroadcastPage() {
 
       {/* ────── STICKY TOP PAGE HEADER (METADATA + ACTIONS) ────── */}
       <div
-        className={`sticky top-0 z-40 -mx-4 -mt-3.5 px-4 pt-3.5 pb-2.5 lg:-mx-5 lg:-mt-3.5 lg:px-5 space-y-3 bg-[#F8F7F4]/95 dark:bg-[#1C1C1C]/95 backdrop-blur-md transition-all duration-200 ${
+        className={`sticky top-0 z-40 -mx-4 -mt-3.5 px-4 pt-3.5 pb-2.5 sm:-mx-6 lg:-mx-8 lg:-mt-3.5 sm:px-6 lg:px-8 space-y-3 bg-[#F8F7F4]/95 dark:bg-[#1C1C1C]/95 backdrop-blur-md transition-all duration-200 ${
           scrolled ? "border-b border-gray-200 dark:border-[#262626] shadow-2xs" : "border-b border-transparent"
         }`}
       >

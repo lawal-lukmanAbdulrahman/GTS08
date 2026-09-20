@@ -61,7 +61,7 @@ export default function AdminStaffPage() {
   };
 
   return (
-    <div className="px-4 pt-3.5 pb-6 lg:px-5 lg:pt-3.5 space-y-6 max-w-[1600px] mx-auto font-sans">
+    <div className="px-4 pt-3.5 pb-6 sm:px-6 lg:px-8 lg:pt-3.5 space-y-6 max-w-[1600px] mx-auto font-sans">
       <AdminTopStrip
         breadcrumbs={[
           { label: "Staff", href: "/admin/staff" },

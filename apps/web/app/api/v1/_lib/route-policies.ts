@@ -105,6 +105,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
 
   // ── staff and admin
   "flags": { GET: "admin" },
+  "live/summary": { GET: "admin" },
   "flags/[id]": { PATCH: "admin" },
   "staff/me": { GET: "staff", PATCH: "staff" },
   "staff/me/activity": { GET: "staff" },

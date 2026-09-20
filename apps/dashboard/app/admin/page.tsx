@@ -131,10 +131,10 @@ export default function AdminPage() {
   const activeTopPct = 100 - activeData.heightPct;
 
   return (
-    <div className="px-4 pt-3.5 pb-6 lg:px-5 lg:pt-3.5 space-y-4 max-w-[1600px] mx-auto transition-colors duration-200">
+    <div className="px-4 pt-3.5 pb-6 sm:px-6 lg:px-8 lg:pt-3.5 space-y-4 max-w-[1600px] mx-auto transition-colors duration-200">
       {/* ────── STICKY TOP PAGE HEADER (METADATA + GREETING ROW COMBINED) ────── */}
       <div
-        className={`sticky top-0 z-40 -mx-4 -mt-3.5 px-4 pt-3.5 pb-2 lg:-mx-5 lg:-mt-3.5 lg:px-5 space-y-3 transition-all duration-200 ${
+        className={`sticky top-0 z-40 -mx-4 -mt-3.5 px-4 pt-3.5 pb-2 sm:-mx-6 lg:-mx-8 lg:-mt-3.5 sm:px-6 lg:px-8 space-y-3 transition-all duration-200 ${
           scrolled
             ? "bg-[#F8F7F4]/90 dark:bg-[#1C1C1C]/90 backdrop-blur-md border-b border-gray-200 dark:border-[#262626] shadow-2xs"
             : "bg-transparent border-b border-transparent"

@@ -24,7 +24,7 @@ export default function AdminSettingsPage() {
   }, []);
 
   return (
-    <div className="px-4 pt-3.5 pb-6 lg:px-5 lg:pt-3.5 space-y-6 max-w-[1600px] mx-auto font-sans">
+    <div className="px-4 pt-3.5 pb-6 sm:px-6 lg:px-8 lg:pt-3.5 space-y-6 max-w-[1600px] mx-auto font-sans">
       <AdminTopStrip breadcrumbs={[{ label: "Settings", href: "/admin/settings" }, { label: "Store details" }]} />
 
       <div className="border-b border-gray-200 dark:border-[#262626] pb-4">

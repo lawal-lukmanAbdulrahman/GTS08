@@ -1088,7 +1088,7 @@ export default function CreateProductPage() {
       
       {/* ────── STICKY PAGE HEADER ────── */}
       <div className="sticky top-0 z-30 bg-white/90 dark:bg-[#181818]/90 backdrop-blur-md border-b border-gray-200 dark:border-[#262626] px-4 pt-3 pb-3 lg:px-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
             <SidebarToggle className="-ml-1" />
             <button
@@ -1183,7 +1183,7 @@ export default function CreateProductPage() {
       </div>
 
       {/* ────── MAIN CONTAINER (RESPONSIVE DUAL-PANE SCROLL) ────── */}
-      <div className="flex-1 lg:overflow-hidden max-w-7xl mx-auto w-full p-4 lg:p-6">
+      <div className="flex-1 lg:overflow-hidden max-w-[1600px] mx-auto w-full p-4 lg:p-6">
         
         {/* Banner Messages */}
         {errorMsg && (
