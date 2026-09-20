@@ -99,6 +99,9 @@ importers:
       '@gts/utils':
         specifier: workspace:*
         version: link:../../packages/utils
+      '@supabase/supabase-js':
+        specifier: ^2.110.7
+        version: 2.110.7
       framer-motion:
         specifier: ^12.43.0
         version: 12.43.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
