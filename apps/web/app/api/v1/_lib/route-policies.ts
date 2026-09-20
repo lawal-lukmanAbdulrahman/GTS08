@@ -50,7 +50,8 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   // ── catalogue
   "brands": { GET: "public", POST: "permission:can_manage_products" },
   "categories": { GET: "public", POST: "permission:can_manage_products" },
-  "categories/[id]": stub("GET", "PATCH", "DELETE"),
+  "categories/[id]": { GET: "public", PATCH: "permission:can_manage_products", DELETE: "permission:can_manage_products" },
+  "categories/reorder": { PUT: "permission:can_manage_products" },
   "products": { GET: "public", POST: "permission:can_manage_products", PUT: "permission:can_manage_products" }, // GET adds cost for staff
   "products/[slug]": { GET: "optionalStaff" },
   "products/drafts": { GET: "permission:can_manage_products", POST: "permission:can_manage_products", DELETE: "permission:can_manage_products" },

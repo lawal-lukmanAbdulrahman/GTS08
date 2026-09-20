@@ -17,7 +17,10 @@ export type ActivityAction =
   | "staff.create"
   | "staff.permissions_update"
   | "product_flag.raise"
-  | "product_flag.update";
+  | "product_flag.update"
+  | "category.update"
+  | "category.delete"
+  | "category.reorder";
 
 export interface ActivityEntry {
   actorId: string;
