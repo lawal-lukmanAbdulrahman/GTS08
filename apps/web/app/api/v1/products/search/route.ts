@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
+import { filterText } from "../../_lib/filter";
 import { serverError, dbError } from "../../_lib/http";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const q = searchParams.get("q") || "";
+    const q = filterText(searchParams.get("q") || "");
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = Math.min(parseInt(searchParams.get("limit") || "24", 10), 50);
     const offset = (page - 1) * limit;

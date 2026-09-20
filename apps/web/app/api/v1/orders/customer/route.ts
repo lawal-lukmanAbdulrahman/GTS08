@@ -4,75 +4,39 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../../auth/utils";
 import { serverError, dbError } from "../../_lib/http";
 
+/** Only what a customer should see of their own order: no IP address, session, staff notes or cashier. */
+const ORDER_COLUMNS = `
+  id, order_number, channel, status, subtotal, delivery_fee, discount_amount, total, promo_code,
+  carrier_name, tracking_number, carrier_tracking_url, paid_at, shipped_at, delivered_at, created_at, updated_at,
+  items:order_items(id, variant_id, quantity, unit_price, line_total, product_snapshot),
+  address:addresses(full_name, phone, address_line1, address_line2, city, state)
+`;
+
+/**
+ * The signed-in customer's own orders. Who they are comes from their sign-in and
+ * nothing else: an email, customer id or user id in the address is ignored, so
+ * one person can't read another's orders by asking for them.
+ */
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const queryCustomerId = searchParams.get("customerId");
-    const queryEmail = searchParams.get("email");
-    const queryUserId = searchParams.get("userId");
-
     const authUser = await getAuthenticatedUser(request);
-    const serviceClient = createServiceClient();
+    if (!authUser?.id) return NextResponse.json({ error: "Please sign in.", code: "UNAUTHORIZED" }, { status: 401 });
 
-    // Collect all valid customer filters
-    const customerFilters: string[] = [];
+    const client = createServiceClient();
+    // Only characters that can't alter the filter expression may reach it.
+    const safeEmail = (authUser.email ?? "").toLowerCase().trim().replace(/[^a-z0-9@._+-]/g, "");
+    const filters = [`user_id.eq.${authUser.id}`];
+    if (safeEmail) filters.push(`email.eq.${safeEmail}`);
 
-    if (authUser?.id) {
-      customerFilters.push(`user_id.eq.${authUser.id}`);
-    }
-    if (authUser?.email) {
-      customerFilters.push(`email.eq.${authUser.email.toLowerCase().trim()}`);
-    }
-    if (queryUserId) {
-      customerFilters.push(`user_id.eq.${queryUserId}`);
-    }
-    if (queryEmail) {
-      customerFilters.push(`email.eq.${queryEmail.toLowerCase().trim()}`);
-    }
-    if (queryCustomerId) {
-      customerFilters.push(`id.eq.${queryCustomerId}`);
-    }
+    const { data: customers, error: customerError } = await client.from("customers").select("id").or(filters.join(","));
+    if (customerError) return dbError(customerError, "DATABASE_ERROR", 500);
+    const ids = [...new Set(((customers ?? []) as Array<{ id: string }>).map((c) => c.id))];
+    if (ids.length === 0) return NextResponse.json({ success: true, data: [] });
 
-    let customerIds: string[] = [];
-
-    if (customerFilters.length > 0) {
-      const { data: matchedCustomers } = await serviceClient
-        .from("customers")
-        .select("id")
-        .or(customerFilters.join(","));
-
-      if (matchedCustomers && matchedCustomers.length > 0) {
-        customerIds = Array.from(new Set(matchedCustomers.map((c) => c.id)));
-      }
-    }
-
-    // Direct match if queryCustomerId provided
-    if (queryCustomerId && !customerIds.includes(queryCustomerId)) {
-      customerIds.push(queryCustomerId);
-    }
-
-    if (customerIds.length === 0) {
-      return NextResponse.json({ success: true, data: [] });
-    }
-
-    // Fetch orders with order items and address, newest first
-    const { data: orders, error } = await serviceClient
-      .from("orders")
-      .select("*, items:order_items(*), address:addresses(*)")
-      .in("customer_id", customerIds)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching customer orders:", error);
-      return dbError(error, "DATABASE_ERROR", 500);
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: orders || [],
-    });
-  } catch (err: any) {
-    console.error("Customer orders API error:", err);
+    const { data: orders, error } = await client.from("orders").select(ORDER_COLUMNS).in("customer_id", ids).order("created_at", { ascending: false });
+    if (error) return dbError(error, "DATABASE_ERROR", 500);
+    return NextResponse.json({ success: true, data: orders ?? [] }, { headers: { "Cache-Control": "no-store" } });
+  } catch (err) {
     return serverError(err);
   }
 }

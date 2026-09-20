@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { filterEmail } from "../_lib/filter";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
       const { data: customerRecords } = await serviceClient
         .from("customers")
         .select("id")
-        .or(`user_id.eq.${user.id},email.eq.${user.email}`);
+        .or(`user_id.eq.${user.id},email.eq.${filterEmail(user.email ?? "")}`);
 
       const customerIds = customerRecords?.map((c) => c.id) || [];
       if (customerIds.length === 0) {

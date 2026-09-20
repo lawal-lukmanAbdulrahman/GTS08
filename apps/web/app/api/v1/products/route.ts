@@ -234,6 +234,10 @@ export async function GET(request: NextRequest) {
         limit,
         pages,
       },
+    }, {
+      // The public list is the same for everyone, so a shared cache may keep it briefly. An answer given to a
+      // signed-in caller can differ (staff see cost prices) and must never be shared.
+      headers: { "Cache-Control": user ? "private, no-store" : "public, s-maxage=30, stale-while-revalidate=120" },
     });
   } catch (err: any) {
     return serverError(err);

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { filterEmail } from "../_lib/filter";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
@@ -66,7 +67,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     const { data: customer } = await serviceClient
       .from("customers")
       .select("id")
-      .or(`user_id.eq.${authUser.id},email.eq.${authUser.email}`)
+      .or(`user_id.eq.${authUser.id},email.eq.${filterEmail(authUser.email ?? "")}`)
       .maybeSingle();
 
     if (!customer) {

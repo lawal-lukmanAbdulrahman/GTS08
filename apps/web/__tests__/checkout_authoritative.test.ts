@@ -19,6 +19,7 @@ vi.mock("../app/api/v1/pos/_lib/inventory", () => ({
 const mockInit = vi.fn();
 vi.mock("../app/api/v1/_lib/paystack", () => ({ initializePayment: (...a: unknown[]) => mockInit(...a) }));
 
+import { getAuthenticatedUser } from "../app/api/v1/auth/utils";
 import { NextRequest } from "next/server";
 import { POST } from "../app/api/v1/checkout/route";
 
@@ -42,6 +43,7 @@ beforeEach(() => {
   db.reset();
   mockAdjustAll.mockReset().mockResolvedValue({ ok: true });
   mockRollback.mockReset().mockResolvedValue(undefined);
+  vi.mocked(getAuthenticatedUser).mockResolvedValue(null);
   mockInit.mockReset().mockResolvedValue({ ok: true, authorizationUrl: "https://checkout.paystack.com/abc" });
   db.results.product_variants = { data: [VARIANT], error: null };
   db.results.customers = { data: { id: "cust-1" }, error: null };
@@ -182,6 +184,50 @@ describe("POST /api/v1/checkout is decided by the server, not the browser", () =
     it("charges full price with no code, whatever percentage the browser claims", async () => {
       await post({ ...BASE, discountPercent: 50 });
       expect(inserted("orders")[0]).toMatchObject({ discount_amount: 0, promo_code: null });
+    });
+  });
+
+  describe("whose customer record an order attaches to", () => {
+    const updates = () => (db.calls.customers ?? []).filter((c) => c.method === "update").map((c) => c.args[0] as Record<string, unknown>);
+    const inserts = () => (db.calls.customers ?? []).filter((c) => c.method === "insert").map((c) => c.args[0] as Record<string, unknown>);
+
+    it("never builds a filter from the email typed into the form", async () => {
+      vi.mocked(getAuthenticatedUser).mockResolvedValue({ id: "u1", email: "me@example.com" } as never);
+      await post({ ...BASE, customer: { ...BASE.customer, email: "x@y.co,id.neq.0" } });
+      expect(db.calls.customers?.some((c) => c.method === "or")).toBeFalsy();
+    });
+    it("uses the signed-in person's own verified email, not whatever the form says", async () => {
+      vi.mocked(getAuthenticatedUser).mockResolvedValue({ id: "u1", email: "me@example.com" } as never);
+      db.results.customers = { data: null, error: null };
+      await post({ ...BASE, customer: { ...BASE.customer, email: "victim@example.com" } });
+      // created for u1's own email (the insert result stub returns an id)
+      expect(inserts()[0]).toMatchObject({ user_id: "u1", email: "me@example.com" });
+    });
+    it("never takes over a customer record that belongs to someone else", async () => {
+      vi.mocked(getAuthenticatedUser).mockResolvedValue({ id: "u1", email: "me@example.com" } as never);
+      db.results.customers = { data: { id: "cust-victim", user_id: "someone-else" }, error: null };
+      await post(BASE);
+      expect(updates().some((u) => "user_id" in u)).toBe(false);
+      expect(inserts()[0]).toMatchObject({ user_id: "u1" });
+    });
+    it("reuses their own record without rewriting who it belongs to", async () => {
+      vi.mocked(getAuthenticatedUser).mockResolvedValue({ id: "u1", email: "me@example.com" } as never);
+      db.results.customers = { data: { id: "cust-1", user_id: "u1" }, error: null };
+      await post(BASE);
+      expect(updates().some((u) => "user_id" in u)).toBe(false);
+      expect(inserts()).toHaveLength(0);
+    });
+    it("a guest can't overwrite a registered customer's details, and gets a record of their own", async () => {
+      db.results.customers = { data: { id: "cust-registered", user_id: "someone-else" }, error: null };
+      await post(BASE);
+      expect(updates()).toHaveLength(0);
+      expect(inserts()).toHaveLength(1);
+    });
+    it("a guest reusing an earlier guest record doesn't rewrite it", async () => {
+      db.results.customers = { data: { id: "cust-guest", user_id: null }, error: null };
+      await post(BASE);
+      expect(updates()).toHaveLength(0);
+      expect(inserts()).toHaveLength(0);
     });
   });
 

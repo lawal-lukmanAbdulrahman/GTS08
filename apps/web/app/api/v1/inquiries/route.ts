@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { filterEmail } from "../_lib/filter";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
@@ -108,7 +109,7 @@ export async function GET(request: NextRequest) {
           ticket_messages(id, sender_type, body, sent_at)
         `)
         .contains("tags", ["product_question"])
-        .or(`user_id.eq.${authUser.id},customer_email.eq.${authUser.email}`)
+        .or(`user_id.eq.${authUser.id},customer_email.eq.${filterEmail(authUser.email ?? "")}`)
         .order("updated_at", { ascending: false });
 
       if (error) {
@@ -210,7 +211,7 @@ export async function GET(request: NextRequest) {
         ticket_messages(id, sender_type, body, sent_at)
       `)
       .contains("tags", ["product_question", `product_id:${productId}`])
-      .or(`user_id.eq.${authUser.id},customer_email.eq.${authUser.email}`)
+      .or(`user_id.eq.${authUser.id},customer_email.eq.${filterEmail(authUser.email ?? "")}`)
       .order("created_at", { ascending: false })
       .limit(1);
 
@@ -274,7 +275,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       .from("support_tickets")
       .select("id, status")
       .contains("tags", ["product_question", `product_id:${sanitizedProductId}`])
-      .or(`user_id.eq.${authUser.id},customer_email.eq.${authUser.email}`)
+      .or(`user_id.eq.${authUser.id},customer_email.eq.${filterEmail(authUser.email ?? "")}`)
       .in("status", ["open", "in_progress"])
       .order("created_at", { ascending: false })
       .limit(1);

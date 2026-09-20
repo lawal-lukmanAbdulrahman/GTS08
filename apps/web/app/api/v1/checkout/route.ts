@@ -92,68 +92,40 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
 
     const authUser = await getAuthenticatedUser(request);
 
-    // 1. Get or Create Customer Record
+    // 1. Find or create the customer record. Who an order belongs to is never decided by what was typed into the form:
+    //    a signed-in person is matched by their account (and their own verified email), and a record that belongs to
+    //    someone else is never reused, updated or taken over.
     let customerId: string | null = null;
     if (authUser?.id) {
-      const { data: existingCust } = await serviceClient
-        .from("customers")
-        .select("id")
-        .or(`user_id.eq.${authUser.id},email.eq.${email}`)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingCust) {
-        customerId = existingCust.id;
-        // update phone or name if changed
-        await serviceClient
-          .from("customers")
-          .update({ full_name: fullName, phone, user_id: authUser.id })
-          .eq("id", customerId);
+      const accountEmail = sanitizeEmail(authUser.email ?? email);
+      let { data: own } = await serviceClient.from("customers").select("id, user_id").eq("user_id", authUser.id).limit(1).maybeSingle();
+      if (own && (own as { user_id?: string | null }).user_id !== authUser.id) own = null;
+      if (!own) {
+        const { data: byEmail } = await serviceClient.from("customers").select("id, user_id").eq("email", accountEmail).limit(1).maybeSingle();
+        // Only an unclaimed record with their own email can be adopted.
+        if (byEmail && (byEmail as { user_id?: string | null }).user_id == null) own = byEmail;
+      }
+      if (own) {
+        customerId = (own as { id: string }).id;
+        // Contact details only; the record's owner is never changed here.
+        await serviceClient.from("customers").update({ full_name: fullName, phone }).eq("id", customerId);
       } else {
-        const { data: newCust, error: custErr } = await serviceClient
+        const { data: created, error: custErr } = await serviceClient
           .from("customers")
-          .insert({
-            user_id: authUser.id,
-            email,
-            full_name: fullName,
-            phone,
-          })
+          .insert({ user_id: authUser.id, email: accountEmail, full_name: fullName, phone })
           .select("id")
           .single();
-
-        if (!custErr && newCust) {
-          customerId = newCust.id;
-        }
+        if (!custErr && created) customerId = created.id;
       }
     } else {
-      // Guest customer check
-      const { data: guestCust } = await serviceClient
-        .from("customers")
-        .select("id")
-        .eq("email", email)
-        .limit(1)
-        .maybeSingle();
-
-      if (guestCust) {
-        customerId = guestCust.id;
-        await serviceClient
-          .from("customers")
-          .update({ full_name: fullName, phone })
-          .eq("id", customerId);
+      // A guest gets a record of their own. An earlier guest record for the same email is reused untouched;
+      // a registered customer's record is never reused or changed by someone who isn't signed in.
+      const { data: guestCust } = await serviceClient.from("customers").select("id, user_id").eq("email", email).limit(1).maybeSingle();
+      if (guestCust && (guestCust as { user_id?: string | null }).user_id == null) {
+        customerId = (guestCust as { id: string }).id;
       } else {
-        const { data: newCust, error: custErr } = await serviceClient
-          .from("customers")
-          .insert({
-            email,
-            full_name: fullName,
-            phone,
-          })
-          .select("id")
-          .single();
-
-        if (!custErr && newCust) {
-          customerId = newCust.id;
-        }
+        const { data: created, error: custErr } = await serviceClient.from("customers").insert({ email, full_name: fullName, phone }).select("id").single();
+        if (!custErr && created) customerId = created.id;
       }
     }
 
