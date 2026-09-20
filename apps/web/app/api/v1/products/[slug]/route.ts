@@ -35,7 +35,7 @@ export async function GET(
       .select(
         `
         *,
-        category:categories(id, name, slug),
+        category:categories(id, name, slug, parent:parent_id(id, name, slug)),
         images:product_images(*),
         variants:product_variants(*, inventory(quantity, reserved_quantity))
       `

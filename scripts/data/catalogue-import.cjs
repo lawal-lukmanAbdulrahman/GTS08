@@ -59,9 +59,33 @@ const priceKobo = (p) => Math.round(p.priceNum * 100);
 
 (async () => {
   const bundle = loadBundle();
-  const db = await rest("GET", "products?select=id,slug,sku,brand,sub_category,average_rating,review_count,category_id,tags,variants:product_variants(id,size,color),images:product_images(id,cloudinary_public_id,variant_id)&limit=500");
-  const cats = await rest("GET", "categories?select=id,name,slug&limit=500");
+  const db = await rest("GET", "products?select=id,slug,category_id,sku,brand,sub_category,average_rating,review_count,category_id,tags,variants:product_variants(id,size,color),images:product_images(id,cloudinary_public_id,variant_id)&limit=500");
+  const cats = await rest("GET", "categories?select=id,name,slug,parent_id&limit=500");
   const bySlug = new Map(db.map((p) => [p.slug, p]));
+  const catById = new Map(cats.map((c) => [c.id, c]));
+  const catByName = () => new Map(cats.map((c) => [norm(c.name), c]));
+
+  // The database names each product's own (narrow) category, e.g. "Air Fryers"; the storefront groups them under a
+  // top-level one ("Appliances"). Record that grouping as a parent category.
+  for (const p of bundle) {
+    const row = bySlug.get(p.id);
+    if (!row) continue;
+    let top = catByName().get(norm(p.category));
+    if (!top) {
+      console.log(`+ top-level category "${p.category}"`);
+      if (APPLY) { [top] = await rest("POST", "categories", { name: p.category, slug: slugify(p.category) }); cats.push(top); catById.set(top.id, top); }
+      else top = { id: "(new)", name: p.category };
+    }
+    const leaf = row.category_id ? catById.get(row.category_id) : null;
+    if (!leaf) {
+      console.log(`~ ${p.id}: no category, set to "${p.category}"`);
+      if (APPLY) { await rest("PATCH", `products?id=eq.${row.id}`, { category_id: top.id }); row.category_id = top.id; }
+    } else if (leaf.id !== top.id && !leaf.parent_id) {
+      console.log(`~ category "${leaf.name}" grouped under "${top.name}"`);
+      if (APPLY) { await rest("PATCH", `categories?id=eq.${leaf.id}`, { parent_id: top.id }); leaf.parent_id = top.id; }
+    }
+  }
+
   const plan = { newProducts: [], newColours: 0, newImages: 0, newVariants: 0, filled: 0 };
 
   for (const p of bundle) {

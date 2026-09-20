@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { ProductCard } from "../_components/ui/product-card";
+import { checkPromo } from "../_lib/checkout-client";
+import { useCheckoutQuote } from "../_lib/use-checkout-quote";
 import { useCatalogue } from "../_components/catalogue-context";
 import { Footer } from "../_components/landing/footer";
 import { useCart } from "../_components/cart-context";
@@ -12,23 +14,23 @@ export default function CartPage() {
   const { cartItems, updateQuantity, removeFromCart, clearCart, totalItemCount } = useCart();
 
   const [promoCode, setPromoCode] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPercent: number } | null>(null);
+  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number } | null>(null); // discount in kobo, from the server
   const [promoError, setPromoError] = useState("");
+  const { quote } = useCheckoutQuote(cartItems);
 
-  const handleApplyPromo = (e: React.FormEvent) => {
+  const handleApplyPromo = async (e: React.FormEvent) => {
     e.preventDefault();
     setPromoError("");
-    const cleanCode = promoCode.trim().toUpperCase();
-    if (!cleanCode) return;
-
-    if (cleanCode === "GTS10" || cleanCode === "WELCOME10") {
-      setAppliedPromo({ code: cleanCode, discountPercent: 10 });
-      setPromoCode("");
-    } else if (cleanCode === "GTS20" || cleanCode === "SUMMER20") {
-      setAppliedPromo({ code: cleanCode, discountPercent: 20 });
+    if (!quote) {
+      setPromoError("Please wait while we check your cart.");
+      return;
+    }
+    const result = await checkPromo(promoCode, quote.subtotal);
+    if (result.ok) {
+      setAppliedPromo({ code: result.code, discount: result.discount });
       setPromoCode("");
     } else {
-      setPromoError("Invalid code. Try GTS10 for 10% off.");
+      setPromoError(result.message);
     }
   };
 
@@ -37,14 +39,12 @@ export default function CartPage() {
   };
 
   // ── Calculation Math ──
-  const rawSubtotal = cartItems.reduce(
-    (sum, item) => sum + item.product.priceNum * item.quantity,
-    0
-  );
+  // The server's prices once they arrive; the page's own estimate until then.
+  const rawSubtotal = quote
+    ? quote.subtotal / 100
+    : cartItems.reduce((sum, item) => sum + item.product.priceNum * item.quantity, 0);
 
-  const discountAmount = appliedPromo
-    ? Math.round((rawSubtotal * appliedPromo.discountPercent) / 100)
-    : 0;
+  const discountAmount = appliedPromo ? appliedPromo.discount / 100 : 0;
 
   const FREE_SHIPPING_THRESHOLD = 500000;
   const isFreeShipping = rawSubtotal >= FREE_SHIPPING_THRESHOLD || cartItems.length === 0;
@@ -256,7 +256,7 @@ export default function CartPage() {
                   <div className="flex items-center justify-between bg-[#F2F0EA] rounded-xl px-4 py-2.5">
                     <span className="text-xs font-bold text-emerald-800 flex items-center gap-2">
                       <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                        {appliedPromo.discountPercent}% OFF
+                        -₦{(appliedPromo.discount / 100).toLocaleString()}
                       </span>
                       Code <strong>{appliedPromo.code}</strong> applied
                     </span>
@@ -305,7 +305,7 @@ export default function CartPage() {
                   {/* Promo Discount */}
                   {appliedPromo && (
                     <div className="flex items-center justify-between text-emerald-700 font-medium">
-                      <span>Promo Discount ({appliedPromo.discountPercent}%)</span>
+                      <span>Promo Discount ({appliedPromo.code})</span>
                       <span className="font-bold">-₦{discountAmount.toLocaleString()}</span>
                     </div>
                   )}

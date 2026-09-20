@@ -17,7 +17,8 @@ export interface ApiProduct {
   review_count: number | null;
   tags: string[] | null;
   badges?: string[];
-  category: { name: string; slug: string } | null;
+  /** A product's own category, which may be narrow ("Air Fryers"); `parent` is the top-level group ("Appliances"). */
+  category: { name: string; slug: string; parent?: { name: string; slug: string } | null } | null;
   primary_image: { cloudinary_id: string } | null;
   images: Array<{ id: string; cloudinary_id: string; is_primary: boolean; sort_order: number; variant_id?: string | null }>;
   variants: Array<{ id: string; size: string | null; color: string | null; color_hex: string | null; is_active?: boolean }>;
@@ -95,8 +96,8 @@ export function dbProductToItem(p: ApiProduct): ProductItem {
     reviews: compactCount(count),
     shortDescription: p.short_description || undefined,
     description: p.description || p.short_description || "",
-    category: p.category?.name || "Other",
-    subCategory: p.sub_category || "",
+    category: p.category?.parent?.name || p.category?.name || "Other",
+    subCategory: p.sub_category || (p.category?.parent ? p.category.name : ""),
     image: cardImage,
     images: options,
     sizes: sizes.length > 0 ? sizes : ["Standard"],

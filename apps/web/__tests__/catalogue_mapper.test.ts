@@ -17,6 +17,13 @@ const P = {
 describe("dbProductToItem", () => {
   const item = dbProductToItem(P as never);
 
+  it("groups a narrow category under its parent, keeping the narrow one as the sub-category when none is set", () => {
+    const leaf = dbProductToItem({ ...P, sub_category: null, category: { name: "Air Fryers", slug: "air-fryers", parent: { name: "Appliances", slug: "appliances" } } } as never);
+    expect(leaf.category).toBe("Appliances");
+    expect(leaf.subCategory).toBe("Air Fryers");
+    expect(item.category).toBe("Fashion"); // no parent: it is the top level itself
+  });
+
   it("carries the basics, with the slug as the storefront's id", () => {
     expect(item).toMatchObject({ id: "air-jordan-1", brand: "Air Jordan", sku: "AJ1", title: "Air Jordan 1", category: "Fashion", subCategory: "Sneakers", hasTransparentBg: true, description: "Long", shortDescription: "Short", tags: ["popular"] });
   });

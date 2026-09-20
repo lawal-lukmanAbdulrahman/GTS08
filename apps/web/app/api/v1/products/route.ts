@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
         average_rating,
         review_count,
         created_at,
-        category:categories(id, name, slug),
+        category:categories(id, name, slug, parent:parent_id(id, name, slug)),
         images:product_images(id, cloudinary_public_id, alt_text, is_primary, sort_order, variant_id),
         variants:product_variants(id, size, color, color_hex, sku, price_modifier, is_active, inventory(quantity, reserved_quantity))
       `,
