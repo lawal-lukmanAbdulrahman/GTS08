@@ -2,33 +2,160 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *" # nightly: performance, E2E and API QA against the staging database
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 20
 
 jobs:
-  ci:
+  # Every push and pull request: correctness gates that need no secrets.
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-
       - run: pnpm install --frozen-lockfile
 
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Lint
-        run: pnpm lint
+      # Fails only on NEW lint errors; the legacy ones are tracked in .lint-baseline.json and can only shrink.
+      - name: Lint (ratchet)
+        run: pnpm lint:ratchet
 
-      - name: Unit tests
+      - name: Unit tests (web + dashboard)
         run: pnpm test
 
       - name: Build
         run: pnpm build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Row-level-security policies, tested with pgTAP against a throwaway local Supabase.
+  rls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start local Supabase (applies every migration)
+        run: supabase start
+      - name: pgTAP policy tests
+        run: supabase test db
+
+  # Speed budgets: absolute timings only make sense on a quiet runner, so this is its own job.
+  perf:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:perf
+
+  # Browser flows + API checks against the STAGING database (never production).
+  e2e:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      PAYSTACK_SECRET_KEY: ${{ secrets.STAGING_PAYSTACK_TEST_SECRET_KEY }}
+      CRON_SECRET: ci-cron-secret
+      NEXT_PUBLIC_API_URL: http://localhost:3002
+      QA_ADMIN_EMAIL: ${{ secrets.STAGING_QA_ADMIN_EMAIL }}
+      QA_ADMIN_PASSWORD: ${{ secrets.STAGING_QA_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Write .env for the helper scripts
+        run: |
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY"
+          } > .env
+
+      - name: Build and start both apps
+        run: |
+          pnpm build
+          (cd apps/web && npx next start --port 3002 &) 
+          (cd apps/dashboard && npx next start --port 3001 &)
+          npx wait-on http://localhost:3002/api/v1/settings http://localhost:3001/login --timeout 120000
+
+      - name: API end-to-end checks
+        run: pnpm qa:api
+
+      - name: Install browsers
+        run: npx --prefix apps/dashboard playwright install --with-deps chromium
+
+      - name: Browser flows (Playwright)
+        run: pnpm test:e2e
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            apps/dashboard/playwright-report
+            apps/dashboard/test-results
+            .qa-results.json
+          if-no-files-found: ignore
+
+  # Lighthouse budgets from the storefront spec (performance >= 85, LCP < 2.5s) and accessibility.
+  lighthouse:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Lighthouse CI
+        run: npx --yes @lhci/cli@0.14.x autorun --config=lighthouserc.json

@@ -43,3 +43,7 @@ CLAUDE.md/
 .qa-results.json
 
 *.tsbuildinfo
+
+# Playwright
+/test-results/
+/playwright-report/

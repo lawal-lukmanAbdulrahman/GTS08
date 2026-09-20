@@ -9,6 +9,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: [],
+    exclude: ["**/node_modules/**", "**/.next/**", "e2e/**"], // Playwright specs run with `pnpm test:e2e`
   },
   resolve: {
     alias: {

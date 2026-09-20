@@ -220,7 +220,7 @@ export default function LoginPage() {
             <form onSubmit={handleLogin} className="space-y-4" noValidate>
               {/* Staff Email Field */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1 font-sans">
+                <label htmlFor="staff-email" className="block text-xs font-bold text-gray-700 mb-1 font-sans">
                   Staff Email
                 </label>
                 <div
@@ -229,7 +229,9 @@ export default function LoginPage() {
                   }`}
                 >
                   <input
+                    id="staff-email"
                     type="email"
+                    autoComplete="username"
                     placeholder="admin@gts.ng"
                     value={email}
                     onChange={(e) => {
@@ -256,7 +258,7 @@ export default function LoginPage() {
 
               {/* Password Field */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1 font-sans">
+                <label htmlFor="staff-password" className="block text-xs font-bold text-gray-700 mb-1 font-sans">
                   Password
                 </label>
                 <div
@@ -265,7 +267,9 @@ export default function LoginPage() {
                   }`}
                 >
                   <input
+                    id="staff-password"
                     type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
                     placeholder="Type your password"
                     value={password}
                     onChange={(e) => {

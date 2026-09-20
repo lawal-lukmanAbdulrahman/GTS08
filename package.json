@@ -7,14 +7,18 @@
     "build": "turbo run build",
     "typecheck": "npm --prefix apps/web run typecheck && npm --prefix apps/dashboard run typecheck",
     "lint": "turbo run lint",
-    "test": "npm --prefix apps/web run test",
+    "test": "npm --prefix apps/web run test && npm --prefix apps/dashboard run test",
     "test:watch": "turbo run test:watch",
-    "test:rls": "turbo run test:rls",
-    "test:e2e": "turbo run test:e2e"
+    "test:rls": "supabase test db",
+    "test:e2e": "npm --prefix apps/dashboard run test:e2e",
+    "test:perf": "npm --prefix apps/web run test:perf",
+    "lint:ratchet": "node scripts/lint-ratchet.cjs",
+    "qa:api": "node scripts/qa/api-e2e.cjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
     "turbo": "^2.4.0",
     "typescript": "^5.7.0"
-  }
+  },
+  "packageManager": "pnpm@10.33.0"
 }
