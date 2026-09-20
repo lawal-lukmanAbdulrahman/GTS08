@@ -4,6 +4,8 @@ import { createServiceClient } from "@gts/database";
 import { validatePasswordChange } from "@gts/utils";
 import { requireStaff } from "../../../_lib/staff-access";
 import { clientIp, logActivity } from "../../../_lib/activity";
+import { afterResponse } from "../../../_lib/email/after";
+import { notifyPasswordChanged } from "../../../_lib/email/events";
 
 /** Change your own password: current + new + confirm (employee spec Part 8). */
 export async function POST(request: NextRequest) {
@@ -64,6 +66,9 @@ export async function POST(request: NextRequest) {
     targetId: staff.user.id,
     ip: clientIp(request),
   });
+
+  const email = staff.user.email ?? null;
+  afterResponse(() => notifyPasswordChanged(serviceClient, { name: staff.fullName, email }));
 
   return NextResponse.json({ data: { changed: true } });
 }

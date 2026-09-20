@@ -5,6 +5,8 @@ import { isUuid } from "@gts/utils";
 import type { SalesRange } from "@gts/utils";
 import { PERMISSION_KEYS, effectivePermissions, requireAdmin, type PermissionKey } from "../../_lib/staff-access";
 import { clientIp, logActivity } from "../../_lib/activity";
+import { afterResponse } from "../../_lib/email/after";
+import { notifyAccessChanged } from "../../_lib/email/events";
 import { loadActivity, loadSalesRecord, SALES_RANGES } from "../../_lib/staff-record";
 
 type Context = { params: Promise<{ id: string }> };
@@ -149,6 +151,8 @@ export async function PATCH(request: NextRequest, { params }: Context) {
       .update({ is_blocked: isBlocked, updated_at: new Date().toISOString() })
       .eq("id", id);
     if (error) return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+    // Only tell them when their access actually changed, not on a repeat of the same state.
+    if (isBlocked !== target.is_blocked) afterResponse(() => notifyAccessChanged(serviceClient, id, isBlocked));
   }
 
   const granted = (Object.keys(flags) as PermissionKey[]).filter((k) => flags[k] === true && before[k] !== true);

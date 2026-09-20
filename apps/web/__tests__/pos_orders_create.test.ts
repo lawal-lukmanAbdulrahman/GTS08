@@ -49,6 +49,14 @@ vi.mock("@gts/database", () => ({
   createServiceClient: () => ({ from: (table: string) => mockFrom(table) }),
 }));
 
+const mockReceipt = vi.fn();
+vi.mock("../app/api/v1/_lib/email/events", () => ({
+  notifyPosReceipt: (...args: unknown[]) => mockReceipt(...args),
+}));
+vi.mock("../app/api/v1/_lib/email/after", () => ({
+  afterResponse: (task: () => Promise<unknown>) => void task(),
+}));
+
 import { NextRequest } from "next/server";
 import { POST } from "../app/api/v1/pos/orders/route";
 
@@ -89,6 +97,7 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
     mockAdjustAll.mockResolvedValue({ ok: true });
     mockRollback.mockReset();
     mockRollback.mockResolvedValue(undefined);
+    mockReceipt.mockReset();
     tableConfig = {
       product_variants: () => ({
         data: [
@@ -247,6 +256,25 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
     Object.keys(allCalls).forEach((k) => delete allCalls[k]);
     await POST(makeRequest({ ...VALID_BODY, customer_email: "shopper@example.com" }));
     expect(allCalls.customers?.length).toBeGreaterThan(0);
+  });
+
+  it("emails the receipt when the customer gave an address, with what they bought", async () => {
+    const res = await POST(makeRequest({ ...VALID_BODY, customer_email: "Shopper@Example.com" }));
+    expect(res.status).toBe(200);
+    expect(mockReceipt).toHaveBeenCalledTimes(1);
+    expect(mockReceipt.mock.calls[0]![1]).toMatchObject({
+      to: "shopper@example.com",
+      orderNumber: "GTS-202609-000001",
+      total: 3000000,
+      paymentMethod: "cash",
+      cashierName: "Ada Cashier",
+      items: [{ name: "GTS Oxford Shirt", size: "M", color: "Black", quantity: 2, unitPrice: 1500000, lineTotal: 3000000 }],
+    });
+  });
+
+  it("sends no receipt for a walk-in with no email", async () => {
+    await POST(makeRequest(VALID_BODY));
+    expect(mockReceipt).not.toHaveBeenCalled();
   });
 
   it("records the sale in the audit log against the cashier", async () => {

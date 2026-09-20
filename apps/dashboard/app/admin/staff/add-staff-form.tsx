@@ -17,11 +17,13 @@ export interface CreatedStaff {
   full_name: string;
   role: string;
   temporary_password: string;
+  /** Whether the welcome email went out; absent from older servers. */
+  email_delivery?: { sent: boolean; skipped: boolean };
 }
 export type CreateResult = { ok: true; data: CreatedStaff } | { ok: false; message: string; errors?: Record<string, string> };
 
 interface Props {
-  onCreate: (input: NewStaffInput) => Promise<CreateResult>;
+  onCreate: (input: NewStaffInput, options: { emailCredentials: boolean }) => Promise<CreateResult>;
   onClose: () => void;
   /** Called when the credentials panel is dismissed, so the list can refresh. */
   onDone: () => void;
@@ -57,6 +59,7 @@ export default function AddStaffForm({ onCreate, onClose, onDone }: Props) {
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<CreatedStaff | null>(null);
   const [copied, setCopied] = useState(false);
+  const [emailCredentials, setEmailCredentials] = useState(false);
 
   function changeRole(next: NewStaffRole) {
     setRole(next);
@@ -74,7 +77,7 @@ export default function AddStaffForm({ onCreate, onClose, onDone }: Props) {
     setErrors({});
     setFailure(null);
     setBusy(true);
-    const result = await onCreate(check.value);
+    const result = await onCreate(check.value, { emailCredentials });
     setBusy(false);
     if (result.ok) setCreated(result.data);
     else {
@@ -109,6 +112,15 @@ export default function AddStaffForm({ onCreate, onClose, onDone }: Props) {
                 </button>
               </div>
             </div>
+            {created.email_delivery && (
+              <p role="status" className="text-sm text-gray-700 dark:text-gray-200">
+                {created.email_delivery.sent
+                  ? `Welcome email sent to ${created.email}.`
+                  : created.email_delivery.skipped
+                    ? "Email isn't set up yet, so no welcome email was sent. Give them the password below yourself."
+                    : "The welcome email couldn't be sent. Give them the password below yourself."}
+              </p>
+            )}
             <p className="text-sm text-amber-700 dark:text-amber-300">
               This password won&apos;t be shown again. Give it to {created.full_name} now. They'll be asked to choose their own password the first time they sign in.
             </p>
@@ -156,6 +168,14 @@ export default function AddStaffForm({ onCreate, onClose, onDone }: Props) {
                 {errors.permissions && <p className="text-sm text-red-600">{errors.permissions}</p>}
               </fieldset>
             )}
+
+            <label className="flex items-start gap-3 text-base text-gray-800 dark:text-gray-100 cursor-pointer">
+              <input type="checkbox" className="mt-1" checked={emailCredentials} onChange={(e) => setEmailCredentials(e.target.checked)} />
+              <span>
+                Include the one-time password in their welcome message
+                <span className="block text-sm text-gray-500 dark:text-gray-400">Off by default: a message isn&apos;t private, so we otherwise send a welcome note without the password.</span>
+              </span>
+            </label>
 
             {failure && (
               <p role="alert" className="text-sm text-red-600 dark:text-red-400">{failure}</p>

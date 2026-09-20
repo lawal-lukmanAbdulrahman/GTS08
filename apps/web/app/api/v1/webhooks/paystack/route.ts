@@ -4,6 +4,8 @@ import crypto from "crypto";
 import { createServiceClient } from "@gts/database";
 import { adjustAll, type InventoryChange } from "../../pos/_lib/inventory";
 import { transitionOrderStatus } from "../../pos/_lib/order-status";
+import { afterResponse } from "../../_lib/email/after";
+import { notifyOrderPaid } from "../../_lib/email/events";
 
 /** True only when the signature is the HMAC-SHA512 of the raw body under our secret. Constant-time. */
 function signatureMatches(rawBody: string, signature: string | null, secret: string): boolean {
@@ -147,6 +149,8 @@ export async function POST(request: NextRequest) {
                 changes.map((c) => ({ variant_id: c.variantId, delta: c.deltaQuantity, reason: "sale_online", order_id: orderId }))
               );
             }
+
+            afterResponse(() => notifyOrderPaid(serviceClient, orderId));
           }
         }
       }

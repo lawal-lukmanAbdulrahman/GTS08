@@ -4,6 +4,8 @@ import { createServiceClient } from "@gts/database";
 import { validateFlagUpdate, isUuid } from "@gts/utils";
 import { requireAdmin } from "../../_lib/staff-access";
 import { clientIp, logActivity } from "../../_lib/activity";
+import { afterResponse } from "../../_lib/email/after";
+import { notifyFlagUpdated } from "../../_lib/email/events";
 
 /** An admin reviews, resolves, dismisses or reopens a flag. */
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -55,6 +57,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     changes: { status },
     ip: clientIp(request),
   });
+
+  afterResponse(() => notifyFlagUpdated(serviceClient, id, status, resolution_note ?? null));
 
   return NextResponse.json({ data });
 }

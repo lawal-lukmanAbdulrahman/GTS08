@@ -9,6 +9,8 @@ import { variantAvailable } from "../_lib/stock-status";
 import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
 import { clientIp, logActivity } from "../../_lib/activity";
 import { serverError } from "../../_lib/http";
+import { afterResponse } from "../../_lib/email/after";
+import { notifyPosReceipt } from "../../_lib/email/events";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -217,8 +219,10 @@ export async function POST(request: NextRequest) {
   }
 
   let customerId: string | null = null;
+  let receiptEmail: string | null = null;
   if (body.customer_email) {
     const email = sanitizeEmail(body.customer_email);
+    receiptEmail = email;
     const { data: existing } = await serviceClient
       .from("customers")
       .select("id")
@@ -332,6 +336,30 @@ export async function POST(request: NextRequest) {
       },
       ip,
     });
+  }
+
+  if (receiptEmail) {
+    const to = receiptEmail;
+    afterResponse(() =>
+      notifyPosReceipt(serviceClient, {
+        to,
+        orderNumber: createdOrder.order_number,
+        createdAt: new Date().toISOString(),
+        items: orderItemsPayload.map((r) => ({
+          name: r.product_snapshot.name,
+          size: r.product_snapshot.size,
+          color: r.product_snapshot.color,
+          quantity: r.quantity,
+          unitPrice: r.unit_price,
+          lineTotal: r.line_total,
+        })),
+        subtotal: totals.subtotal,
+        discountAmount: totals.discountAmount,
+        total: createdOrder.total,
+        paymentMethod,
+        cashierName: access.fullName,
+      })
+    );
   }
 
   return NextResponse.json({

@@ -42,8 +42,11 @@ export default function AdminStaffPage() {
   const filtered = filterStaff(staff, { query, role: roleFilter, status: statusFilter });
   const paged = paginate(filtered, page, 10);
 
-  async function createStaff(input: NewStaffInput): Promise<CreateResult> {
-    const result = await apiCall<CreatedStaff>("/users/staff", { method: "POST", json: input });
+  async function createStaff(input: NewStaffInput, options: { emailCredentials: boolean }): Promise<CreateResult> {
+    const result = await apiCall<CreatedStaff>("/users/staff", {
+      method: "POST",
+      json: { ...input, email_credentials: options.emailCredentials },
+    });
     if (result.ok) return { ok: true, data: result.data };
     return { ok: false, message: result.message, errors: result.details };
   }

@@ -1,0 +1,172 @@
+import { formatKobo } from "@gts/utils";
+import { esc } from "./html";
+
+export interface StoreInfo {
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+}
+
+export interface Rendered {
+  subject: string;
+  html: string;
+  text: string;
+}
+
+const GOLD = "#EDCF5D";
+const INK = "#1C1C1C";
+
+/** One shared, plain, inline-styled shell so every message looks like it came from the same shop. */
+function shell(store: StoreInfo, title: string, bodyHtml: string): string {
+  const footer = [store.name, store.address, store.phone ? `Tel: ${store.phone}` : null].filter(Boolean).map(esc).join(" · ");
+  return `<!doctype html><html><body style="margin:0;background:#F8F7F4;font-family:Arial,Helvetica,sans-serif;color:${INK};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;">
+<tr><td style="background:${GOLD};padding:18px 24px;font-size:18px;font-weight:800;letter-spacing:.3px;">${esc(store.name)}</td></tr>
+<tr><td style="padding:28px 24px 8px;"><h1 style="margin:0 0 12px;font-size:22px;line-height:1.3;">${esc(title)}</h1>${bodyHtml}</td></tr>
+<tr><td style="padding:16px 24px 24px;color:#6b7280;font-size:12px;border-top:1px solid #eee;">${footer}</td></tr>
+</table></td></tr></table></body></html>`;
+}
+
+const p = (html: string) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">${html}</p>`;
+const button = (href: string, label: string) =>
+  `<p style="margin:20px 0;"><a href="${esc(href)}" style="display:inline-block;background:${INK};color:#ffffff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:8px;">${esc(label)}</a></p>`;
+
+export function staffWelcomeEmail(o: { name: string; role: string; email: string; signInUrl: string; oneTimePassword?: string; store: StoreInfo }): Rendered {
+  const role = o.role.replace("_", " ");
+  const credentials = o.oneTimePassword
+    ? p(`Sign in with your email <strong>${esc(o.email)}</strong> and this one-time password:`) +
+      `<p style="margin:0 0 14px;"><code style="display:inline-block;background:#F3F4F6;padding:10px 14px;border-radius:6px;font-size:18px;font-weight:700;letter-spacing:.5px;">${esc(o.oneTimePassword)}</code></p>` +
+      p("You'll be asked to choose your own new password straight away. Please don't share this one.")
+    : p("Your admin will give you your first password. You'll be asked to choose your own new one when you sign in.");
+  const text = [
+    `Welcome to ${o.store.name}, ${o.name}.`,
+    `Your account is ready, with the role: ${role}.`,
+    o.oneTimePassword ? `Sign in with ${o.email} and this one-time password: ${o.oneTimePassword}\nYou'll be asked to choose your own new password straight away.` : "Your admin will give you your first password.",
+    `Sign in: ${o.signInUrl}`,
+  ].join("\n\n");
+  return {
+    subject: `Welcome to ${o.store.name}: your account is ready`,
+    html: shell(o.store, `Welcome, ${o.name}`, p(`Your <strong>${esc(role)}</strong> account at ${esc(o.store.name)} is ready.`) + credentials + button(o.signInUrl, "Sign in")),
+    text,
+  };
+}
+
+export function passwordChangedEmail(o: { name: string; whenText: string; signInUrl: string; store: StoreInfo }): Rendered {
+  const help = o.store.phone ? `call ${o.store.phone}` : "contact your admin";
+  return {
+    subject: "Your password was changed",
+    html: shell(
+      o.store,
+      "Your password was changed",
+      p(`Hello ${esc(o.name)}, the password on your ${esc(o.store.name)} staff account was changed on <strong>${esc(o.whenText)}</strong>.`) +
+        p(`If this wasn't you, ${esc(help)} straight away so your account can be secured.`) +
+        button(o.signInUrl, "Sign in")
+    ),
+    text: `Hello ${o.name}, the password on your ${o.store.name} staff account was changed on ${o.whenText}.\n\nIf this wasn't you, ${help} straight away.\n\nSign in: ${o.signInUrl}`,
+  };
+}
+
+interface Line {
+  name: string;
+  size?: string | null;
+  color?: string | null;
+  quantity: number;
+  unitPrice?: number;
+  lineTotal: number;
+}
+
+const variantOf = (l: Line) => [l.size, l.color].filter(Boolean).join(" / ");
+
+function itemsTable(items: Line[]): string {
+  const rows = items
+    .map((l) => {
+      const v = variantOf(l);
+      return `<tr><td style="padding:8px 0;border-bottom:1px solid #eee;font-size:14px;">${esc(l.name)}${v ? `<br><span style="color:#6b7280;font-size:12px;">${esc(v)}</span>` : ""}</td><td style="padding:8px 8px;border-bottom:1px solid #eee;font-size:14px;text-align:center;">${esc(l.quantity)}</td><td style="padding:8px 0;border-bottom:1px solid #eee;font-size:14px;text-align:right;">${esc(formatKobo(l.lineTotal))}</td></tr>`;
+    })
+    .join("");
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 16px;"><tr><th align="left" style="font-size:12px;color:#6b7280;padding-bottom:4px;">Item</th><th style="font-size:12px;color:#6b7280;padding-bottom:4px;">Qty</th><th align="right" style="font-size:12px;color:#6b7280;padding-bottom:4px;">Amount</th></tr>${rows}</table>`;
+}
+
+const PAYMENT_LABEL = { cash: "Cash", pos_terminal: "Card" } as const;
+
+export function posReceiptEmail(o: {
+  store: StoreInfo;
+  orderNumber: string;
+  dateText: string;
+  items: Line[];
+  subtotal: number;
+  discountAmount: number;
+  total: number;
+  paymentMethod: keyof typeof PAYMENT_LABEL;
+  cashierName: string;
+}): Rendered {
+  const row = (label: string, value: string, strong = false) =>
+    `<tr><td style="padding:3px 0;font-size:14px;${strong ? "font-weight:800;font-size:16px;" : ""}">${esc(label)}</td><td align="right" style="padding:3px 0;font-size:14px;${strong ? "font-weight:800;font-size:16px;" : ""}">${esc(value)}</td></tr>`;
+  const totals =
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">` +
+    row("Subtotal", formatKobo(o.subtotal)) +
+    (o.discountAmount > 0 ? row("Discount", `-${formatKobo(o.discountAmount)}`) : "") +
+    row("Total", formatKobo(o.total), true) +
+    row("Paid by", PAYMENT_LABEL[o.paymentMethod]) +
+    `</table>`;
+  const lines = o.items.map((l) => `${l.quantity} x ${l.name}${variantOf(l) ? ` (${variantOf(l)})` : ""}: ${formatKobo(l.lineTotal)}`);
+  return {
+    subject: `Your receipt from ${o.store.name}: ${o.orderNumber}`,
+    html: shell(o.store, "Thank you for your purchase", p(`Order <strong>${esc(o.orderNumber)}</strong> · ${esc(o.dateText)}`) + itemsTable(o.items) + totals + p(`<span style="color:#6b7280;font-size:13px;">Served by ${esc(o.cashierName)}. Keep this email for returns.</span>`)),
+    text: [`Receipt from ${o.store.name}`, `Order ${o.orderNumber} · ${o.dateText}`, ...lines, o.discountAmount > 0 ? `Discount: -${formatKobo(o.discountAmount)}` : "", `Total: ${formatKobo(o.total)}`, `Paid by: ${PAYMENT_LABEL[o.paymentMethod]}`, `Served by ${o.cashierName}`].filter(Boolean).join("\n"),
+  };
+}
+
+export function orderPaidEmail(o: { store: StoreInfo; name: string; orderNumber: string; items: Line[]; total: number; trackUrl: string }): Rendered {
+  return {
+    subject: `Payment received: order ${o.orderNumber}`,
+    html: shell(
+      o.store,
+      "We've received your payment",
+      p(`Thank you, ${esc(o.name)}. Your payment for order <strong>${esc(o.orderNumber)}</strong> was successful.`) +
+        itemsTable(o.items) +
+        p(`<strong>Total paid: ${esc(formatKobo(o.total))}</strong>`) +
+        p("Track your order any time with your order number and this email address.") +
+        button(o.trackUrl, "Track my order")
+    ),
+    text: `Thank you, ${o.name}. Your payment for order ${o.orderNumber} was successful.\n\n${o.items.map((l) => `${l.quantity} x ${l.name}: ${formatKobo(l.lineTotal)}`).join("\n")}\n\nTotal paid: ${formatKobo(o.total)}\n\nTrack your order: ${o.trackUrl}`,
+  };
+}
+
+const FLAG_WORDS: Record<string, { subject: string; line: string }> = {
+  in_review: { subject: "is being looked at", line: "An admin is now reviewing" },
+  resolved: { subject: "was resolved", line: "An admin marked as resolved" },
+  dismissed: { subject: "was closed", line: "An admin closed without changes" },
+  open: { subject: "was reopened", line: "An admin reopened" },
+};
+
+export function flagUpdatedEmail(o: { store: StoreInfo; name: string; productName: string; status: string; note: string | null }): Rendered {
+  const w = FLAG_WORDS[o.status] ?? FLAG_WORDS.in_review!;
+  return {
+    subject: `Your flag on "${o.productName}" ${w.subject}`,
+    html: shell(
+      o.store,
+      `Your flag ${w.subject}`,
+      p(`Hello ${esc(o.name)}. ${esc(w.line)} your flag on <strong>${esc(o.productName)}</strong>.`) +
+        (o.note ? `<p style="margin:0 0 14px;padding:10px 14px;border-left:3px solid ${GOLD};background:#FAFAF7;font-size:15px;line-height:1.5;">${esc(o.note)}</p>` : "")
+    ),
+    text: `Hello ${o.name}. ${w.line} your flag on ${o.productName}.${o.note ? `\n\nAdmin's note: ${o.note}` : ""}`,
+  };
+}
+
+export function accountAccessEmail(o: { store: StoreInfo; name: string; blocked: boolean; signInUrl?: string }): Rendered {
+  const help = o.store.phone ? `Call ${o.store.phone} if you think this is a mistake.` : "Speak to your admin if you think this is a mistake.";
+  if (o.blocked) {
+    return {
+      subject: "Your staff access has been suspended",
+      html: shell(o.store, "Your access was suspended", p(`Hello ${esc(o.name)}, an admin has suspended your ${esc(o.store.name)} staff access. You can't sign in until it's restored.`) + p(esc(help))),
+      text: `Hello ${o.name}, an admin has suspended your ${o.store.name} staff access. You can't sign in until it's restored. ${help}`,
+    };
+  }
+  return {
+    subject: "Your staff access has been restored",
+    html: shell(o.store, "Your access is back", p(`Hello ${esc(o.name)}, your ${esc(o.store.name)} staff access has been restored.`) + (o.signInUrl ? button(o.signInUrl, "Sign in") : "")),
+    text: `Hello ${o.name}, your ${o.store.name} staff access has been restored.${o.signInUrl ? ` Sign in: ${o.signInUrl}` : ""}`,
+  };
+}

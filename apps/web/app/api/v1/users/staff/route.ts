@@ -8,6 +8,7 @@ import { clientIp, logActivity } from "../../_lib/activity";
 import { generateTempPassword } from "../../_lib/temp-password";
 import { requireAdmin } from "../../_lib/staff-access";
 import { serverError } from "../../_lib/http";
+import { notifyStaffWelcome } from "../../_lib/email/events";
 
 export async function GET(request: NextRequest) {
   try {
@@ -132,8 +133,26 @@ export async function POST(request: NextRequest) {
     ip: clientIp(request),
   });
 
+  // Only a real `true` puts the password in the mail; the admin still sees it on screen either way.
+  const emailCredentials = (body as Record<string, unknown>).email_credentials === true;
+  const welcome = await notifyStaffWelcome(serviceClient, {
+    name: full_name,
+    role,
+    email,
+    oneTimePassword: emailCredentials ? password : undefined,
+  });
+
   return NextResponse.json(
-    { data: { id: userId, email, full_name, role, temporary_password: password } },
+    {
+      data: {
+        id: userId,
+        email,
+        full_name,
+        role,
+        temporary_password: password,
+        email_delivery: { sent: welcome.ok, skipped: !welcome.ok && welcome.skipped === true },
+      },
+    },
     { status: 201, headers: { "Cache-Control": "no-store" } }
   );
 }

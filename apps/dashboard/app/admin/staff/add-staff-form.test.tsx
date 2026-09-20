@@ -32,7 +32,9 @@ describe("AddStaffForm", () => {
   it("explains that an admin has full access instead of showing switches", () => {
     setup();
     fireEvent.change(screen.getByLabelText(/role/i), { target: { value: "admin" } });
-    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    // Only the welcome-message option remains; no permission switches.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.getByRole("checkbox", { name: /include the one-time password/i })).toBeInTheDocument();
     expect(screen.getByText(/full access/i)).toBeInTheDocument();
   });
 
@@ -65,6 +67,39 @@ describe("AddStaffForm", () => {
     expect(await screen.findByText("Xy12abc!")).toBeInTheDocument();
     expect(screen.getByText(/won't be shown again/i)).toBeInTheDocument();
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
+  });
+
+  it("asks the server to email the password only when the box is ticked", async () => {
+    const { onCreate } = setup();
+    fill();
+    const box = screen.getByRole("checkbox", { name: /include the one-time password/i });
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+    await waitFor(() => expect(onCreate).toHaveBeenCalled());
+    expect((onCreate as ReturnType<typeof vi.fn>).mock.calls[0]![1]).toEqual({ emailCredentials: true });
+  });
+
+  it("does not ask for the password to be emailed by default", async () => {
+    const { onCreate } = setup();
+    fill();
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+    await waitFor(() => expect(onCreate).toHaveBeenCalled());
+    expect((onCreate as ReturnType<typeof vi.fn>).mock.calls[0]![1]).toEqual({ emailCredentials: false });
+  });
+
+  it("says whether the welcome email went out", async () => {
+    setup({ onCreate: vi.fn().mockResolvedValue({ ok: true, data: { ...CREATED, email_delivery: { sent: true, skipped: false } } }) });
+    fill();
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+    expect(await screen.findByText(/welcome email sent to ada@example.com/i)).toBeInTheDocument();
+  });
+
+  it("tells the admin to hand over the password when email isn't set up", async () => {
+    setup({ onCreate: vi.fn().mockResolvedValue({ ok: true, data: { ...CREATED, email_delivery: { sent: false, skipped: true } } }) });
+    fill();
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+    expect(await screen.findByText(/email isn't set up/i)).toBeInTheDocument();
   });
 
   it("refreshes the list only when the credentials are dismissed", async () => {
