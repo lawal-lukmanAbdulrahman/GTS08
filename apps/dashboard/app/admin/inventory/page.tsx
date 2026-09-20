@@ -154,6 +154,8 @@ function resolveVariantImage(
 export default function AdminInventoryPage() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [movementsError, setMovementsError] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState<boolean>(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
@@ -243,200 +245,28 @@ export default function AdminInventoryPage() {
 
   const fetchInventory = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const token = localStorage.getItem("gts_token");
       const res = await fetch(`${API_BASE}/inventory`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data && json.data.length > 0) {
-          setInventory(json.data);
-          return;
-        }
+      if (!res.ok) {
+        setLoadError(res.status === 403 ? "You don't have access to inventory." : "We couldn't load the stock list.");
+        return;
       }
-      // If DB has no inventory records yet, load fallback sample catalog
-      setInventory(getFallbackInventory());
+      const json = await res.json();
+      setInventory(json.data ?? []);
     } catch {
-      setInventory(getFallbackInventory());
+      setLoadError("We couldn't load the stock list. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const getFallbackInventory = (): InventoryItem[] => [
-    {
-      id: "inv-1",
-      variant_id: "var-1",
-      product_name: "Cool back pack",
-      product_slug: "cool-back-pack",
-      sku: "BP-BLK-2026",
-      brand: "GTS",
-      category_name: "Fashion",
-      variant_size: "Standard",
-      variant_color: "Midnight Slate",
-      variant_color_hex: "#1E293B",
-      quantity: 50,
-      reserved_quantity: 0,
-      available_quantity: 50,
-      low_stock_threshold: 10,
-      unit_price: 3500000,
-      cost_price: 2200000,
-      total_valuation: 1750000,
-      last_restocked_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-      image: "/products/backpack.png",
-    },
-    {
-      id: "inv-2",
-      variant_id: "var-2",
-      product_name: "DeLonghi 2 Slice Retro Electric Toaster",
-      product_slug: "delonghi-2-slice-retro-electric-toaster",
-      sku: "DL-TST-2026",
-      brand: "DeLonghi",
-      category_name: "Appliances",
-      variant_size: "2-Slice",
-      variant_color: "Chrome Red",
-      variant_color_hex: "#DC2626",
-      quantity: 3,
-      reserved_quantity: 0,
-      available_quantity: 3,
-      low_stock_threshold: 5,
-      unit_price: 2200000,
-      cost_price: 1500000,
-      total_valuation: 66000,
-      last_restocked_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-      image: "/products/toaster.png",
-    },
-    {
-      id: "inv-3",
-      variant_id: "var-3",
-      product_name: "Tri-Ply Heavy Duty Stainless Steel Stock Pot",
-      product_slug: "tri-ply-heavy-duty-stainless-steel-stock-pot",
-      sku: "ST-POT-32CM",
-      brand: "MasterChef",
-      category_name: "Appliances",
-      variant_size: "32cm / 12L",
-      variant_color: "Polished Steel",
-      variant_color_hex: "#94A3B8",
-      quantity: 36,
-      reserved_quantity: 2,
-      available_quantity: 34,
-      low_stock_threshold: 8,
-      unit_price: 2800000,
-      cost_price: 1800000,
-      total_valuation: 952000,
-      last_restocked_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-      image: "/products/stockpot.png",
-    },
-    {
-      id: "inv-4",
-      variant_id: "var-4",
-      product_name: "Hurom Slow Masticating Cold Press Juicer",
-      product_slug: "hurom-slow-masticating-cold-press-juicer",
-      sku: "HR-JCR-H300",
-      brand: "Hurom",
-      category_name: "Appliances",
-      variant_size: "Standard",
-      variant_color: "Matte Black",
-      variant_color_hex: "#0F172A",
-      quantity: 2,
-      reserved_quantity: 0,
-      available_quantity: 2,
-      low_stock_threshold: 5,
-      unit_price: 5500000,
-      cost_price: 3900000,
-      total_valuation: 110000,
-      last_restocked_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-      image: "/products/juicer.png",
-    },
-    {
-      id: "inv-5",
-      variant_id: "var-5",
-      product_name: "OX Heavy Duty 18\" Standing Pedestal Fan",
-      product_slug: "ox-heavy-duty-18-standing-pedestal-fan",
-      sku: "OX-FAN-18PRO",
-      brand: "OX",
-      category_name: "Appliances",
-      variant_size: "18-inch",
-      variant_color: "Industrial Black",
-      variant_color_hex: "#18181B",
-      quantity: 1,
-      reserved_quantity: 0,
-      available_quantity: 1,
-      low_stock_threshold: 6,
-      unit_price: 3500000,
-      cost_price: 2400000,
-      total_valuation: 35000,
-      last_restocked_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-      image: "/products/fan.png",
-    },
-    {
-      id: "inv-6",
-      variant_id: "var-6",
-      product_name: "LG NeoChef Inverter Microwave Oven",
-      product_slug: "lg-neochef-inverter-microwave-oven",
-      sku: "LG-MW-25L",
-      brand: "LG",
-      category_name: "Appliances",
-      variant_size: "25 Liters",
-      variant_color: "Smoky Mirror Glass",
-      variant_color_hex: "#475569",
-      quantity: 1,
-      reserved_quantity: 0,
-      available_quantity: 1,
-      low_stock_threshold: 4,
-      unit_price: 7200000,
-      cost_price: 5400000,
-      total_valuation: 72000,
-      last_restocked_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-      image: "/products/microwave.png",
-    },
-    {
-      id: "inv-7",
-      variant_id: "var-7",
-      product_name: "PlayStation 5 Console Spider-Man 2 Bundle",
-      product_slug: "playstation-5-console-spider-man-2-bundle",
-      sku: "PS5-SM2-BNDL",
-      brand: "Sony",
-      category_name: "Gaming",
-      variant_size: "Disc Edition",
-      variant_color: "Symbiote Red/Black",
-      variant_color_hex: "#991B1B",
-      quantity: 0,
-      reserved_quantity: 0,
-      available_quantity: 0,
-      low_stock_threshold: 5,
-      unit_price: 68000000,
-      cost_price: 58000000,
-      total_valuation: 0,
-      last_restocked_at: new Date(Date.now() - 86400000 * 14).toISOString(),
-      image: "/products/spiderman_ps5.png",
-    },
-    {
-      id: "inv-8",
-      variant_id: "var-8",
-      product_name: "Nexus Twin Tub Washing Machine",
-      product_slug: "nexus-twin-tub-washing-machine",
-      sku: "NX-WM-TT-2026",
-      brand: "Nexus",
-      category_name: "Appliances",
-      variant_size: "7.5 KG",
-      variant_color: "White/Blue",
-      variant_color_hex: "#2563EB",
-      quantity: 12,
-      reserved_quantity: 1,
-      available_quantity: 11,
-      low_stock_threshold: 4,
-      unit_price: 18500000,
-      cost_price: 14500000,
-      total_valuation: 2035000,
-      last_restocked_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-      image: "/products/washing_machine.png",
-    },
-  ];
-
   const fetchMovements = async (variantId?: string) => {
     setMovementsLoading(true);
+    setMovementsError(null);
     try {
       const url = variantId
         ? `${API_BASE}/inventory/movements?variant_id=${variantId}`
@@ -446,41 +276,16 @@ export default function AdminInventoryPage() {
       if (res.ok) {
         const json = await res.json();
         setMovementsList(json.data || []);
-        return;
+      } else {
+        setMovementsList([]);
+        setMovementsError("We couldn't load the stock history.");
       }
-    } catch {}
-
-    // Fallback sample movements
-    setMovementsList([
-      {
-        id: "mv-1",
-        variant_id: variantId || "var-1",
-        delta: 50,
-        reason: "restock",
-        notes: "Initial warehouse shipment received",
-        created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-        actor: { full_name: "Admin Stock Manager", role: "admin" },
-      },
-      {
-        id: "mv-2",
-        variant_id: variantId || "var-3",
-        delta: -2,
-        reason: "sale_pos",
-        notes: "POS Terminal checkout #POS-1092",
-        created_at: new Date(Date.now() - 3600000 * 12).toISOString(),
-        actor: { full_name: "Lagos Cashier Desk", role: "cashier" },
-      },
-      {
-        id: "mv-3",
-        variant_id: variantId || "var-7",
-        delta: -5,
-        reason: "sale_online",
-        notes: "Online Store Order #GTS-8842",
-        created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-        actor: { full_name: "System Webhook", role: "system" },
-      },
-    ]);
-    setMovementsLoading(false);
+    } catch {
+      setMovementsList([]);
+      setMovementsError("We couldn't load the stock history. Check your connection and try again.");
+    } finally {
+      setMovementsLoading(false);
+    }
   };
 
   const handleOpenMovementsDrawer = (inv?: InventoryItem) => {
@@ -821,6 +626,13 @@ export default function AdminInventoryPage() {
             { label: "Overview" },
           ]}
         />
+
+        {loadError && (
+          <div role="alert" className="flex items-center justify-between gap-3 rounded-[8px] border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900 px-4 py-3 text-sm text-red-800 dark:text-red-200">
+            <span>{loadError}</span>
+            <button type="button" onClick={fetchInventory} className="font-semibold underline">Try again</button>
+          </div>
+        )}
 
         {/* Title & Action Buttons Row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-0.5">
@@ -2280,6 +2092,10 @@ export default function AdminInventoryPage() {
                     {[1, 2, 3, 4].map((i) => (
                       <div key={i} className="h-16 bg-gray-100 dark:bg-[#252525] rounded-xl animate-pulse" />
                     ))}
+                  </div>
+                ) : movementsError ? (
+                  <div role="alert" className="text-center py-12 text-red-700 dark:text-red-300 text-sm">
+                    {movementsError}
                   </div>
                 ) : movementsList.length === 0 ? (
                   <div className="text-center py-12 text-gray-400 font-mono text-xs">
