@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
+import { requirePermission } from "../../_lib/staff-access";
 
 export async function GET(request: NextRequest) {
+  const access = await requirePermission(request, "can_manage_inventory");
+  if (!access.ok) return access.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const variantId = searchParams.get("variant_id");
-    const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 100);
+    const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50), 100);
 
     const serviceClient = createServiceClient();
 

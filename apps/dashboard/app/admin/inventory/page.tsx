@@ -1,5 +1,6 @@
 "use client";
 
+import { putInventory } from "../../lib/inventory-api";
 import { API_BASE } from "../../lib/api-base";
 import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
@@ -440,7 +441,8 @@ export default function AdminInventoryPage() {
       const url = variantId
         ? `${API_BASE}/inventory/movements?variant_id=${variantId}`
         : `${API_BASE}/inventory/movements`;
-      const res = await fetch(url);
+      const token = localStorage.getItem("gts_token");
+      const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (res.ok) {
         const json = await res.json();
         setMovementsList(json.data || []);
@@ -530,22 +532,17 @@ export default function AdminInventoryPage() {
     setAdjustSubmitting(true);
     const targetVariantId = adjustModalItem.variant_id || adjustModalItem.id;
 
-    try {
-      const token = localStorage.getItem("gts_token");
-      await idempotentFetch(`${API_BASE}/inventory/${targetVariantId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          adjustment_type: adjustType,
-          quantity: parsedQty,
-          reason: adjustReason,
-          notes: adjustNotes || null,
-        }),
-      });
-    } catch {}
+    const saved = await putInventory(targetVariantId, {
+      adjustment_type: adjustType,
+      quantity: parsedQty,
+      reason: adjustReason,
+      notes: adjustNotes || null,
+    });
+    if (!saved.ok) {
+      setAdjustSubmitting(false);
+      showToast(saved.message);
+      return;
+    }
 
     // Optimistic state update
     setInventory((prev) =>
@@ -589,19 +586,12 @@ export default function AdminInventoryPage() {
     setThresholdSubmitting(true);
     const targetVariantId = thresholdModalItem.variant_id || thresholdModalItem.id;
 
-    try {
-      const token = localStorage.getItem("gts_token");
-      await idempotentFetch(`${API_BASE}/inventory/${targetVariantId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          low_stock_threshold: parsedThreshold,
-        }),
-      });
-    } catch {}
+    const saved = await putInventory(targetVariantId, { low_stock_threshold: parsedThreshold });
+    if (!saved.ok) {
+      setThresholdSubmitting(false);
+      showToast(saved.message);
+      return;
+    }
 
     // Optimistic update
     setInventory((prev) =>
@@ -627,13 +617,29 @@ export default function AdminInventoryPage() {
 
     setBulkSubmitting(true);
 
-    // Apply optimistic updates to all selected items
+    // Ask the server first; only the variants it accepted are updated on screen.
+    const succeeded = new Set<string>();
+    let firstError: string | null = null;
+    for (const itemId of selectedItems) {
+      const item = inventory.find((i) => i.id === itemId);
+      if (!item) continue;
+      const saved = await putInventory(item.variant_id || item.id, {
+        adjustment_type: bulkAdjustType,
+        quantity: parsedQty,
+        reason: bulkAdjustReason,
+        notes: `Bulk adjustment across ${selectedItems.length} selected variants`,
+      });
+      if (saved.ok) succeeded.add(itemId);
+      else firstError = firstError ?? saved.message;
+    }
+
     setInventory((prev) =>
       prev.map((item) => {
-        if (selectedItems.includes(item.id)) {
+        if (succeeded.has(item.id)) {
           let newQty = item.quantity;
           if (bulkAdjustType === "add") newQty += parsedQty;
           else if (bulkAdjustType === "set") newQty = parsedQty;
+          else if (bulkAdjustType === "remove") newQty = Math.max(0, newQty - parsedQty);
 
           const newAvail = Math.max(0, newQty - item.reserved_quantity);
           const unitP = item.unit_price > 100000 ? item.unit_price / 100 : item.unit_price;
@@ -650,35 +656,16 @@ export default function AdminInventoryPage() {
       })
     );
 
-    // Async batch call to backend
-    try {
-      const token = localStorage.getItem("gts_token");
-      for (const itemId of selectedItems) {
-        const item = inventory.find((i) => i.id === itemId);
-        if (item) {
-          const targetVariantId = item.variant_id || item.id;
-          fetch(`${API_BASE}/inventory/${targetVariantId}`, {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({
-              adjustment_type: bulkAdjustType,
-              quantity: parsedQty,
-              reason: bulkAdjustReason,
-              notes: `Bulk adjustment across ${selectedItems.length} selected variants`,
-            }),
-          }).catch(() => {});
-        }
-      }
-    } catch {}
-
+    const attempted = selectedItems.length;
     setBulkSubmitting(false);
     setShowBulkAdjustModal(false);
     setBulkAdjustQty("");
     setSelectedItems([]);
-    showToast(`Bulk updated ${selectedItems.length} inventory variants successfully!`);
+    if (firstError) {
+      showToast(`Updated ${succeeded.size} of ${attempted} variants. ${firstError}`);
+    } else {
+      showToast(`Bulk updated ${succeeded.size} inventory variants successfully!`);
+    }
   };
 
   const formatNaira = (amount: number) => {

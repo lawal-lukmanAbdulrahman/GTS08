@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
+import { requirePermission } from "../_lib/staff-access";
 
 function resolveVariantImage(
   productName: string,
@@ -91,6 +92,10 @@ function resolveVariantImage(
 }
 
 export async function GET(request: NextRequest) {
+  // Stock levels and product costs are for the people who manage inventory, not the public.
+  const access = await requirePermission(request, "can_manage_inventory");
+  if (!access.ok) return access.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const lowStockOnly = searchParams.get("low_stock") === "true";
