@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
+import { optionalStaff } from "../../_lib/staff-access";
+import { canSeeCost, stripCostFields } from "../../_lib/privacy";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
@@ -43,6 +45,10 @@ export async function GET(
     } else {
       query = query.eq("slug", slug);
     }
+
+    // The public sees active products only; staff can open a draft to edit it.
+    const staff = await optionalStaff(request);
+    if (!staff) query = query.eq("status", "active");
 
     const { data: product, error } = await query.maybeSingle();
 
@@ -85,15 +91,15 @@ export async function GET(
         sort_order: img.sort_order || 0,
       }));
 
-    return NextResponse.json({
-      data: {
-        ...product,
-        description_images: descImages,
-        description_image_urls: descImages.map((img: any) => img.url),
-        variants,
-        reviews: reviews || [],
-      },
-    });
+    const payload = {
+      ...product,
+      description_images: descImages,
+      description_image_urls: descImages.map((img: any) => img.url),
+      variants,
+      reviews: reviews || [],
+    };
+
+    return NextResponse.json({ data: canSeeCost(staff) ? payload : stripCostFields(payload) });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || "Internal server error", code: "SERVER_ERROR" },
