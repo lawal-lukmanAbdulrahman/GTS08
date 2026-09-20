@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../../../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../../../_lib/staff-access";
+import { serverError } from "../../../_lib/http";
 
 // PATCH /api/v1/inquiries/[id]/status
 // Restricted to staff/admin, wrapped in idempotency
@@ -49,6 +50,6 @@ export const PATCH = withIdempotency(async function PATCH(
 
     return NextResponse.json({ success: true, data });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 });

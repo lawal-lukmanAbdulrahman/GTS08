@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { sanitizeEmail, sanitizeSqlInput, getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
+import { serverError } from "../_lib/http";
 
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
@@ -263,9 +264,6 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     });
   } catch (err: any) {
     console.error("Checkout fatal error:", err);
-    return NextResponse.json(
-      { error: err.message || "Internal server error during checkout.", code: "SERVER_ERROR" },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 });

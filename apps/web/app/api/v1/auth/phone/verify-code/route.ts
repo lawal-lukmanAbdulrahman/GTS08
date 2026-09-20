@@ -5,6 +5,7 @@ import { validateSqlSafe } from "@gts/utils";
 import { normalizePhoneNumber } from "@/../lib/termii";
 import { verifyOtpForPhone } from "@/../lib/phone-otp-store";
 import { createServiceClient } from "@gts/database";
+import { serverError } from "../../../_lib/http";
 
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
@@ -93,9 +94,6 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     });
   } catch (err: any) {
     console.error("[PHONE VERIFY ERROR]", err);
-    return NextResponse.json(
-      { error: err.message || "Failed to verify phone code", code: "SERVER_ERROR" },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 });

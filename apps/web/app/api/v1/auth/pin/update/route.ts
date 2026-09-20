@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from "../../utils";
 import { createServiceClient } from "@gts/database";
 import { hashPin, verifyPinTicket } from "@/../lib/pin-security";
 import { withIdempotency } from "@/lib/idempotency";
+import { serverError } from "../../../_lib/http";
 
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
@@ -61,9 +62,6 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     });
   } catch (err: any) {
     console.error("PIN update error:", err);
-    return NextResponse.json(
-      { error: err.message || "Failed to update PIN.", code: "SERVER_ERROR" },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 });

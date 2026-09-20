@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
 import { requirePermission } from "../_lib/staff-access";
+import { serverError } from "../_lib/http";
 
 const STOREFRONT_CATEGORIES = [
   {
@@ -195,6 +196,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ data: category }, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 }

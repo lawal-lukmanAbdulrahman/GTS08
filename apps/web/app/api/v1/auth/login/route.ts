@@ -5,10 +5,15 @@ import { sanitizeEmail } from "../utils";
 import { validateSqlSafe } from "@gts/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { clientIp, logActivity } from "../../_lib/activity";
+import { serverError } from "../../_lib/http";
+import { countLoginAttempt } from "../../_lib/login-limit";
 
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      return NextResponse.json({ error: "Send the email and password as a JSON object.", code: "INVALID_BODY" }, { status: 400 });
+    }
 
     const emailCheck = validateSqlSafe(body.email, "Email");
     if (!emailCheck.isSafe) {
@@ -35,6 +40,15 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Invalid email format. Please enter a valid email address.", code: "INVALID_INPUT", field: "email" },
         { status: 400 }
+      );
+    }
+
+    // Stop guessing at one account, whichever address it comes from.
+    const attempt = await countLoginAttempt(email);
+    if (!attempt.allowed) {
+      return NextResponse.json(
+        { error: "Too many sign-in attempts for this account. Please wait a minute and try again.", code: "RATE_LIMIT_EXCEEDED", retryAfter: attempt.retryAfterSeconds },
+        { status: 429, headers: { "Retry-After": String(attempt.retryAfterSeconds) } }
       );
     }
 
@@ -111,9 +125,6 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       },
     });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Internal server error", code: "SERVER_ERROR" },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 });

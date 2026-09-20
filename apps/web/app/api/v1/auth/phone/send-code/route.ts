@@ -9,6 +9,7 @@ import {
   sendPhoneVerificationCode,
 } from "@/../lib/termii";
 import { saveOtpForPhone } from "@/../lib/phone-otp-store";
+import { serverError } from "../../../_lib/http";
 
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
@@ -95,9 +96,6 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     });
   } catch (err: any) {
     console.error("[PHONE SEND CODE ERROR]", err);
-    return NextResponse.json(
-      { error: err.message || "Failed to send verification code", code: "SERVER_ERROR" },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 });

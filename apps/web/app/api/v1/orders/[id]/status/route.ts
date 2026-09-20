@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../../../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../../../_lib/staff-access";
+import { serverError } from "../../../_lib/http";
 
 export const PUT = withIdempotency(async function PUT(
   request: NextRequest,
@@ -88,6 +89,6 @@ export const PUT = withIdempotency(async function PUT(
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 });

@@ -5,6 +5,7 @@ import { getAuthenticatedUser } from "../../../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { sanitizeXss } from "@gts/utils";
 import { optionalStaff } from "../../../_lib/staff-access";
+import { serverError } from "../../../_lib/http";
 
 // GET /api/v1/inquiries/[id]/messages
 // Secure thread retrieval: must be customer owner or staff/admin
@@ -86,7 +87,7 @@ export async function GET(
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 }
 
@@ -216,6 +217,6 @@ export const POST = withIdempotency(async function POST(
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 });

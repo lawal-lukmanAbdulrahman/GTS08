@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePermission } from "../../_lib/staff-access";
+import { serverError } from "../../_lib/http";
 
 export async function GET(request: NextRequest) {
   const access = await requirePermission(request, "can_manage_inventory");
@@ -49,6 +50,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: movements || [] });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 }

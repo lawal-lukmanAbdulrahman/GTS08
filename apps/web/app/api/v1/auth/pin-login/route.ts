@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, createServiceClient } from "@gts/database";
 import { hashPin } from "@/../lib/pin-security";
 import { withIdempotency } from "@/lib/idempotency";
+import { serverError } from "../../_lib/http";
 
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
@@ -91,6 +92,6 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    return serverError(err);
   }
 });

@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from "../utils";
 import { createServerClient, createServiceClient } from "@gts/database";
 import { withIdempotency } from "@/lib/idempotency";
 import { validateSqlSafe, sanitizeSafeText } from "@gts/utils";
+import { serverError } from "../../_lib/http";
 
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
@@ -86,9 +87,6 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     });
   } catch (err: any) {
     console.error("Delete account error:", err);
-    return NextResponse.json(
-      { error: err.message || "Internal server error", code: "SERVER_ERROR" },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 });

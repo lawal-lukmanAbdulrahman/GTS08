@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from "../../utils";
 import { createServerClient } from "@gts/database";
 import { generatePinTicket } from "@/../lib/pin-security";
 import { withIdempotency } from "@/lib/idempotency";
+import { serverError } from "../../../_lib/http";
 
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
@@ -42,9 +43,6 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     });
   } catch (err: any) {
     console.error("PIN reset with password error:", err);
-    return NextResponse.json(
-      { error: err.message || "Failed to verify password.", code: "SERVER_ERROR" },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 });

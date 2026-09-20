@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { optionalStaff } from "../../_lib/staff-access";
 import { canSeeCost, stripCostFields } from "../../_lib/privacy";
+import { serverError } from "../../_lib/http";
 
 export async function GET(
   request: NextRequest,
@@ -101,9 +102,6 @@ export async function GET(
 
     return NextResponse.json({ data: canSeeCost(staff) ? payload : stripCostFields(payload) });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Internal server error", code: "SERVER_ERROR" },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 }

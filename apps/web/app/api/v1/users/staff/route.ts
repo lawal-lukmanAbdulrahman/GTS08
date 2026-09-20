@@ -7,6 +7,7 @@ import { effectivePermissions, requireSuperAdmin } from "../../_lib/staff-access
 import { clientIp, logActivity } from "../../_lib/activity";
 import { generateTempPassword } from "../../_lib/temp-password";
 import { requireAdmin } from "../../_lib/staff-access";
+import { serverError } from "../../_lib/http";
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: staffWithPerms });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 }
 

@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../../_lib/staff-access";
+import { serverError } from "../../_lib/http";
 
 // ── GET /api/v1/products/drafts ──────────────────────────────────────────────
 // Fetch all drafts or a specific draft by product_id or draft id
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: drafts || [] });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 }
 
@@ -148,7 +149,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
 
     return NextResponse.json({ data: newDraft }, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 });
 
@@ -184,6 +185,6 @@ export const DELETE = withIdempotency(async function DELETE(request: NextRequest
 
     return NextResponse.json({ success: true, message: "Draft deleted safely. Live product untouched." });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 });

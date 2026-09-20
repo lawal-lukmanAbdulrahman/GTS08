@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient, createServiceClient } from "@gts/database/server";
+import { serverError } from "../../../_lib/http";
 
 export async function POST(request: NextRequest) {
   try {
@@ -109,9 +110,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (err: any) {
     console.error("Error in passkey registration verification:", err);
-    return NextResponse.json(
-      { error: err.message || "Failed to verify passkey registration." },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 }

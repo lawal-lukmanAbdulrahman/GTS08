@@ -102,4 +102,11 @@ describe("route policy manifest", () => {
     walk(ROOT);
     expect(offenders).toEqual([]);
   });
+
+  it("no route echoes an internal error message from its catch-all (use serverError)", () => {
+    const offenders = discovered
+      .filter((d) => /error: \w+\.message \|\|/.test(d.body))
+      .map((d) => `${d.method} /${d.route}`);
+    expect(offenders).toEqual([]);
+  });
 });

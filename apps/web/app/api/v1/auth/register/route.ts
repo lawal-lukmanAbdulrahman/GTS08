@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { sanitizeEmail } from "../utils";
 import { validateSqlSafe, sanitizeSafeText, sanitizeDigitsOnly } from "@gts/utils";
 import { withIdempotency } from "@/lib/idempotency";
+import { serverError } from "../../_lib/http";
 
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
@@ -121,9 +122,6 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Internal server error" },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 });

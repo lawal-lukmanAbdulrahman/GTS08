@@ -8,6 +8,7 @@ import { withIdempotency } from "@/lib/idempotency";
 import { sanitizeSafeText, sanitizeUrl } from "@gts/utils";
 import type { BroadcastItem } from "../../../../lib/notifications";
 import { requireAdmin } from "../_lib/staff-access";
+import { serverError } from "../_lib/http";
 
 // ─── File-backed & In-memory broadcast campaigns store ───────────────────────
 let broadcastCampaigns: BroadcastItem[] = [];
@@ -247,10 +248,7 @@ export const DELETE = withIdempotency(async function DELETE(request: NextRequest
       message: "Broadcast deleted successfully",
     });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Failed to delete broadcast" },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 });
 
@@ -448,10 +446,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       message: "Broadcast notification updated successfully",
     });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Internal server error", code: "SERVER_ERROR" },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 });
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
+import { serverError } from "../../_lib/http";
 
 export async function GET(request: NextRequest) {
   try {
@@ -57,9 +58,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: order });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Internal server error", code: "SERVER_ERROR" },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 }

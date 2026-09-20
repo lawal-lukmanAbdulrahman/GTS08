@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../_lib/staff-access";
+import { serverError } from "../_lib/http";
 
 export async function GET(request: NextRequest) {
   try {
@@ -237,10 +238,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Internal server error", code: "SERVER_ERROR" },
-      { status: 500 }
-    );
+    return serverError(err);
   }
 }
 
@@ -430,7 +428,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
 
     return NextResponse.json({ data: product }, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 });
 
@@ -676,6 +674,6 @@ export const PUT = withIdempotency(async function PUT(request: NextRequest) {
 
     return NextResponse.json({ data: updatedProduct });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 });

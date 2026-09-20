@@ -5,6 +5,7 @@ import { getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { sanitizeSafeText, sanitizeXss } from "@gts/utils";
 import { requirePermission } from "../_lib/staff-access";
+import { serverError } from "../_lib/http";
 
 // GET /api/v1/inquiries
 // - If ?productId=... & user authenticated: returns customer's private inquiry thread for that product.
@@ -242,7 +243,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 }
 
@@ -376,6 +377,6 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal server error", code: "SERVER_ERROR" }, { status: 500 });
+    return serverError(err);
   }
 });
