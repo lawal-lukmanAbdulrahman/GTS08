@@ -1,6 +1,6 @@
 import { formatWAT } from "@gts/utils";
 import { sendEmail, type SendResult } from "./send";
-import { accountAccessEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, type StoreInfo } from "./templates";
+import { accountAccessEmail, orderStatusEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, type StoreInfo } from "./templates";
 
 type Client = { from(table: string): any };
 
@@ -84,6 +84,22 @@ export function notifyOrderPaid(client: Client, orderId: string): Promise<void> 
         trackUrl: `${storefrontUrl()}/track`,
       }),
     });
+  }, undefined);
+}
+
+/** Tells the customer about the steps they care about (confirmed, shipped, delivered, cancelled). Internal steps are skipped. */
+export function notifyOrderStatus(client: Client, orderId: string, status: string): Promise<void> {
+  return safely(async () => {
+    const { data } = await client
+      .from("orders")
+      .select("order_number, paid_at, carrier_name, tracking_number, carrier_tracking_url, customer:customers(email, full_name)")
+      .eq("id", orderId)
+      .maybeSingle();
+    const o = data as { order_number: string; paid_at: string | null; carrier_name: string | null; tracking_number: string | null; carrier_tracking_url: string | null; customer: { email: string | null; full_name: string | null } | null } | null;
+    if (!o?.customer?.email) return;
+    const store = await storeInfo(client);
+    const mail = orderStatusEmail({ store, name: o.customer.full_name || "there", orderNumber: o.order_number, status, trackUrl: `${storefrontUrl()}/track`, carrierName: o.carrier_name, trackingNumber: o.tracking_number, trackingUrl: o.carrier_tracking_url, paid: !!o.paid_at });
+    if (mail) await sendEmail({ to: o.customer.email, ...mail });
   }, undefined);
 }
 

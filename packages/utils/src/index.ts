@@ -30,3 +30,4 @@ export { validateNewStaff, defaultGrants, STAFF_ROLES, STAFF_ROLE_LABELS, PERMIS
 export { validateOrderItems, isUuid, MAX_LINE_QUANTITY, MAX_ORDER_LINES, type OrderItem, type OrderItemsValidation } from "./order-items";
 export { consume, memoryStore, upstashStore, createRateLimitStore, planBuckets, userIdFromAuthHeader, type Bucket, type Caller, type RateLimitStore, type ConsumeResult } from "./rate-limit";
 export { receiptBrand, RECEIPT_THANKS, RECEIPT_WEBSITE, type ReceiptBrand } from "./receipt-brand";
+export { canTransition, nextStatuses, stockEffectOfCancel } from "./order-machine";

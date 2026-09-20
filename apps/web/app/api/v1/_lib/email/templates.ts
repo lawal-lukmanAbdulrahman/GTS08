@@ -157,6 +157,28 @@ export function posReceiptEmail(o: {
   };
 }
 
+const STATUS_WORDS: Record<string, { subject: (n: string) => string; title: string; line: string }> = {
+  confirmed: { subject: (n) => `Order ${n} is confirmed`, title: "Your order is confirmed", line: "We've confirmed your order and are getting it ready." },
+  shipped: { subject: (n) => `Order ${n} is on its way`, title: "Your order is on its way", line: "Your order has been handed to the courier." },
+  delivered: { subject: (n) => `Order ${n} was delivered`, title: "Your order was delivered", line: "Your order has been delivered. We hope you love it." },
+  cancelled: { subject: (n) => `Order ${n} was cancelled`, title: "Your order was cancelled", line: "Your order has been cancelled." },
+};
+
+/** A short update for the steps a customer cares about; null for internal steps (e.g. processing). */
+export function orderStatusEmail(o: { store: StoreInfo; name: string; orderNumber: string; status: string; trackUrl: string; carrierName?: string | null; trackingNumber?: string | null; trackingUrl?: string | null; paid?: boolean }): Rendered | null {
+  const words = STATUS_WORDS[o.status];
+  if (!words) return null;
+  const courier = o.status === "shipped" && (o.carrierName || o.trackingNumber)
+    ? p(`Courier: <strong>${esc(o.carrierName ?? "")}</strong>${o.trackingNumber ? `<br>Tracking number: <strong>${esc(o.trackingNumber)}</strong>` : ""}`) + (o.trackingUrl ? button(o.trackingUrl, "Track with the courier") : "")
+    : "";
+  const refund = o.status === "cancelled" && o.paid ? p("Since you'd already paid, we'll refund you. It can take a few working days to reach your account.") : "";
+  return {
+    subject: words.subject(o.orderNumber),
+    html: shell(o.store, words.title, p(`Hello ${esc(o.name)}. ${esc(words.line)} Order <strong>${esc(o.orderNumber)}</strong>.`) + courier + refund + button(o.trackUrl, "Track my order")),
+    text: [`Hello ${o.name}. ${words.line} Order ${o.orderNumber}.`, o.status === "shipped" && o.carrierName ? `Courier: ${o.carrierName}${o.trackingNumber ? `, tracking number ${o.trackingNumber}` : ""}` : "", o.trackingUrl && o.status === "shipped" ? `Track: ${o.trackingUrl}` : "", refund ? "Since you'd already paid, we'll refund you." : "", `Track your order: ${o.trackUrl}`].filter(Boolean).join("\n\n"),
+  };
+}
+
 export function orderPaidEmail(o: { store: StoreInfo; name: string; orderNumber: string; items: Line[]; total: number; trackUrl: string }): Rendered {
   const brand = receiptBrand({ name: o.store.name, phone: o.store.phone, website: o.store.website });
   const store = { ...o.store, name: brand.name, phone: brand.phone };

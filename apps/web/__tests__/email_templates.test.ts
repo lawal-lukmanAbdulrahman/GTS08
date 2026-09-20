@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { accountAccessEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail } from "../app/api/v1/_lib/email/templates";
+import { orderStatusEmail, accountAccessEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail } from "../app/api/v1/_lib/email/templates";
 
 const STORE = { name: "GTS Stores", address: "12 Marina, Lagos", phone: "0803 000 0000" };
 const EVIL = `<img src=x onerror=alert(1)>"&'`;
@@ -99,6 +99,30 @@ describe("posReceiptEmail", () => {
   it("escapes product names", () => {
     const m = posReceiptEmail({ ...sale, items: [{ ...sale.items[0]!, name: EVIL }] });
     expect(m.html).not.toContain("<img src=x");
+  });
+});
+
+describe("orderStatusEmail", () => {
+  const base = { store: STORE, name: "Ngozi", orderNumber: "GTS-202609-000200", trackUrl: "https://gts.ng/track" };
+  it("tells the customer in plain words what happened, for each step they care about", () => {
+    expect(orderStatusEmail({ ...base, status: "confirmed" })!.subject).toMatch(/confirmed/i);
+    expect(orderStatusEmail({ ...base, status: "shipped" })!.subject).toMatch(/on its way/i);
+    expect(orderStatusEmail({ ...base, status: "delivered" })!.subject).toMatch(/delivered/i);
+    expect(orderStatusEmail({ ...base, status: "cancelled" })!.subject).toMatch(/cancelled/i);
+  });
+  it("says nothing about steps that are internal", () => {
+    expect(orderStatusEmail({ ...base, status: "processing" })).toBeNull();
+  });
+  it("gives the courier and tracking number when shipped, escaped", () => {
+    const m = orderStatusEmail({ ...base, status: "shipped", carrierName: "GIG", trackingNumber: EVIL, trackingUrl: "https://t.example/1" })!;
+    expect(m.html).toContain("GIG");
+    expect(m.html).toContain('href="https://t.example/1"');
+    expect(m.html).not.toContain("<img src=x");
+    expect(m.text).toContain("GIG");
+  });
+  it("says a refund is being handled when a paid order is cancelled", () => {
+    expect(orderStatusEmail({ ...base, status: "cancelled", paid: true })!.html).toMatch(/refund/i);
+    expect(orderStatusEmail({ ...base, status: "cancelled", paid: false })!.html).not.toMatch(/refund/i);
   });
 });
 

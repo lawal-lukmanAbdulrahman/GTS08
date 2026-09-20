@@ -28,8 +28,6 @@ export async function GET(_request: NextRequest, { params }: Context) {
   }
 }
 
-const FIELDS = ["name", "slug", "description", "banner_cloudinary_id", "mobile_banner_cloudinary_id", "parent_id", "sort_order", "is_active", "seo_title", "seo_description"] as const;
-
 export async function PATCH(request: NextRequest, { params }: Context) {
   const access = await requirePermission(request, "can_manage_products");
   if (!access.ok) return access.response;

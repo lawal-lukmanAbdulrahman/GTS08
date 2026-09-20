@@ -1,5 +1,6 @@
 "use client";
 
+import { statusChoices } from "./order-status-options";
 import { API_BASE } from "../../lib/api-base";
 import { useEffect, useState } from "react";
 import { AdminTopStrip } from "../sidebar-context";
@@ -27,6 +28,8 @@ export default function AdminOrdersPage() {
   const [newStatus, setNewStatus] = useState("");
   const [carrierName, setCarrierName] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateNotice, setUpdateNotice] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOrders();
@@ -57,28 +60,29 @@ export default function AdminOrdersPage() {
   const handleUpdateStatus = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeOrder) return;
+    setUpdateError(null);
+
+    const courier = { carrier_name: carrierName || undefined, tracking_number: trackingNumber || undefined };
+    const changingStatus = newStatus !== activeOrder.status;
 
     try {
       const token = localStorage.getItem("gts_token");
-      const res = await idempotentFetch(`${API_BASE}/orders/${activeOrder.id}/status`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          status: newStatus,
-          carrier_name: carrierName || undefined,
-          tracking_number: trackingNumber || undefined,
-        }),
-      });
+      const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+      // Same status: just the courier details. A new status has rules the server enforces.
+      const res = changingStatus
+        ? await idempotentFetch(`${API_BASE}/orders/${activeOrder.id}/status`, { method: "PUT", headers, body: JSON.stringify({ status: newStatus, ...courier }) })
+        : await fetch(`${API_BASE}/orders/${activeOrder.id}`, { method: "PATCH", headers, body: JSON.stringify(courier) });
+      const body = await res.json().catch(() => null);
 
       if (res.ok) {
+        setUpdateNotice(body?.data?.refund_required ? "Order cancelled. It was already paid, so refund the customer in Paystack." : null);
         setActiveOrder(null);
         fetchOrders();
+      } else {
+        setUpdateError(body?.error || "Couldn't update the order. Please try again.");
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      setUpdateError("Couldn't reach the server. Check your connection and try again.");
     }
   };
 
@@ -188,6 +192,7 @@ export default function AdminOrdersPage() {
                       <button
                         onClick={() => {
                           setActiveOrder(o);
+                          setUpdateError(null);
                           setNewStatus(o.status);
                           setCarrierName(o.carrier_name || "");
                           setTrackingNumber(o.tracking_number || "");
@@ -205,12 +210,17 @@ export default function AdminOrdersPage() {
         </div>
       )}
 
+      {updateNotice && (
+        <p role="status" className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">{updateNotice}</p>
+      )}
+
       {/* Modal for managing order status & courier info */}
       {activeOrder && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-[#1C1E22] border border-gray-200 dark:border-[#2A2C32] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">Order {activeOrder.order_number}</h2>
             <form onSubmit={handleUpdateStatus} className="space-y-4 text-xs">
+              {updateError && <p role="alert" className="rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 px-3 py-2 text-red-700 dark:text-red-300">{updateError}</p>}
               <div>
                 <label className="block font-bold text-gray-700 dark:text-[#9CA3AF] mb-1">Status</label>
                 <select
@@ -218,13 +228,9 @@ export default function AdminOrdersPage() {
                   onChange={(e) => setNewStatus(e.target.value)}
                   className="w-full p-3 rounded-xl bg-gray-50 dark:bg-[#16171A] border border-gray-200 dark:border-[#2A2C32] text-gray-900 dark:text-white focus:outline-none focus:border-[#EDCF5D]"
                 >
-                  <option value="pending_payment">Pending Payment</option>
-                  <option value="paid">Paid</option>
-                  <option value="confirmed">Confirmed</option>
-                  <option value="processing">Processing</option>
-                  <option value="shipped">Shipped</option>
-                  <option value="delivered">Delivered</option>
-                  <option value="cancelled">Cancelled</option>
+                  {statusChoices(activeOrder).map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
                 </select>
               </div>
 

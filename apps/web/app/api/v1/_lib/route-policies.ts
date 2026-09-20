@@ -80,7 +80,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
 
   // ── orders
   "orders": { GET: "session|optionalStaff" }, // own orders; everyone's with can_view_all_orders
-  "orders/[id]": stub("GET", "PATCH"),
+  "orders/[id]": { GET: "permission:can_view_all_orders", PATCH: "permission:can_view_all_orders" },
   "orders/[id]/status": { PUT: "permission:can_view_all_orders" },
   "orders/customer": { GET: "session" },
   "orders/track": { GET: "public" }, // requires order number AND email

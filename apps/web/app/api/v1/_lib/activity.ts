@@ -20,7 +20,9 @@ export type ActivityAction =
   | "product_flag.update"
   | "category.update"
   | "category.delete"
-  | "category.reorder";
+  | "category.reorder"
+  | "order.update"
+  | "order.status";
 
 export interface ActivityEntry {
   actorId: string;
