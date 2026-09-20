@@ -168,14 +168,18 @@ describe("Backend Security & Spec Compliance Test Suite", () => {
       body: JSON.stringify({ event: "charge.success", data: { reference: "gts_ref_123" } }),
     });
 
-    // Enforce production mode check
+    // A configured secret, as in any real environment; the signature must still be verified.
     const origEnv = process.env.NODE_ENV;
+    const origKey = process.env.PAYSTACK_SECRET_KEY;
     (process.env as any).NODE_ENV = "production";
+    process.env.PAYSTACK_SECRET_KEY = "sk_test_contract_secret";
 
     const res = await POST(req as any);
     const body = await res.json();
 
     (process.env as any).NODE_ENV = origEnv;
+    if (origKey === undefined) delete process.env.PAYSTACK_SECRET_KEY;
+    else process.env.PAYSTACK_SECRET_KEY = origKey;
 
     expect(res.status).toBe(401);
     expect(body.code).toBe("UNAUTHORIZED");
