@@ -16,6 +16,9 @@ vi.mock("../app/api/v1/pos/_lib/inventory", () => ({
   rollback: (...a: unknown[]) => mockRollback(...a),
 }));
 
+const mockInit = vi.fn();
+vi.mock("../app/api/v1/_lib/paystack", () => ({ initializePayment: (...a: unknown[]) => mockInit(...a) }));
+
 import { NextRequest } from "next/server";
 import { POST } from "../app/api/v1/checkout/route";
 
@@ -39,6 +42,7 @@ beforeEach(() => {
   db.reset();
   mockAdjustAll.mockReset().mockResolvedValue({ ok: true });
   mockRollback.mockReset().mockResolvedValue(undefined);
+  mockInit.mockReset().mockResolvedValue({ ok: true, authorizationUrl: "https://checkout.paystack.com/abc" });
   db.results.product_variants = { data: [VARIANT], error: null };
   db.results.customers = { data: { id: "cust-1" }, error: null };
   db.results.addresses = { data: { id: "addr-1" }, error: null };
@@ -84,6 +88,26 @@ describe("POST /api/v1/checkout is decided by the server, not the browser", () =
     expect(body.data.payment).toMatchObject({ status: "pending", reference: inserted("transactions")[0]!.paystack_reference });
   });
 
+  it("starts the payment with the server's total and returns the page to pay on", async () => {
+    const body = await (await post(BASE)).json();
+    expect(mockInit).toHaveBeenCalledWith(expect.objectContaining({
+      email: "buyer@example.com",
+      amountKobo: 3250000,
+      reference: inserted("transactions")[0]!.paystack_reference,
+      callbackUrl: expect.stringMatching(/\/checkout\/complete$/),
+    }));
+    expect(body.data.payment.authorization_url).toBe("https://checkout.paystack.com/abc");
+  });
+
+  it("cancels the order and frees the stock when payment can't be started", async () => {
+    mockInit.mockResolvedValue({ ok: false, reason: "NOT_CONFIGURED" });
+    const res = await post(BASE);
+    expect(res.status).toBe(503);
+    expect((await res.json()).code).toBe("PAYMENT_UNAVAILABLE");
+    expect(mockRollback).toHaveBeenCalled();
+    expect(db.calls.orders?.some((c) => c.method === "update")).toBe(true);
+  });
+
   it("refuses, and creates nothing, when there isn't enough stock", async () => {
     mockAdjustAll.mockResolvedValue({ ok: false, reason: "INSUFFICIENT_STOCK", available: 1, failedVariantId: V1 });
     const res = await post(BASE);
@@ -109,6 +133,22 @@ describe("POST /api/v1/checkout is decided by the server, not the browser", () =
     const res = await post({ ...BASE, items: [{ id: "sample-1", title: "Aura V1 Pro Vacuum", price: 10, quantity: 1 }] });
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe("INVALID_ITEMS");
+  });
+
+  it("accepts cart lines named by product slug, size and colour, and still prices them from the database", async () => {
+    db.results.products = { data: [{ slug: "oxford-shirt", status: "active", variants: [{ id: V1, size: "M", color: "Black", is_active: true }, { id: "22222222-2222-4222-8222-222222222222", size: "L", color: "Black", is_active: true }] }], error: null };
+    const res = await post({ ...BASE, items: [{ product_slug: "oxford-shirt", size: "M", color: "black", quantity: 2, price: 1 }] });
+    expect(res.status).toBe(200);
+    expect(mockAdjustAll).toHaveBeenCalledWith(expect.anything(), [{ variantId: V1, deltaReserved: 2, requireAvailable: 2 }]);
+    expect(inserted("orders")[0]).toMatchObject({ subtotal: 3100000 });
+  });
+
+  it("refuses a product slug that doesn't exist", async () => {
+    db.results.products = { data: [], error: null };
+    const res = await post({ ...BASE, items: [{ product_slug: "ghost", quantity: 1 }] });
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("ITEM_UNAVAILABLE");
+    expect(mockAdjustAll).not.toHaveBeenCalled();
   });
 
   it("only takes prepaid methods, since the webhook is what marks an order paid", async () => {

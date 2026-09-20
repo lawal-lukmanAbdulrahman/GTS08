@@ -2,18 +2,12 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import crypto from "crypto";
 import { createServiceClient } from "@gts/database";
-import { validateOrderItems } from "@gts/utils";
 import { sanitizeEmail, sanitizeSqlInput, getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { serverError } from "../_lib/http";
 import { adjustAll, rollback, type InventoryChange } from "../pos/_lib/inventory";
-
-/** Delivery fees in kobo. The browser only chooses an option; the server owns the price. */
-const DELIVERY_FEE_KOBO: Record<string, number> = {
-  door: 150_000,
-  pickup: 110_000,
-  express: 450_000,
-};
+import { DELIVERY_FEE_KOBO, resolveCartLines } from "../_lib/checkout-cart";
+import { initializePayment } from "../_lib/paystack";
 
 /** Every one of these is paid through Paystack, whose webhook is the only thing that marks an order paid. */
 const PREPAID_METHODS = ["paystack", "card-transfer", "palmpay", "opay"];
@@ -52,12 +46,14 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    // Only the variant and quantity are read from each line; a price sent by the browser is never looked at.
-    const validItems = validateOrderItems(rawItems);
-    if (!validItems.ok) {
-      return NextResponse.json({ error: validItems.message, code: "INVALID_ITEMS" }, { status: 400 });
+    // Only what to buy and how many is read from each line; a price sent by the browser is never looked at.
+    const serviceClient = createServiceClient();
+    const resolved = await resolveCartLines(serviceClient, rawItems);
+    if (!resolved.ok) {
+      const status = resolved.code === "DATABASE_ERROR" ? 500 : 400;
+      return NextResponse.json({ error: resolved.message, code: resolved.code }, { status });
     }
-    const items = validItems.items;
+    const items = resolved.items;
 
     if (!customerInput?.email || !customerInput?.fullName || !customerInput?.phone) {
       return NextResponse.json(
@@ -93,7 +89,6 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     const city = sanitizeSqlInput(addressInput.city);
     const state = sanitizeSqlInput(addressInput.state);
 
-    const serviceClient = createServiceClient();
     const authUser = await getAuthenticatedUser(request);
 
     // 1. Get or Create Customer Record
@@ -305,6 +300,24 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       return serverError(new Error(txErr.message));
     }
 
+    const storefront = (process.env.NEXT_PUBLIC_STOREFRONT_URL || "http://localhost:3002").replace(/\/+$/, "");
+    const payment = await initializePayment({
+      email,
+      amountKobo: grandTotalKobo,
+      reference: paystackRef,
+      callbackUrl: `${storefront}/checkout/complete`,
+      metadata: { order_id: order.id, order_number: order.order_number },
+    });
+    if (!payment.ok) {
+      // No way to pay means no order: free the stock rather than leave it held until expiry.
+      await serviceClient.from("orders").update({ status: "cancelled", internal_notes: "Cancelled: payment could not be started." }).eq("id", order.id);
+      await releaseHolds();
+      return NextResponse.json(
+        { error: "Online payment isn't available right now. Please try again shortly.", code: "PAYMENT_UNAVAILABLE" },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -325,6 +338,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
           method: paymentMethod,
           reference: paystackRef,
           status: "pending",
+          authorization_url: payment.authorizationUrl,
         },
       },
     });

@@ -70,6 +70,8 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   // ── cart, checkout, promos, wishlist
   "cart": stub("GET", "POST", "PATCH", "DELETE"),
   "checkout": { POST: "public" }, // guest checkout by design; payment is confirmed only by the webhook
+  "checkout/status": { GET: "public" }, // keyed by an unguessable payment reference; reveals no customer details
+  "checkout/quote": { POST: "public" }, // read-only price and stock check for the cart; holds nothing
   "promos": stub("GET", "POST"),
   "promos/[id]": stub("GET", "PATCH", "DELETE"),
   "promos/validate": stub("POST"),
