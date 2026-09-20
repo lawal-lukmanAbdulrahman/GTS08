@@ -150,6 +150,7 @@ function _Footer() {
 
 import { Header } from "./_components/landing/header";
 import { CartProvider } from "./_components/cart-context";
+import { CatalogueProvider } from "./_components/catalogue-context";
 import { WishlistProvider } from "./_components/wishlist-context";
 import { AuthModalProvider } from "./_components/auth-modal-context";
 import { AuthProvider } from "./_components/auth-context";
@@ -165,6 +166,7 @@ export default function StorefrontLayout({
   return (
     <ThemeProvider>
       <ErrorBoundary>
+        <CatalogueProvider>
         <AuthProvider>
           <AuthModalProvider>
             <WishlistProvider>
@@ -187,6 +189,7 @@ export default function StorefrontLayout({
             </WishlistProvider>
           </AuthModalProvider>
         </AuthProvider>
+        </CatalogueProvider>
       </ErrorBoundary>
     </ThemeProvider>
   );

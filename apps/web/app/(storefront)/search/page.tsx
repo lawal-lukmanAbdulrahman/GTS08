@@ -3,8 +3,9 @@
 import { useState, useMemo, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ProductCard } from "../_components/ui/product-card";
-import { REAL_PRODUCTS, ALL_BRAND_KEYS, ProductItem } from "../_data/products";
-import { createClient } from "@gts/database/client";
+import type { ProductItem } from "../_data/products";
+import { ALL_BRAND_KEYS } from "../_data/brands";
+import { useCatalogue } from "../_components/catalogue-context";
 import { ProductSearchEngine, type SearchableProduct } from "../../../lib/search-engine";
 
 const MEGA_CATEGORY_NAMES = [
@@ -20,7 +21,6 @@ const MEGA_CATEGORY_NAMES = [
   "Gaming",
 ];
 
-const CATEGORIES = ["All", ...Array.from(new Set([...MEGA_CATEGORY_NAMES, ...REAL_PRODUCTS.map((p) => p.category)]))];
 const ALL_BRANDS = ALL_BRAND_KEYS;
 
 const SORT_OPTIONS = [
@@ -349,8 +349,9 @@ function SearchPageInner() {
   const initialCat = searchParams.get("category") ?? "All";
   const initialBrand = searchParams.get("brand") ?? "";
 
-  const [allCatalogProducts, setAllCatalogProducts] = useState<ProductItem[]>(REAL_PRODUCTS);
-  const [loadingDb, setLoadingDb] = useState(true);
+  // Products come from the database through the shared catalogue.
+  const { products: allCatalogProducts, loading: loadingDb } = useCatalogue();
+  const CATEGORIES = useMemo(() => ["All", ...Array.from(new Set([...MEGA_CATEGORY_NAMES, ...allCatalogProducts.map((p) => p.category)]))], [allCatalogProducts]);
   const [activeCategory, setActiveCategory] = useState(initialCat);
   const [priceRange, setPriceRange] = useState<[number, number]>([MIN_PRICE, MAX_PRICE]);
   const [minDiscount, setMinDiscount] = useState<number | null>(null);
@@ -366,79 +367,6 @@ function SearchPageInner() {
     if (initialCat) setActiveCategory(initialCat);
     if (initialBrand) setActiveBrands([initialBrand]);
   }, [initialCat, initialBrand]);
-
-  // Merge Live Database Products from Supabase
-  useEffect(() => {
-    async function loadDatabaseProducts() {
-      try {
-        const supabase = createClient() as any;
-        const { data: dbProducts, error } = await supabase
-          .from("products")
-          .select(`
-            id,
-            name,
-            slug,
-            sku,
-            brand,
-            sub_category,
-            has_transparent_bg,
-            description,
-            base_price,
-            compare_at_price,
-            average_rating,
-            review_count,
-            tags,
-            category:categories(name),
-            images:product_images(cloudinary_public_id, is_primary)
-          `)
-          .eq("status", "active")
-          .limit(100);
-
-        if (!error && dbProducts && dbProducts.length > 0) {
-          const formattedDbItems: ProductItem[] = dbProducts.map((p: any) => {
-            const priceNaira = (p.base_price || 0) / 100;
-            const origPriceNaira = p.compare_at_price ? p.compare_at_price / 100 : undefined;
-            const primaryImg = p.images?.find((img: any) => img.is_primary)?.cloudinary_public_id || p.images?.[0]?.cloudinary_public_id || "/products/hero/air_jordan_retro_1_blue.png";
-
-            return {
-              id: p.slug || p.id,
-              brand: p.brand || "GTS",
-              sku: p.sku || `GTS-${p.id.slice(0, 6)}`,
-              title: p.name,
-              price: `₦${priceNaira.toLocaleString()}`,
-              originalPrice: origPriceNaira ? `₦${origPriceNaira.toLocaleString()}` : undefined,
-              priceNum: priceNaira,
-              badge: origPriceNaira && origPriceNaira > priceNaira ? `${Math.round(((origPriceNaira - priceNaira) / origPriceNaira) * 100)}% OFF` : undefined,
-              rating: Number(p.average_rating || 4.8),
-              reviewsCount: Number(p.review_count || 42),
-              reviews: `${p.review_count || 42}`,
-              description: p.description || "",
-              category: p.category?.name || "Appliances",
-              subCategory: p.sub_category || "General",
-              image: primaryImg,
-              images: [],
-              sizes: ["Standard"],
-              tags: p.tags || ["New", "Popular"],
-              hasTransparentBg: p.has_transparent_bg || false,
-            };
-          });
-
-          // Merge avoiding duplicates by id
-          setAllCatalogProducts((prev) => {
-            const existingIds = new Set(prev.map((i) => i.id));
-            const fresh = formattedDbItems.filter((i) => !existingIds.has(i.id));
-            return [...prev, ...fresh];
-          });
-        }
-      } catch (err) {
-        console.warn("Could not fetch database products for search:", err);
-      } finally {
-        setLoadingDb(false);
-      }
-    }
-
-    loadDatabaseProducts();
-  }, []);
 
   const toggleBrand = (b: string) =>
     setActiveBrands((prev) => (prev.includes(b) ? prev.filter((x) => x !== b) : [...prev, b]));

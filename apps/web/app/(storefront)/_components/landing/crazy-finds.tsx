@@ -1,18 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { ProductCard } from "../ui/product-card";
 
-import { REAL_PRODUCTS } from "../../_data/products";
-
-// Strictly Items with Massive / Crazy Discounts (30%–70% OFF & Clearance Deals)
-const CRAZY_FINDS = REAL_PRODUCTS.filter((p) =>
-  ["50% OFF", "40% OFF", "30% OFF", "DEAL", "SALE", "HOT"].includes(p.badge || "") ||
-  Boolean(p.badge && p.badge.includes("OFF"))
-);
+import { useCatalogue } from "../catalogue-context";
 
 export function CrazyFinds() {
+  const { products: catalogue } = useCatalogue();
+  // Products marked down: they carry a was-price, so the catalogue flags them as on sale.
+  const CRAZY_FINDS = useMemo(() => catalogue.filter((p) => p.badge === "SALE" || Boolean(p.badge && p.badge.includes("OFF"))), [catalogue]);
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);

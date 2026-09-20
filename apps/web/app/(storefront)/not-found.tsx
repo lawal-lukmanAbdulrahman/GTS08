@@ -4,7 +4,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Footer } from "./_components/landing/footer";
 import { ProductCard } from "./_components/ui/product-card";
-import { REAL_PRODUCTS } from "./_data/products";
+import { useCatalogue } from "./_components/catalogue-context";
 
 // Dynamically import WarpText with SSR disabled to ensure WebGL initializes smoothly client-side
 const WarpText = dynamic(() => import("./_components/ui/WarpText"), {
@@ -12,7 +12,8 @@ const WarpText = dynamic(() => import("./_components/ui/WarpText"), {
 });
 
 export default function NotFound() {
-  const recommendedProducts = REAL_PRODUCTS.slice(0, 4);
+  const { products } = useCatalogue();
+  const recommendedProducts = products.slice(0, 4);
 
   return (
     <div className="min-h-screen bg-white text-[#010101] flex flex-col font-sans">

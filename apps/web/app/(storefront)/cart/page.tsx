@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { ProductCard } from "../_components/ui/product-card";
-import { REAL_PRODUCTS } from "../_data/products";
+import { useCatalogue } from "../_components/catalogue-context";
 import { Footer } from "../_components/landing/footer";
 import { useCart } from "../_components/cart-context";
 
@@ -55,7 +55,8 @@ export default function CartPage() {
   const grandTotal = Math.max(0, rawSubtotal - discountAmount + shippingFee);
 
   // Recommended Products for the bottom carousel
-  const recommendedProducts = REAL_PRODUCTS.slice(3, 8);
+  const { products: catalogue } = useCatalogue();
+  const recommendedProducts = catalogue.slice(3, 8);
 
   return (
     <div className="min-h-screen bg-white text-[#010101] font-sans">

@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { createClient } from "@gts/database/client";
 import { Footer } from "../../_components/landing/footer";
 import { ProductCard } from "../../_components/ui/product-card";
-import { getProductById } from "../../_data/products";
+import { useCatalogue } from "../../_components/catalogue-context";
 import type { ProductItem } from "../../_data/products";
 import { useCart } from "../../_components/cart-context";
 import { useWishlist } from "../../_components/wishlist-context";
@@ -90,6 +90,11 @@ export default function ProductDetailPage({
     }
   };
 
+  // If the detail request can't be answered, the catalogue copy (also from the database) stands in.
+  const { getProduct } = useCatalogue();
+  const getFromCatalogue = useRef(getProduct);
+  getFromCatalogue.current = getProduct;
+
   // Fetch product from live database
   useEffect(() => {
     let isMounted = true;
@@ -99,7 +104,7 @@ export default function ProductDetailPage({
       try {
         const supabase = createClient() as any;
         const decodedSlug = decodeURIComponent(slug).trim().toLowerCase();
-        const localFallback = getProductById(slug);
+        const localFallback = getFromCatalogue.current(slug);
 
         const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const isUuid = UUID_RE.test(decodedSlug);
@@ -331,7 +336,7 @@ export default function ProductDetailPage({
         }
       } catch (err) {
         console.warn("Could not fetch product details from database:", err);
-        const localFallback = getProductById(slug);
+        const localFallback = getFromCatalogue.current(slug);
         if (localFallback && isMounted) {
           setProduct(localFallback);
         }

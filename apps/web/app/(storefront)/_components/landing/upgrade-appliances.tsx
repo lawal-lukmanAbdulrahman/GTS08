@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { ProductCard } from "../ui/product-card";
-import { REAL_PRODUCTS, type ProductItem } from "../../_data/products";
+import type { ProductItem } from "../../_data/products";
+import { useCatalogue } from "../catalogue-context";
 
 // Curated appliance and kitchen items
 const APPLIANCE_IDS = [
@@ -20,6 +21,7 @@ const APPLIANCE_IDS = [
 ];
 
 export function UpgradeAppliances() {
+  const { products: catalogue } = useCatalogue();
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -27,10 +29,10 @@ export function UpgradeAppliances() {
 
   // Collect the curated appliance products in order
   const applianceProducts = useMemo(() => {
-    return APPLIANCE_IDS.map((id) => REAL_PRODUCTS.find((p) => p.id === id)).filter(
+    return APPLIANCE_IDS.map((id) => catalogue.find((p) => p.id === id)).filter(
       (p): p is ProductItem => Boolean(p)
     );
-  }, []);
+  }, [catalogue]);
 
   const updateScrollState = () => {
     if (scrollContainerRef.current) {

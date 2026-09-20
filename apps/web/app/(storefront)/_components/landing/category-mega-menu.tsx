@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { BRAND_REGISTRY } from "../../_data/products";
+import { BRAND_REGISTRY } from "../../_data/brands";
 
 export interface CategoryItem {
   id: string;

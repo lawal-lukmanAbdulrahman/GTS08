@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { apiCall } from "../../lib/staff-api";
 import { SidebarToggle } from "../sidebar-context";
+import { CatalogueProvider } from "./_storefront/catalogue-context";
 import { Header } from "./_storefront/landing/header";
 import { Hero } from "./_storefront/landing/hero";
 import { Bestsellers } from "./_storefront/landing/bestsellers";
@@ -104,7 +105,7 @@ const DEFAULT_HERO_PRODUCTS: HeroProductChoice[] = [
 
 const BASE_WIDTH = 1440;
 
-export default function StorefrontManagementPage() {
+function StorefrontManagementPage() {
   const [sections, setSections] = useState<SectionItem[]>(DEFAULT_SECTIONS);
   const [selectedSectionId, setSelectedSectionId] = useState<string>("hero");
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -910,5 +911,14 @@ export default function StorefrontManagementPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** The preview shows the real catalogue, from the database. */
+export default function StorefrontManagementPageWithCatalogue() {
+  return (
+    <CatalogueProvider>
+      <StorefrontManagementPage />
+    </CatalogueProvider>
   );
 }

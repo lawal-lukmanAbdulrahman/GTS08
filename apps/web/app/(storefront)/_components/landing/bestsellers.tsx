@@ -1,17 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { ProductCard } from "../ui/product-card";
 
-import { REAL_PRODUCTS } from "../../_data/products";
+import { useCatalogue } from "../catalogue-context";
 
 // Strictly Household, Appliances, Electronics & Home items for Bestsellers section
-const PRODUCTS = REAL_PRODUCTS.filter((p) =>
-  ["Appliances", "Electronics", "Home & Office", "Supermarket"].includes(p.category)
-);
 
 export function Bestsellers() {
+  const { products: catalogue } = useCatalogue();
+  const PRODUCTS = useMemo(() => catalogue.filter((p) => ["Appliances", "Electronics", "Home & Office", "Supermarket"].includes(p.category)), [catalogue]);
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);

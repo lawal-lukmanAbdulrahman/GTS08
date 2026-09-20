@@ -1,7 +1,8 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
-import { ProductItem, REAL_PRODUCTS } from "../_data/products";
+import type { ProductItem } from "../_data/products";
+import { useCatalogue } from "./catalogue-context";
 import { AuthContext } from "./auth-context";
 import { getCartSessionId, linesToCartItems, mergeCart, pushCart, setCartSessionId, unionCart } from "../_lib/server-sync";
 
@@ -35,6 +36,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   // Signed in or not (the cart works outside an AuthProvider too, e.g. in tests).
   const userId = useContext(AuthContext)?.user?.id ?? null;
+  const { products: catalogue } = useCatalogue();
+  const catalogueRef = useRef(catalogue);
+  catalogueRef.current = catalogue;
   const latest = useRef<CartItem[]>([]);
   latest.current = cartItems;
   const pushedOnce = useRef(false);
@@ -90,7 +94,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         if (merged) {
           setCartSessionId(merged.sessionId);
           pushedOnce.current = true;
-          setCartItems((prev) => unionCart(prev, linesToCartItems(merged.lines, REAL_PRODUCTS)));
+          setCartItems((prev) => unionCart(prev, linesToCartItems(merged.lines, catalogueRef.current)));
         }
       } finally {
         merging.current = false;

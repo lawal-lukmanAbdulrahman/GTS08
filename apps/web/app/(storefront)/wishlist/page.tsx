@@ -6,7 +6,7 @@ import { useWishlist } from "../_components/wishlist-context";
 import { useCart } from "../_components/cart-context";
 import { ProductCard } from "../_components/ui/product-card";
 import { Footer } from "../_components/landing/footer";
-import { REAL_PRODUCTS } from "../_data/products";
+import { useCatalogue } from "../_components/catalogue-context";
 
 export default function WishlistPage() {
   const { wishlistItems, wishlistCount, removeFromWishlist, clearWishlist } = useWishlist();
@@ -19,7 +19,8 @@ export default function WishlistPage() {
   };
 
   // Trending recommendations for popular products carousel
-  const recommendedProducts = REAL_PRODUCTS.slice(0, 10);
+  const { products: catalogue } = useCatalogue();
+  const recommendedProducts = catalogue.slice(0, 10);
 
   // ── Carousel scroll state ──
   const scrollRef = useRef<HTMLDivElement>(null);

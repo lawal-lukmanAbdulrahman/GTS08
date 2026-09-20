@@ -203,6 +203,7 @@ export async function GET(request: NextRequest) {
             alt: img.alt_text,
             is_primary: img.is_primary,
             sort_order: img.sort_order || 0,
+            variant_id: img.variant_id || null,
           })),
           description_images: descImages,
           description_image_urls: descImages.map((img: any) => img.url),

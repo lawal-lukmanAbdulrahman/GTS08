@@ -1,7 +1,8 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
-import { ProductItem, REAL_PRODUCTS } from "../_data/products";
+import type { ProductItem } from "../_data/products";
+import { useCatalogue } from "./catalogue-context";
 import { AuthContext } from "./auth-context";
 import { fetchWishlistSlugs, removeWishlistSlug, saveWishlistSlug } from "../_lib/server-sync";
 
@@ -23,6 +24,7 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
   const [wishlistIds, setWishlistIds] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const userId = useContext(AuthContext)?.user?.id ?? null;
+  const { products: catalogue } = useCatalogue();
   const latest = useRef<string[]>([]);
   latest.current = wishlistIds;
   const syncedFor = useRef<string | null>(null);
@@ -95,7 +97,7 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
 
   // Resolve product objects from catalog
   const wishlistItems = wishlistIds
-    .map((id) => REAL_PRODUCTS.find((p) => p.id === id))
+    .map((id) => catalogue.find((p) => p.id === id))
     .filter((p): p is ProductItem => p !== undefined);
 
   return (

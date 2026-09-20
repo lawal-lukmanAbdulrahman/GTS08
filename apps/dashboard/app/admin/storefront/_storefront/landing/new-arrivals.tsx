@@ -2,12 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { ProductCard } from "../ui/product-card";
-import { REAL_PRODUCTS } from "../data/products";
-
-// Strictly Fashion items for New Arrivals section
-const PRODUCTS = REAL_PRODUCTS.filter((p) => p.category === "Fashion").slice(0, 6);
+import { useCatalogue } from "../catalogue-context";
 
 function SparkleStar() {
   return (
@@ -21,6 +18,8 @@ function SparkleStar() {
 }
 
 export function NewArrivals() {
+  const { products: catalogue } = useCatalogue();
+  const PRODUCTS = useMemo(() => catalogue.filter((p) => p.category === "Fashion").slice(0, 6), [catalogue]);
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const toggleWishlist = (id: string) =>
     setWishlisted((prev) => ({ ...prev, [id]: !prev[id] }));

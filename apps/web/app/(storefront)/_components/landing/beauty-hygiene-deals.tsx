@@ -3,116 +3,17 @@
 import Link from "next/link";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { ProductCard } from "../ui/product-card";
-import { REAL_PRODUCTS, type ProductItem } from "../../_data/products";
-import { createClient } from "@gts/database/client";
+import { useCatalogue } from "../catalogue-context";
 
 export function BeautyHygieneDeals() {
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
-  const [dbProducts, setDbProducts] = useState<ProductItem[]>([]);
+  const { products: catalogue } = useCatalogue();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Fallback initial products from REAL_PRODUCTS to avoid layout shift
-  const fallbackProducts = useMemo(() => {
-    return REAL_PRODUCTS.filter((p) => p.category === "Health & Beauty");
-  }, []);
-
-  // Fetch real beauty & hygiene products directly from Supabase Database
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadDatabaseProducts() {
-      try {
-        const supabase = createClient();
-        const { data, error } = await supabase
-          .from("products")
-          .select(`
-            id,
-            name,
-            slug,
-            sku,
-            brand,
-            sub_category,
-            has_transparent_bg,
-            description,
-            short_description,
-            base_price,
-            compare_at_price,
-            average_rating,
-            review_count,
-            tags,
-            category:categories(name, slug),
-            images:product_images(cloudinary_public_id, is_primary)
-          `)
-          .eq("status", "active");
-
-        if (!error && data && data.length > 0 && isMounted) {
-          const matched = data.filter((p: any) => {
-            const catName = p.category?.name?.toLowerCase() || "";
-            const catSlug = p.category?.slug?.toLowerCase() || "";
-            const tags = (p.tags || []).map((t: string) => t.toLowerCase());
-            return (
-              catName.includes("beauty") ||
-              catName.includes("health") ||
-              catSlug.includes("beauty") ||
-              catSlug.includes("health") ||
-              tags.includes("beauty") ||
-              tags.includes("hygiene") ||
-              tags.includes("beauty hygiene deals")
-            );
-          });
-
-          if (matched.length > 0) {
-            const formatted: ProductItem[] = matched.map((p: any) => {
-              const priceNaira = (p.base_price || 0) / 100;
-              const origPriceNaira = p.compare_at_price ? p.compare_at_price / 100 : undefined;
-              const primaryImg =
-                p.images?.find((img: any) => img.is_primary)?.cloudinary_public_id ||
-                p.images?.[0]?.cloudinary_public_id ||
-                "/products/health_and_beauty_section.jpg";
-
-              return {
-                id: p.slug || p.id,
-                brand: p.brand || "GTS Beauty",
-                sku: p.sku || `GTS-${p.id.slice(0, 6)}`,
-                title: p.name,
-                price: `₦${priceNaira.toLocaleString()}`,
-                originalPrice: origPriceNaira ? `₦${origPriceNaira.toLocaleString()}` : undefined,
-                priceNum: priceNaira,
-                badge:
-                  origPriceNaira && origPriceNaira > priceNaira
-                    ? `${Math.round(((origPriceNaira - priceNaira) / origPriceNaira) * 100)}% OFF`
-                    : "DEAL",
-                rating: Number(p.average_rating || 4.8),
-                reviewsCount: Number(p.review_count || 56),
-                reviews: `${p.review_count || 56}`,
-                description: p.description || p.short_description || "",
-                category: "Health & Beauty",
-                subCategory: p.sub_category || "Skincare & Serums",
-                image: primaryImg,
-                images: [],
-                sizes: ["Standard"],
-                tags: p.tags || ["Beauty", "Hygiene"],
-                hasTransparentBg: p.has_transparent_bg || false,
-              };
-            });
-
-            setDbProducts(formatted);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load beauty products from DB:", err);
-      }
-    }
-
-    loadDatabaseProducts();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const sourceProducts = dbProducts.length > 0 ? dbProducts : fallbackProducts;
+  // Beauty and hygiene products come from the shared catalogue (the database).
+  const sourceProducts = useMemo(() => catalogue.filter((p) => p.category === "Health & Beauty" || p.tags.some((t) => ["beauty", "hygiene", "beauty hygiene deals"].includes(t.toLowerCase()))), [catalogue]);
 
   const updateScrollState = () => {
     if (scrollContainerRef.current) {

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -10,7 +10,8 @@ import {
   type SearchableProduct,
 } from "../../../../lib/search-engine";
 
-import { REAL_PRODUCTS, type ProductItem } from "../../_data/products";
+import type { ProductItem } from "../../_data/products";
+import { useCatalogue } from "../catalogue-context";
 
 import {
   getRecentlyViewed,
@@ -71,17 +72,6 @@ function toSearchable(p: ProductItem): SearchableProduct {
   };
 }
 
-// ─── Singleton Engine (built once, shared across overlay renders) ─────────────
-let _engine: ProductSearchEngine | null = null;
-
-function getEngine(): ProductSearchEngine {
-  if (!_engine) {
-    _engine = new ProductSearchEngine();
-    _engine.buildIndex(REAL_PRODUCTS.map(toSearchable));
-  }
-  return _engine;
-}
-
 // ─── Highlight matched portion in bold ────────────────────────────────────────
 function HighlightedText({ text, query }: { text: string; query: string }) {
   if (!query.trim()) return <span>{text}</span>;
@@ -110,6 +100,14 @@ interface SearchDropdownCardProps {
 }
 
 export function SearchDropdownCard({ isOpen, query, onClose, onSelectTerm }: SearchDropdownCardProps) {
+  // The suggestion index is built from the catalogue (the database) and rebuilt when it changes.
+  const { products: catalogue } = useCatalogue();
+  const engine = useMemo(() => {
+    const e = new ProductSearchEngine();
+    e.buildIndex(catalogue.map(toSearchable));
+    return e;
+  }, [catalogue]);
+
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedProduct[]>([]);
   const router = useRouter();
@@ -178,7 +176,7 @@ export function SearchDropdownCard({ isOpen, query, onClose, onSelectTerm }: Sea
 
   // Use the engine's autocomplete for instant prefix-trie suggestions
   const suggestions = hasSuggestions
-    ? getEngine().autocomplete(trimmed, 10)
+    ? engine.autocomplete(trimmed, 10)
     : [];
 
   return (

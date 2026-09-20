@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useCart } from "../cart-context";
 import { useWishlist } from "../wishlist-context";
-import { REAL_PRODUCTS } from "../data/products";
+import { useCatalogue } from "../catalogue-context";
 import { saveRecentlyViewed } from "../landing/search-history";
 
 export interface ProductCardProps {
@@ -61,15 +61,16 @@ export function ProductCard({
   const wishlistContext = useWishlist();
   const isInWishlist = wishlistContext?.isInWishlist;
   const toggleWishlist = wishlistContext?.toggleWishlist;
+  const { products: catalogue } = useCatalogue();
 
   // Resolve transparent background:
   // 1. If explicit boolean passed, use it.
-  // 2. Otherwise look up in REAL_PRODUCTS.
+  // 2. Otherwise look it up in the catalogue.
   // 3. Fallback to false (no padding, full bleed cover)
   const isTransparent =
     typeof hasTransparentBg === "boolean"
       ? hasTransparentBg
-      : (REAL_PRODUCTS.find((p) => p.id === id)?.hasTransparentBg ?? false);
+      : (catalogue.find((p) => p.id === id)?.hasTransparentBg ?? false);
 
   const isWishlisted =
     externalIsWishlisted !== undefined
@@ -93,7 +94,7 @@ export function ProductCard({
       onAddToCart(id);
     } else {
       // Find full product or construct item
-      const fullProduct = REAL_PRODUCTS.find((p) => p.id === id) || {
+      const fullProduct = catalogue.find((p) => p.id === id) || {
         id,
         brand: "GTS",
         sku: id,
