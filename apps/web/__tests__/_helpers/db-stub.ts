@@ -20,7 +20,8 @@ export function makeDbStub() {
   const client = {
     from(table: string) {
       touched.push(table);
-      const log: Call[] = (calls[table] = []);
+      const log: Call[] = []; // this query only, for result functions
+      const all: Call[] = (calls[table] ??= []); // every query on the table since reset, for assertions
       const stub: any = new Proxy(
         {},
         {
@@ -28,6 +29,7 @@ export function makeDbStub() {
             if (prop === "then") return (resolve: (v: Result) => void) => resolve(resultFor(table, log));
             return (...args: unknown[]) => {
               log.push({ method: prop, args });
+              all.push({ method: prop, args });
               if (prop === "single" || prop === "maybeSingle") return Promise.resolve(resultFor(table, log));
               return stub;
             };

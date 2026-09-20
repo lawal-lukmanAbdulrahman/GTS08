@@ -74,7 +74,11 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "storefront/sections": { GET: "public", PUT: "admin" },
 
   // ── cart, checkout, promos, wishlist
-  "cart": stub("GET", "POST", "PATCH", "DELETE"),
+  "cart/[sessionId]": { GET: "public", DELETE: "public" }, // the session id is a random UUID and the only key to the cart
+  "cart/[sessionId]/items": { POST: "public" },
+  "cart/[sessionId]/items/[variantId]": { PUT: "public", DELETE: "public" },
+  "cart/[sessionId]/validate": { POST: "public" },
+  "cart/merge": { POST: "session" },
   "checkout": { POST: "public" }, // guest checkout by design; payment is confirmed only by the webhook
   "checkout/status": { GET: "public" }, // keyed by an unguessable payment reference; reveals no customer details
   "checkout/quote": { POST: "public" }, // read-only price and stock check for the cart; holds nothing
@@ -82,7 +86,9 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "promos/[id]": { GET: "admin", PATCH: "admin", DELETE: "admin" },
   "promos/[id]/activate": { PUT: "admin" },
   "promos/validate": { POST: "public" }, // advice only; unknown and unusable codes look identical; checkout re-prices on the server
-  "wishlist": stub("GET", "POST", "DELETE"),
+  "wishlist": { GET: "session", POST: "session" },
+  "wishlist/[productId]": { DELETE: "session" },
+  "wishlist/check/[productId]": { GET: "session" },
 
   // ── orders
   "orders": { GET: "session|optionalStaff" }, // own orders; everyone's with can_view_all_orders
