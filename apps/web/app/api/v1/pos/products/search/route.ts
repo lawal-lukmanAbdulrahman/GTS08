@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../../_lib/access";
 import { computeStockStatus, variantAvailable, type InventoryRow } from "../../_lib/stock-status";
+import { dbError } from "../../../_lib/http";
 
 interface RawVariant {
   id: string;
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest) {
       .select("id, parent_id, slug")
       .eq("is_active", true);
     if (catError) {
-      return NextResponse.json({ error: catError.message, code: "DATABASE_ERROR" }, { status: 500 });
+      return dbError(catError, "DATABASE_ERROR", 500);
     }
     const all = (cats || []) as Array<{ id: string; parent_id: string | null; slug: string }>;
     const root = all.find((c) => c.slug === category);
@@ -122,9 +123,8 @@ export async function GET(request: NextRequest) {
     if ((error as { code?: string }).code === "PGRST103") {
       return NextResponse.json({ data: [], meta: { total: 0, page, limit, pages: 1 } });
     }
-    // Never pass an upstream HTML error page through to the caller.
-    const message = /^\s*</.test(error.message) ? "Product search is temporarily unavailable." : error.message;
-    return NextResponse.json({ error: message, code: "DATABASE_ERROR" }, { status: 500 });
+    // Whatever the database said (or an upstream HTML error page) stays in the log.
+    return dbError(error, "DATABASE_ERROR", 500);
   }
 
   const products = ((data as unknown as RawProduct[]) || []).map(mapProduct);

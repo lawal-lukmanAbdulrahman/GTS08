@@ -5,7 +5,7 @@ import { getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { sanitizeSafeText, sanitizeXss } from "@gts/utils";
 import { requirePermission } from "../_lib/staff-access";
-import { serverError } from "../_lib/http";
+import { serverError, dbError } from "../_lib/http";
 
 // GET /api/v1/inquiries
 // - If ?productId=... & user authenticated: returns customer's private inquiry thread for that product.
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 
       const { data: tickets, error } = await query;
       if (error) {
-        return NextResponse.json({ error: error.message, code: "DB_ERROR" }, { status: 500 });
+        return dbError(error, "DB_ERROR", 500);
       }
 
       // Format with latest message and extracted productId
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
         .order("updated_at", { ascending: false });
 
       if (error) {
-        return NextResponse.json({ error: error.message, code: "DB_ERROR" }, { status: 500 });
+        return dbError(error, "DB_ERROR", 500);
       }
 
       const productIds = (tickets || [])
@@ -215,7 +215,7 @@ export async function GET(request: NextRequest) {
       .limit(1);
 
     if (error) {
-      return NextResponse.json({ error: error.message, code: "DB_ERROR" }, { status: 500 });
+      return dbError(error, "DB_ERROR", 500);
     }
 
     const ticket = tickets?.[0] || null;
@@ -299,7 +299,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
         .single();
 
       if (createError) {
-        return NextResponse.json({ error: createError.message, code: "CREATE_TICKET_FAILED" }, { status: 500 });
+        return dbError(createError, "CREATE_TICKET_FAILED", 500);
       }
       ticketId = newTicket.id;
     } else {
@@ -324,7 +324,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       .single();
 
     if (msgError) {
-      return NextResponse.json({ error: msgError.message, code: "CREATE_MSG_FAILED" }, { status: 500 });
+      return dbError(msgError, "CREATE_MSG_FAILED", 500);
     }
 
     // Broadcast over Supabase Realtime WebSocket channels

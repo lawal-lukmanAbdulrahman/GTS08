@@ -149,7 +149,10 @@ export async function sendCampaign(client: Client, campaign: CampaignRow): Promi
       const results = await Promise.all(
         recipients.slice(i, i + CONCURRENCY).map((to) => sendEmail({ to, ...mail, headers: { "List-Unsubscribe": `<mailto:${unsubscribe}?subject=Unsubscribe>` } }))
       );
-      for (const r of results) r.ok ? sent++ : failed++;
+      for (const r of results) {
+        if (r.ok) sent++;
+        else failed++;
+      }
     }
   } catch (err) {
     console.error("[campaigns] could not build the audience:", err);

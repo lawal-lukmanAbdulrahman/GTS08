@@ -607,6 +607,11 @@ export default function EditProductPage() {
       });
 
       const json = await res.json().catch(() => ({}));
+      // A duplicate (409) just means it already exists, so it is selected below; any other failure is shown.
+      if (!res.ok && res.status !== 409) {
+        setErrorMsg(json.error || "Couldn't save the category. Please try again.");
+        return;
+      }
       const createdCategory: CategoryOption = json.data || {
         name: newCategoryName.trim(),
         slug: newCategoryName.toLowerCase().replace(/[^a-z0-9]+/g, "-"),

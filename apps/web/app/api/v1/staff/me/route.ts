@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { validatePhoneNumber } from "@gts/utils";
 import { requireStaff } from "../../_lib/staff-access";
 import { clientIp, logActivity } from "../../_lib/activity";
+import { dbError } from "../../_lib/http";
 
 /** The signed-in staff member's own profile and what they're allowed to do. */
 export async function GET(request: NextRequest) {
@@ -58,7 +59,7 @@ export async function PATCH(request: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+    return dbError(error, "DATABASE_ERROR", 500);
   }
 
   // The number is personal data: record that it changed, not what it changed to.

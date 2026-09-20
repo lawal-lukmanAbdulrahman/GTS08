@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { parseWhatsAppContact, isUuid } from "@gts/utils";
 import { requirePosAccess } from "../../../_lib/access";
 import { clientIp, logActivity } from "../../../../_lib/activity";
+import { dbError } from "../../../../_lib/http";
 
 interface OrderRow {
   id: string;
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     .maybeSingle();
 
   if (error) {
-    return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+    return dbError(error, "DATABASE_ERROR", 500);
   }
   if (!data) {
     return NextResponse.json({ error: "Order not found.", code: "ORDER_NOT_FOUND" }, { status: 404 });

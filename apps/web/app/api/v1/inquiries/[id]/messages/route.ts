@@ -5,7 +5,7 @@ import { getAuthenticatedUser } from "../../../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { sanitizeXss } from "@gts/utils";
 import { optionalStaff } from "../../../_lib/staff-access";
-import { serverError } from "../../../_lib/http";
+import { serverError, dbError } from "../../../_lib/http";
 
 // GET /api/v1/inquiries/[id]/messages
 // Secure thread retrieval: must be customer owner or staff/admin
@@ -157,7 +157,7 @@ export const POST = withIdempotency(async function POST(
       .single();
 
     if (msgError) {
-      return NextResponse.json({ error: msgError.message, code: "INSERT_MSG_FAILED" }, { status: 500 });
+      return dbError(msgError, "INSERT_MSG_FAILED", 500);
     }
 
     // 2. Update ticket status: if staff replied, mark 'in_progress' or update timestamp

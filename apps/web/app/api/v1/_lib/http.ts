@@ -23,3 +23,12 @@ export async function readJson(request: NextRequest): Promise<{ ok: true; body: 
     return { ok: false, response: NextResponse.json(INVALID_BODY, { status: 400 }) };
   }
 }
+
+/**
+ * A database failure as a response: the real message goes to the server log, and the
+ * caller gets a generic one, since the text can name tables, columns or constraints.
+ */
+export function dbError(error: { message?: string } | null | undefined, code = "DATABASE_ERROR", status = 500): NextResponse {
+  console.error(`[api] ${code}:`, error?.message ?? error);
+  return NextResponse.json({ error: "Something went wrong. Please try again.", code }, { status });
+}

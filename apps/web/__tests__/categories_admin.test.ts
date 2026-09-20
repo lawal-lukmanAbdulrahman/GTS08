@@ -12,6 +12,7 @@ vi.mock("../app/api/v1/_lib/staff-access", async (orig) => ({
 }));
 
 import { NextRequest } from "next/server";
+import { POST as createCategory } from "../app/api/v1/categories/route";
 import { GET, PATCH, DELETE } from "../app/api/v1/categories/[id]/route";
 import { PUT as REORDER } from "../app/api/v1/categories/reorder/route";
 
@@ -119,5 +120,34 @@ describe("PUT /categories/reorder", () => {
     const res = await REORDER(req("PUT", [{ id: ID, sort_order: 1 }, { id: ID2, sort_order: 0 }]));
     expect(res.status).toBe(200);
     expect(db.touched.filter((t) => t === "categories")).toHaveLength(2);
+  });
+});
+
+describe("POST /categories", () => {
+  const post = (body: unknown) => createCategory(req("POST", body));
+  it("needs can_manage_products", async () => {
+    mockPerm.mockResolvedValue({ ok: false, response: NextResponse.json({ error: "no" }, { status: 403 }) });
+    expect((await post({ name: "Shirts" })).status).toBe(403);
+  });
+  it("creates a category with a slug made from its name", async () => {
+    const res = await post({ name: "  Formal   Shirts ", sort_order: 2 });
+    expect(res.status).toBe(201);
+    expect(db.called("categories", "insert")!.args[0]).toMatchObject({ name: "Formal Shirts", slug: "formal-shirts", sort_order: 2 });
+  });
+  it("validates", async () => {
+    for (const body of [{}, { name: "" }, { name: "x".repeat(101) }, { name: "Ok", slug: "Bad Slug" }, { name: "Ok", sort_order: -1 }, { name: "Ok", parent_id: "nope" }]) {
+      expect((await post(body)).status, JSON.stringify(body)).toBe(400);
+    }
+    expect((await post("{nope")).status).toBe(400);
+  });
+  it("tells the admin when it fails, instead of pretending it worked", async () => {
+    db.results.categories = { data: null, error: { message: "relation secret_t missing" } };
+    const res = await post({ name: "Shirts" });
+    expect(res.status).toBe(500);
+    expect(JSON.stringify(await res.json())).not.toMatch(/secret_t/);
+  });
+  it("says so when the name or slug is taken", async () => {
+    db.results.categories = { data: null, error: { code: "23505", message: "duplicate key" } };
+    expect((await post({ name: "Shirts" })).status).toBe(409);
   });
 });

@@ -6,6 +6,7 @@ import { requireAdmin } from "../../_lib/staff-access";
 import { clientIp, logActivity } from "../../_lib/activity";
 import { afterResponse } from "../../_lib/email/after";
 import { notifyFlagUpdated } from "../../_lib/email/events";
+import { dbError } from "../../_lib/http";
 
 /** An admin reviews, resolves, dismisses or reopens a flag. */
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -46,7 +47,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .select("id, status, resolution_note, resolved_at")
     .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+  if (error) return dbError(error, "DATABASE_ERROR", 500);
   if (!data) return NextResponse.json({ error: "Flag not found.", code: "FLAG_NOT_FOUND" }, { status: 404 });
 
   await logActivity(serviceClient, {

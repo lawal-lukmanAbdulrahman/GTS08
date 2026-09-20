@@ -4,7 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../_lib/staff-access";
-import { serverError } from "../_lib/http";
+import { serverError, dbError } from "../_lib/http";
 
 export async function GET(request: NextRequest) {
   try {
@@ -102,10 +102,7 @@ export async function GET(request: NextRequest) {
     const { data: products, count, error } = await query;
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message, code: "DATABASE_ERROR" },
-        { status: 500 }
-      );
+      return dbError(error, "DATABASE_ERROR", 500);
     }
 
     // Transform products payload
@@ -351,7 +348,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       .single();
 
     if (prodErr) {
-      return NextResponse.json({ error: prodErr.message, code: "DATABASE_ERROR" }, { status: 400 });
+      return dbError(prodErr, "DATABASE_ERROR", 400);
     }
 
     // Attach Description Images if provided
@@ -571,7 +568,7 @@ export const PUT = withIdempotency(async function PUT(request: NextRequest) {
       .single();
 
     if (updateErr) {
-      return NextResponse.json({ error: updateErr.message, code: "DATABASE_ERROR" }, { status: 400 });
+      return dbError(updateErr, "DATABASE_ERROR", 400);
     }
 
     // Update Primary Image

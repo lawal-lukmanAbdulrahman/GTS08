@@ -18,6 +18,7 @@ export type ActivityAction =
   | "staff.permissions_update"
   | "product_flag.raise"
   | "product_flag.update"
+  | "category.create"
   | "category.update"
   | "category.delete"
   | "category.reorder"

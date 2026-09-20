@@ -4,7 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { sanitizeSafeText, sanitizeXss } from "@gts/utils";
-import { serverError } from "../_lib/http";
+import { serverError, dbError } from "../_lib/http";
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false });
 
     if (error) {
-      return NextResponse.json({ error: error.message, code: "DB_ERROR" }, { status: 500 });
+      return dbError(error, "DB_ERROR", 500);
     }
 
     return NextResponse.json({ data: reviews || [] });
@@ -125,10 +125,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       .single();
 
     if (insertErr) {
-      return NextResponse.json(
-        { error: insertErr.message, code: "INSERT_FAILED" },
-        { status: 500 }
-      );
+      return dbError(insertErr, "INSERT_FAILED", 500);
     }
 
     return NextResponse.json({ success: true, data: review });

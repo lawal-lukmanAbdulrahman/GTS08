@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
 import { validateStoreSettings } from "@gts/utils";
 import { requireAdmin } from "../_lib/staff-access";
+import { dbError } from "../_lib/http";
 
 // The settings table is a one-row singleton (migration 00001).
 const SETTINGS_ID = "00000000-0000-0000-0000-000000000001";
@@ -39,7 +40,7 @@ export async function GET(_request: NextRequest) {
   }
 
   if (error) {
-    return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+    return dbError(error, "DATABASE_ERROR", 500);
   }
   return NextResponse.json({ data: data ?? DEFAULT_STORE });
 }
@@ -84,7 +85,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (error) {
-    return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+    return dbError(error, "DATABASE_ERROR", 500);
   }
   return NextResponse.json({ data, ...(warning ? { warning } : {}) });
 }

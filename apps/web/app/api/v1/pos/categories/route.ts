@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../_lib/access";
+import { dbError } from "../../_lib/http";
 
 /** Top-level categories for the POS tabs; choosing one also covers its sub-categories (see products/search). */
 export async function GET(request: NextRequest) {
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
     .order("name", { ascending: true });
 
   if (error) {
-    return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+    return dbError(error, "DATABASE_ERROR", 500);
   }
   return NextResponse.json({ data: data || [] });
 }

@@ -4,7 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../../_lib/staff-access";
-import { serverError } from "../../_lib/http";
+import { serverError, dbError } from "../../_lib/http";
 
 // ── GET /api/v1/products/drafts ──────────────────────────────────────────────
 // Fetch all drafts or a specific draft by product_id or draft id
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
 
       if (error) {
-        return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+        return dbError(error, "DATABASE_ERROR", 500);
       }
       return NextResponse.json({ data: data || null });
     }
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
 
       if (error) {
-        return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+        return dbError(error, "DATABASE_ERROR", 500);
       }
       return NextResponse.json({ data: data || null });
     }
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
       .order("updated_at", { ascending: false });
 
     if (error) {
-      return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+      return dbError(error, "DATABASE_ERROR", 500);
     }
 
     return NextResponse.json({ data: drafts || [] });
@@ -124,7 +124,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
           .single();
 
         if (updateErr) {
-          return NextResponse.json({ error: updateErr.message, code: "DATABASE_ERROR" }, { status: 400 });
+          return dbError(updateErr, "DATABASE_ERROR", 400);
         }
         return NextResponse.json({ data: updated });
       }
@@ -144,7 +144,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       .single();
 
     if (insertErr) {
-      return NextResponse.json({ error: insertErr.message, code: "DATABASE_ERROR" }, { status: 400 });
+      return dbError(insertErr, "DATABASE_ERROR", 400);
     }
 
     return NextResponse.json({ data: newDraft }, { status: 201 });
@@ -180,7 +180,7 @@ export const DELETE = withIdempotency(async function DELETE(request: NextRequest
 
     const { error } = await query;
     if (error) {
-      return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 400 });
+      return dbError(error, "DATABASE_ERROR", 400);
     }
 
     return NextResponse.json({ success: true, message: "Draft deleted safely. Live product untouched." });

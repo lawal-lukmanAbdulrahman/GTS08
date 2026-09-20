@@ -7,6 +7,7 @@ import { adjustAll, type InventoryChange } from "../../../_lib/inventory";
 import { transitionOrderStatus } from "../../../_lib/order-status";
 import { clientIp, logActivity } from "../../../../_lib/activity";
 import { sanitizeSqlInput } from "../../../../auth/utils";
+import { dbError } from "../../../../_lib/http";
 
 /**
  * Cancels a WhatsApp order that was never paid (customer went quiet, changed
@@ -39,7 +40,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ ref
     .maybeSingle();
 
   if (error) {
-    return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+    return dbError(error, "DATABASE_ERROR", 500);
   }
   if (!data) {
     return NextResponse.json({ error: "Order not found.", code: "ORDER_NOT_FOUND" }, { status: 404 });

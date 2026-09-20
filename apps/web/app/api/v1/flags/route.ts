@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { FLAG_STATUSES, type FlagStatus } from "@gts/utils";
 import { requireAdmin } from "../_lib/staff-access";
+import { dbError } from "../_lib/http";
 
 /** The admin review queue of product flags raised by cashiers. */
 export async function GET(request: NextRequest) {
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     );
   if (status !== "all") query = query.eq("status", status);
   const { data, error } = await query.order("created_at", { ascending: false }).limit(100);
-  if (error) return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+  if (error) return dbError(error, "DATABASE_ERROR", 500);
 
   const { data: all } = await serviceClient.from("product_flags").select("status").limit(5000);
   const counts: Record<FlagStatus, number> = { open: 0, in_review: 0, resolved: 0, dismissed: 0 };

@@ -4,7 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../../../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../../../_lib/staff-access";
-import { serverError } from "../../../_lib/http";
+import { serverError, dbError } from "../../../_lib/http";
 
 // PATCH /api/v1/inquiries/[id]/status
 // Restricted to staff/admin, wrapped in idempotency
@@ -45,7 +45,7 @@ export const PATCH = withIdempotency(async function PATCH(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message, code: "UPDATE_FAILED" }, { status: 500 });
+      return dbError(error, "UPDATE_FAILED", 500);
     }
 
     return NextResponse.json({ success: true, data });

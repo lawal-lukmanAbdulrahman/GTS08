@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
 import { optionalStaff } from "../_lib/staff-access";
-import { serverError } from "../_lib/http";
+import { serverError, dbError } from "../_lib/http";
 
 export async function GET(request: NextRequest) {
   try {
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
       const { data: orders, count, error } = await custQuery;
 
       if (error) {
-        return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+        return dbError(error, "DATABASE_ERROR", 500);
       }
 
       const total = count || 0;
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
     const { data: orders, count, error } = await query;
 
     if (error) {
-      return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+      return dbError(error, "DATABASE_ERROR", 500);
     }
 
     const total = count || 0;

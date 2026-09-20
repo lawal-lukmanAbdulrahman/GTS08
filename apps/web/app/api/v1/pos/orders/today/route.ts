@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { startOfWATDay } from "@gts/utils";
 import { requirePosAccess } from "../../_lib/access";
+import { dbError } from "../../../_lib/http";
 
 /**
  * gts_03_cashier_spec.md Part 6: today's walk-in/whatsapp orders created by
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
     .order("created_at", { ascending: false });
 
   if (error) {
-    return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+    return dbError(error, "DATABASE_ERROR", 500);
   }
 
   return NextResponse.json({ data: data || [] });

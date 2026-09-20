@@ -7,6 +7,7 @@ import { clientIp, logActivity } from "../../../../_lib/activity";
 import { adjustAll, type InventoryChange } from "../../../_lib/inventory";
 import { transitionOrderStatus } from "../../../_lib/order-status";
 import { sanitizeSqlInput } from "../../../../auth/utils";
+import { dbError } from "../../../../_lib/http";
 
 function isToday(isoDate: string): boolean {
   return new Date(isoDate).getTime() >= startOfWATDay(new Date()).getTime();
@@ -46,7 +47,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     .maybeSingle();
 
   if (orderError) {
-    return NextResponse.json({ error: orderError.message, code: "DATABASE_ERROR" }, { status: 500 });
+    return dbError(orderError, "DATABASE_ERROR", 500);
   }
   if (!order) {
     return NextResponse.json({ error: "Order not found.", code: "ORDER_NOT_FOUND" }, { status: 404 });

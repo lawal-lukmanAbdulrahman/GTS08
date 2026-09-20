@@ -6,6 +6,7 @@ import { requirePosAccess } from "../../../_lib/access";
 import { adjustAll, type InventoryChange } from "../../../_lib/inventory";
 import { transitionOrderStatus } from "../../../_lib/order-status";
 import { clientIp, logActivity } from "../../../../_lib/activity";
+import { dbError } from "../../../../_lib/http";
 
 const PAYMENT_METHODS = ["cash", "pos_terminal"] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
     .maybeSingle();
 
   if (orderError) {
-    return NextResponse.json({ error: orderError.message, code: "DATABASE_ERROR" }, { status: 500 });
+    return dbError(orderError, "DATABASE_ERROR", 500);
   }
   if (!order) {
     return NextResponse.json({ error: "Order not found.", code: "ORDER_NOT_FOUND" }, { status: 404 });

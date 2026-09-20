@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { validateProductFlag } from "@gts/utils";
 import { requirePosAccess } from "../../_lib/staff-access";
 import { clientIp, logActivity } from "../../_lib/activity";
+import { dbError } from "../../_lib/http";
 
 const FLAG_COLUMNS = "id, product_id, variant_id, reason, note, status, created_at";
 
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       );
     }
-    return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+    return dbError(error, "DATABASE_ERROR", 500);
   }
 
   const created = data as { id: string };
@@ -102,6 +103,6 @@ export async function GET(request: NextRequest) {
     .order("created_at", { ascending: false })
     .limit(50);
 
-  if (error) return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+  if (error) return dbError(error, "DATABASE_ERROR", 500);
   return NextResponse.json({ data: data || [] });
 }

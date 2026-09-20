@@ -3,7 +3,7 @@ import { getAuthenticatedUser } from "../../utils";
 import { createServiceClient } from "@gts/database";
 import { hashPin, verifyPinTicket } from "@/../lib/pin-security";
 import { withIdempotency } from "@/lib/idempotency";
-import { serverError } from "../../../_lib/http";
+import { serverError, dbError } from "../../../_lib/http";
 
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
@@ -53,7 +53,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     });
 
     if (updateErr) {
-      return NextResponse.json({ error: updateErr.message, code: "DATABASE_ERROR" }, { status: 500 });
+      return dbError(updateErr, "DATABASE_ERROR", 500);
     }
 
     return NextResponse.json({

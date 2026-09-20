@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { getAuthenticatedUser } from "../auth/utils";
 import { requirePermission } from "../_lib/staff-access";
-import { serverError } from "../_lib/http";
+import { serverError, readJson } from "../_lib/http";
+import { isUuid, toSlug } from "@gts/utils";
+import { clientIp, logActivity } from "../_lib/activity";
+import { isDbUniqueViolation, isPlainObject, SLUG, textField } from "../_lib/validate";
 
 const STOREFRONT_CATEGORIES = [
   {
@@ -148,54 +150,55 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const access = await requirePermission(request, "can_manage_products");
+  if (!access.ok) return access.response;
+
   try {
-    const access = await requirePermission(request, "can_manage_products");
-    if (!access.ok) return access.response;
-    const user = access.user;
+    const parsed = await readJson(request);
+    if (!parsed.ok) return parsed.response;
+    const b = isPlainObject(parsed.body) ? parsed.body : {};
 
-    const body = await request.json();
-    const { name, slug, description, banner_cloudinary_id, parent_id, sort_order, sub_categories } = body;
+    const errors: Record<string, string> = {};
+    const name = textField(b.name, "Name", { max: 100, required: true });
+    if ("error" in name) errors.name = name.error;
+    const description = textField(b.description, "Description", { max: 2000 });
+    if ("error" in description) errors.description = description.error;
+    const banner = textField(b.banner_cloudinary_id, "Banner", { max: 255 });
+    if ("error" in banner) errors.banner_cloudinary_id = banner.error;
 
-    if (!name) {
-      return NextResponse.json({ error: "Category name is required", code: "INVALID_INPUT" }, { status: 400 });
+    let slug = "";
+    if (b.slug !== undefined && b.slug !== null && b.slug !== "") {
+      if (typeof b.slug !== "string" || !SLUG.test(b.slug) || b.slug.length > 100) errors.slug = "Slug can only use lowercase letters, numbers and single dashes.";
+      else slug = b.slug;
+    } else if (!("error" in name) && name.value) {
+      slug = toSlug(name.value);
+      if (!slug) errors.slug = "Give the category a name with letters or numbers.";
     }
+    if (b.sort_order !== undefined && (typeof b.sort_order !== "number" || !Number.isInteger(b.sort_order) || b.sort_order < 0)) errors.sort_order = "Sort order must be a whole number, 0 or more.";
+    if (b.parent_id !== undefined && b.parent_id !== null && !isUuid(b.parent_id)) errors.parent_id = "Parent must be a category id.";
 
-    const finalSlug = slug || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    if (Object.keys(errors).length > 0) return NextResponse.json({ error: "Please fix the highlighted fields.", code: "VALIDATION_ERROR", details: errors }, { status: 400 });
 
-    const serviceClient = createServiceClient();
-    const { data: category, error } = await serviceClient
+    const client = createServiceClient();
+    const { data, error } = await client
       .from("categories")
-      .upsert(
-        {
-          name: name.trim(),
-          slug: finalSlug,
-          description: description || null,
-          banner_cloudinary_id: banner_cloudinary_id || null,
-          parent_id: parent_id || null,
-          sort_order: sort_order || 0,
-        },
-        { onConflict: "name" }
-      )
+      .insert({
+        name: (name as { value: string }).value,
+        slug,
+        description: (description as { value: string | null }).value,
+        banner_cloudinary_id: (banner as { value: string | null }).value,
+        parent_id: (b.parent_id as string | null | undefined) ?? null,
+        sort_order: (b.sort_order as number | undefined) ?? 0,
+      })
       .select()
       .single();
-
     if (error) {
-      // Return success gracefully
-      return NextResponse.json(
-        {
-          data: {
-            name: name.trim(),
-            slug: finalSlug,
-            description: description || null,
-            sub_categories: sub_categories || [],
-          },
-        },
-        { status: 201 }
-      );
+      if (isDbUniqueViolation(error)) return NextResponse.json({ error: "A category with that name or slug already exists.", code: "CATEGORY_EXISTS" }, { status: 409 });
+      return serverError(new Error(error.message));
     }
-
-    return NextResponse.json({ data: category }, { status: 201 });
-  } catch (err: any) {
+    await logActivity(client, { actorId: access.user.id, action: "category.create", targetType: "category", targetId: (data as { id: string }).id, ip: clientIp(request) });
+    return NextResponse.json({ data }, { status: 201 });
+  } catch (err) {
     return serverError(err);
   }
 }

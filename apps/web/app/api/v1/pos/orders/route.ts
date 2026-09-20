@@ -8,7 +8,7 @@ import { checkStockSufficiency } from "../_lib/stock-sufficiency";
 import { variantAvailable } from "../_lib/stock-status";
 import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
 import { clientIp, logActivity } from "../../_lib/activity";
-import { serverError } from "../../_lib/http";
+import { serverError, dbError } from "../../_lib/http";
 import { afterResponse } from "../../_lib/email/after";
 import { notifyPosReceipt } from "../../_lib/email/events";
 
@@ -93,7 +93,7 @@ function stockFailureResponse(
       { status: 503 }
     );
   }
-  return NextResponse.json({ error: failure.message, code: "DATABASE_ERROR" }, { status: 500 });
+  return dbError(failure, "DATABASE_ERROR", 500);
 }
 
 export async function POST(request: NextRequest) {
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
   }
   const validItems = validateOrderItems(body.items);
   if (!validItems.ok) {
-    return NextResponse.json({ error: validItems.message, code: "INVALID_ITEMS" }, { status: 400 });
+    return dbError(validItems, "INVALID_ITEMS", 400);
   }
   const items = validItems.items;
 
@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
     .in("id", variantIds);
 
   if (variantError) {
-    return NextResponse.json({ error: variantError.message, code: "DATABASE_ERROR" }, { status: 500 });
+    return dbError(variantError, "DATABASE_ERROR", 500);
   }
 
   const variants = (variantRows || []) as unknown as VariantRow[];
@@ -239,7 +239,7 @@ export async function POST(request: NextRequest) {
         .single();
       if (custError) {
         await rollback(serviceClient, stockChanges);
-        return NextResponse.json({ error: custError.message, code: "DATABASE_ERROR" }, { status: 500 });
+        return dbError(custError, "DATABASE_ERROR", 500);
       }
       customerId = (created as { id: string }).id;
     }

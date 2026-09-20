@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { serverError } from "../../_lib/http";
+import { serverError, dbError } from "../../_lib/http";
 
 export async function GET(request: NextRequest) {
   try {
@@ -45,10 +45,7 @@ export async function GET(request: NextRequest) {
       .range(offset, offset + limit - 1);
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message, code: "DATABASE_ERROR" },
-        { status: 500 }
-      );
+      return dbError(error, "DATABASE_ERROR", 500);
     }
 
     const transformed = (products || []).map((p: any) => {

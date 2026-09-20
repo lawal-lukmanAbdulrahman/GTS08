@@ -8,6 +8,7 @@ import { clientIp, logActivity } from "../../_lib/activity";
 import { afterResponse } from "../../_lib/email/after";
 import { notifyAccessChanged } from "../../_lib/email/events";
 import { loadActivity, loadSalesRecord, SALES_RANGES } from "../../_lib/staff-record";
+import { dbError } from "../../_lib/http";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -52,8 +53,8 @@ export async function GET(request: NextRequest, { params }: Context) {
 
   const serviceClient = createServiceClient();
   const [sales, activity] = await Promise.all([loadSalesRecord(serviceClient, id, range), loadActivity(serviceClient, id)]);
-  if (!sales.ok) return NextResponse.json({ error: sales.message, code: "DATABASE_ERROR" }, { status: 500 });
-  if (!activity.ok) return NextResponse.json({ error: activity.message, code: "DATABASE_ERROR" }, { status: 500 });
+  if (!sales.ok) return dbError(sales, "DATABASE_ERROR", 500);
+  if (!activity.ok) return dbError(activity, "DATABASE_ERROR", 500);
 
   const { ok: _ok, ...salesData } = sales;
   return NextResponse.json({
@@ -141,7 +142,7 @@ export async function PATCH(request: NextRequest, { params }: Context) {
       .upsert({ user_id: id, ...flags, granted_by: admin.user.id, updated_at: new Date().toISOString() }, { onConflict: "user_id" })
       .select("*")
       .single();
-    if (error) return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+    if (error) return dbError(error, "DATABASE_ERROR", 500);
     after = (data as Record<string, unknown>) ?? { ...before, ...flags };
   }
 
@@ -150,7 +151,7 @@ export async function PATCH(request: NextRequest, { params }: Context) {
       .from("users")
       .update({ is_blocked: isBlocked, updated_at: new Date().toISOString() })
       .eq("id", id);
-    if (error) return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+    if (error) return dbError(error, "DATABASE_ERROR", 500);
     // Only tell them when their access actually changed, not on a repeat of the same state.
     if (isBlocked !== target.is_blocked) afterResponse(() => notifyAccessChanged(serviceClient, id, isBlocked));
   }

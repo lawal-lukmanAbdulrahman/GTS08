@@ -7,7 +7,7 @@ import { effectivePermissions, requireSuperAdmin } from "../../_lib/staff-access
 import { clientIp, logActivity } from "../../_lib/activity";
 import { generateTempPassword } from "../../_lib/temp-password";
 import { requireAdmin } from "../../_lib/staff-access";
-import { serverError } from "../../_lib/http";
+import { serverError, dbError } from "../../_lib/http";
 import { notifyStaffWelcome } from "../../_lib/email/events";
 
 export async function GET(request: NextRequest) {
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       .neq("role", "customer");
 
     if (error) {
-      return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+      return dbError(error, "DATABASE_ERROR", 500);
     }
 
     // Attach permissions

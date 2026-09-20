@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../../_lib/access";
 import { variantAvailable, type InventoryRow } from "../../_lib/stock-status";
+import { dbError } from "../../../_lib/http";
 
 /**
  * Barcode scanner support (gts_03_cashier_spec.md Part 7): exact SKU match
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ sku
     .maybeSingle();
 
   if (error) {
-    return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+    return dbError(error, "DATABASE_ERROR", 500);
   }
 
   if (!data) {
