@@ -246,4 +246,33 @@ describe("SearchPanel (spec Part 3)", () => {
       expect(onFlagProduct).toHaveBeenCalledWith(OUT_OF_STOCK_PRODUCT);
     });
   });
+
+  describe("product pictures", () => {
+    const withImage = (cloudinary_id: string): PosProduct => ({ ...SINGLE_VARIANT_PRODUCT, primary_image: { cloudinary_id, alt: "Plain Tee photo" } });
+    const show = (p: PosProduct) =>
+      render(<SearchPanel query="" onQueryChange={vi.fn()} category="all" onCategoryChange={vi.fn()} categories={[]} products={[p]} loading={false} onQuickAdd={vi.fn()} onOpenVariantModal={vi.fn()} {...DEFAULTS} />);
+
+    it("shows the picture when the catalogue holds a full image URL", () => {
+      show(withImage("https://res.cloudinary.com/drstfd8gs/image/upload/v1/tee.webp"));
+      expect(screen.getByAltText("Plain Tee photo")).toHaveAttribute("src", "https://res.cloudinary.com/drstfd8gs/image/upload/v1/tee.webp");
+    });
+
+    it("shows a placeholder, not a broken image, for a stored path that was never uploaded", () => {
+      show(withImage("/products/tee.png"));
+      expect(screen.queryByAltText("Plain Tee photo")).not.toBeInTheDocument();
+      expect(screen.getByTestId("no-image")).toBeInTheDocument();
+    });
+
+    it("falls back to the placeholder if the picture fails to load", () => {
+      show(withImage("https://res.cloudinary.com/drstfd8gs/image/upload/v1/gone.webp"));
+      fireEvent.error(screen.getByAltText("Plain Tee photo"));
+      expect(screen.queryByAltText("Plain Tee photo")).not.toBeInTheDocument();
+      expect(screen.getByTestId("no-image")).toBeInTheDocument();
+    });
+
+    it("shows the placeholder when a product has no picture at all", () => {
+      show(SINGLE_VARIANT_PRODUCT);
+      expect(screen.getByTestId("no-image")).toBeInTheDocument();
+    });
+  });
 });

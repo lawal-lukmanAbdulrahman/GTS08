@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { formatKobo } from "@gts/utils";
+import { resolveProductImageUrl } from "./product-image";
 import type { PosProduct } from "./pos-types";
 import { resolveQuickAddVariant } from "./quick-add";
 
@@ -31,6 +33,22 @@ const STOCK_BADGE: Record<PosProduct["stock_status"], { label: string; className
   low_stock: { label: "Low Stock", className: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
   out_of_stock: { label: "Out of Stock", className: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" },
 };
+
+function Thumb({ image }: { image: PosProduct["primary_image"] }) {
+  const [failed, setFailed] = useState(false);
+  const url = resolveProductImageUrl(image?.cloudinary_id);
+  if (!url || failed) {
+    return (
+      <div data-testid="no-image" className="w-full h-full flex items-center justify-center text-gray-300 dark:text-[#444]">
+        <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21zM8.25 8.625a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0z" />
+        </svg>
+      </div>
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={image?.alt ?? ""} onError={() => setFailed(true)} className="w-full h-full object-cover" />;
+}
 
 export default function SearchPanel({
   query,
@@ -128,14 +146,7 @@ export default function SearchPanel({
                       }`}
                     >
                       <div className="aspect-square rounded-[8px] bg-gray-100 dark:bg-[#242424] mb-2 overflow-hidden">
-                        {product.primary_image && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={`https://res.cloudinary.com/daht6d5ck/image/upload/${product.primary_image.cloudinary_id}`}
-                            alt={product.primary_image.alt}
-                            className="w-full h-full object-cover"
-                          />
-                        )}
+                        <Thumb image={product.primary_image} />
                       </div>
                       <p className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-2">{product.name}</p>
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{formatKobo(product.base_price)}</p>
