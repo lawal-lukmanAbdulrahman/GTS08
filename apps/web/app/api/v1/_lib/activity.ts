@@ -28,7 +28,11 @@ export type ActivityAction =
   | "promo.delete"
   | "ticket.update"
   | "size_guide.update"
-  | "content_slot.update";
+  | "content_slot.update"
+  | "campaign.create"
+  | "campaign.update"
+  | "campaign.delete"
+  | "campaign.send";
 
 export interface ActivityEntry {
   actorId: string;

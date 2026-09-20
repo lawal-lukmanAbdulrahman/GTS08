@@ -111,14 +111,15 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "tickets/[id]/messages": { POST: "permission:can_handle_tickets" },
 
   // ── email, notifications, cron
-  "email-campaigns": stub("GET", "POST"),
-  "email-campaigns/[id]": stub("GET", "PATCH"),
-  "email-campaigns/[id]/send": stub("POST"),
+  "email-campaigns": { GET: "admin", POST: "admin" },
+  "email-campaigns/[id]": { GET: "admin", PATCH: "admin", DELETE: "admin" },
+  "email-campaigns/[id]/send": { POST: "admin" },
   "notifications": { GET: "admin" },
   "notifications/unread-count": { GET: "admin" },
   "notifications/[id]/read": { PUT: "admin" },
   "notifications/read-all": { PUT: "admin" },
   "cron/cleanup-reservations": { GET: "cron", POST: "cron" }, // Vercel Cron calls with GET
+  "cron/send-campaigns": { GET: "cron" },
   "cron/expire-orders": { GET: "cron", POST: "cron" },
 
   // ── staff and admin

@@ -179,6 +179,17 @@ export function orderStatusEmail(o: { store: StoreInfo; name: string; orderNumbe
   };
 }
 
+/** A marketing message: the admin's text, one button, and always a way to opt out. */
+export function campaignEmail(o: { store: StoreInfo; subject: string; preview?: string | null; bodyHtml: string; ctaLabel?: string | null; ctaUrl?: string | null; unsubscribeEmail: string }): Rendered {
+  const cta = o.ctaLabel && o.ctaUrl ? button(o.ctaUrl, o.ctaLabel) : "";
+  const optOut = `<p style="margin:18px 0 0;font-size:12px;color:#6b7280;">You're getting this because you shopped with ${esc(o.store.name)}. To unsubscribe, email <a href="mailto:${esc(o.unsubscribeEmail)}?subject=Unsubscribe" style="color:#6b7280;">${esc(o.unsubscribeEmail)}</a> and we'll take you off the list.</p>`;
+  return {
+    subject: o.subject,
+    html: shell(o.store, o.subject, (o.preview ? `<span style="display:none;max-height:0;overflow:hidden;">${esc(o.preview)}</span>` : "") + o.bodyHtml + cta + optOut),
+    text: [o.subject, "", o.bodyHtml.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n\n").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim(), o.ctaLabel && o.ctaUrl ? `${o.ctaLabel}: ${o.ctaUrl}` : "", `To unsubscribe, email ${o.unsubscribeEmail} and we'll take you off the list.`].filter((l) => l !== "").join("\n\n"),
+  };
+}
+
 export function ticketReceivedEmail(o: { store: StoreInfo; name: string; reference: string; subject: string }): Rendered {
   return {
     subject: `We got your message (${o.reference})`,

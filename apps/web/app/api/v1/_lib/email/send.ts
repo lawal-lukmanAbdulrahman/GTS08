@@ -3,6 +3,8 @@ export interface EmailMessage {
   subject: string;
   html: string;
   text: string;
+  /** Extra message headers, e.g. List-Unsubscribe on bulk mail. */
+  headers?: Record<string, string>;
 }
 
 export type SendResult = { ok: true; id: string | null } | { ok: false; skipped?: boolean; reason: string };
@@ -29,7 +31,7 @@ export async function sendEmail(message: EmailMessage): Promise<SendResult> {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: [to], subject: message.subject, html: message.html, text: message.text, ...(replyTo ? { reply_to: replyTo } : {}) }),
+      body: JSON.stringify({ from, to: [to], subject: message.subject, html: message.html, text: message.text, ...(replyTo ? { reply_to: replyTo } : {}), ...(message.headers ? { headers: message.headers } : {}) }),
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) {
