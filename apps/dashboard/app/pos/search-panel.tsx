@@ -105,7 +105,7 @@ export default function SearchPanel({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-4 space-y-3">
+      <div className="p-6 space-y-4">
         <input
           autoFocus
           type="text"
@@ -128,7 +128,8 @@ export default function SearchPanel({
           <button
             type="button"
             onClick={() => onCategoryChange("all")}
-            className={`px-3 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap ${
+            aria-pressed={category === "all"}
+            className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${
               category === "all"
                 ? "bg-[#EDCF5D] text-[#010101]"
                 : "bg-gray-100 dark:bg-[#242424] text-gray-600 dark:text-gray-300"
@@ -141,7 +142,8 @@ export default function SearchPanel({
               key={cat.id}
               type="button"
               onClick={() => onCategoryChange(cat.slug)}
-              className={`px-3 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap ${
+              aria-pressed={category === cat.slug}
+              className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${
                 category === cat.slug
                   ? "bg-[#EDCF5D] text-[#010101]"
                   : "bg-gray-100 dark:bg-[#242424] text-gray-600 dark:text-gray-300"
@@ -163,7 +165,7 @@ export default function SearchPanel({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
+      <div className="flex-1 overflow-y-auto px-6 pb-6">
         {loading && products.length === 0 ? (
           <p className="text-base text-gray-500 text-center pt-10">Loading products...</p>
         ) : products.length === 0 ? (
@@ -172,46 +174,61 @@ export default function SearchPanel({
           </p>
         ) : (
           <>
-            <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">
-              {searching ? `Results for "${query.trim()}"` : "Best sellers"}
-            </p>
-            <div data-testid="product-grid" className={`grid gap-3 ${compact ? "grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "grid-cols-2 lg:grid-cols-3"}`}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                {searching ? `Results for "${query.trim()}"` : "Best sellers"}
+              </p>
+              {loading && (
+                <p role="status" className="text-sm font-semibold text-gray-500 dark:text-gray-400 animate-pulse">
+                  Updating...
+                </p>
+              )}
+            </div>
+            <div
+              data-testid="product-grid"
+              aria-busy={loading}
+              className={`grid gap-4 transition-opacity ${loading ? "opacity-50 pointer-events-none" : "opacity-100"} ${compact ? "grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "grid-cols-2 lg:grid-cols-3"}`}
+            >
               {products.map((product) => {
                 const badge = STOCK_BADGE[product.stock_status];
                 const outOfStock = product.stock_status === "out_of_stock";
                 return (
-                  <div key={product.id} className="relative">
+                  <div
+                    key={product.id}
+                    data-testid="product-card"
+                    className={`flex flex-col rounded-[12px] border border-gray-200 dark:border-[#262626] bg-white dark:bg-[#1C1C1C] p-3 hover:border-gray-400 dark:hover:border-[#444] transition-colors ${outOfStock ? "opacity-60" : ""}`}
+                  >
                     <button
                       type="button"
                       onClick={() => handleProductTap(product)}
                       disabled={outOfStock}
-                      className={`w-full text-left rounded-[10px] border border-gray-200 dark:border-[#262626] p-2.5 bg-white dark:bg-[#1C1C1C] hover:border-gray-400 dark:hover:border-[#444] transition-all ${
-                        outOfStock ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
-                      }`}
+                      className={`flex-1 w-full text-left ${outOfStock ? "cursor-not-allowed" : "cursor-pointer"}`}
                     >
-                      <div className={`${compact ? "aspect-[4/3]" : "aspect-square"} rounded-[8px] bg-gray-100 dark:bg-[#242424] mb-2 overflow-hidden`}>
+                      <div className={`${compact ? "aspect-[4/3]" : "aspect-square"} rounded-[8px] bg-gray-100 dark:bg-[#242424] mb-3 overflow-hidden`}>
                         <Thumb image={product.primary_image} />
                       </div>
                       <p className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-2">{product.name}</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{formatKobo(product.base_price)}</p>
-                      <span className={`inline-block mt-1 px-1.5 py-0.5 rounded-full text-xs font-bold ${badge.className}`}>
-                        {badge.label}
-                      </span>
-                      {product.stock_status === "low_stock" && (
-                        <span className="ml-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
-                          {product.variants.reduce((n, v) => n + Math.max(0, v.available), 0)} left
-                        </span>
-                      )}
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{formatKobo(product.base_price)}</p>
                     </button>
-                    <button
-                      type="button"
-                      aria-label={`Flag ${product.name}`}
-                      title="Report a problem with this product"
-                      onClick={() => onFlagProduct(product)}
-                      className="absolute bottom-1.5 right-1.5 min-h-[44px] min-w-[44px] px-2 rounded-[8px] bg-white/90 dark:bg-[#1C1C1C]/90 border border-gray-200 dark:border-[#383838] text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-red-600 hover:border-red-300"
-                    >
-                      ⚑ Flag
-                    </button>
+                    <div data-testid="product-card-footer" className="mt-3 flex items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${badge.className}`}>{badge.label}</span>
+                        {product.stock_status === "low_stock" && (
+                          <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                            {product.variants.reduce((n, v) => n + Math.max(0, v.available), 0)} left
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Flag ${product.name}`}
+                        title="Report a problem with this product"
+                        onClick={() => onFlagProduct(product)}
+                        className="shrink-0 min-h-[44px] min-w-[44px] px-3 rounded-[8px] border border-gray-200 dark:border-[#383838] text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-red-600 hover:border-red-300"
+                      >
+                        ⚑ Flag
+                      </button>
+                    </div>
                   </div>
                 );
               })}

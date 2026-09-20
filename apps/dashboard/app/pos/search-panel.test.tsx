@@ -257,8 +257,8 @@ describe("SearchPanel (spec Part 3)", () => {
       expect(screen.getByAltText("Plain Tee photo")).toHaveAttribute("src", "https://res.cloudinary.com/drstfd8gs/image/upload/v1/tee.webp");
     });
 
-    it("shows a placeholder, not a broken image, for a stored path that was never uploaded", () => {
-      show(withImage("/products/tee.png"));
+    it("shows a placeholder, not a broken image, for a value that is not a usable image", () => {
+      show(withImage("/etc/passwd"));
       expect(screen.queryByAltText("Plain Tee photo")).not.toBeInTheDocument();
       expect(screen.getByTestId("no-image")).toBeInTheDocument();
     });
@@ -331,6 +331,45 @@ describe("SearchPanel (spec Part 3)", () => {
       const flag = screen.getByRole("button", { name: /flag plain tee/i });
       expect(flag).toHaveTextContent(/flag/i);
       expect(flag.className).toMatch(/min-h-\[44px\]/);
+    });
+  });
+
+  describe("card layout and loading feedback", () => {
+    const grid = (over = {}) =>
+      render(<SearchPanel query="" onQueryChange={vi.fn()} category="all" onCategoryChange={vi.fn()} categories={[]} products={[SINGLE_VARIANT_PRODUCT]} loading={false} onQuickAdd={vi.fn()} onOpenVariantModal={vi.fn()} {...DEFAULTS} {...over} />);
+
+    it("keeps the Flag button inside its card, in the normal flow (not floating over the edge)", () => {
+      grid();
+      const card = screen.getByTestId("product-card");
+      const flag = screen.getByRole("button", { name: /flag plain tee/i });
+      expect(card).toContainElement(flag);
+      expect(flag.className).not.toMatch(/absolute/);
+    });
+
+    it("puts the stock badge and the Flag button on one footer row", () => {
+      grid();
+      const footer = screen.getByTestId("product-card-footer");
+      expect(footer).toContainElement(screen.getByText(/in stock/i));
+      expect(footer).toContainElement(screen.getByRole("button", { name: /flag plain tee/i }));
+    });
+
+    it("shows the old products dimmed with a message while a new filter loads, so a click never looks dead", () => {
+      grid({ loading: true });
+      expect(screen.getByTestId("product-grid")).toHaveAttribute("aria-busy", "true");
+      expect(screen.getByRole("status")).toHaveTextContent(/updating/i);
+      expect(screen.getByTestId("product-grid").className).toMatch(/opacity-/);
+    });
+
+    it("is not dimmed when nothing is loading", () => {
+      grid({ loading: false });
+      expect(screen.getByTestId("product-grid")).toHaveAttribute("aria-busy", "false");
+      expect(screen.queryByText(/updating/i)).not.toBeInTheDocument();
+    });
+
+    it("marks the chosen category chip as pressed for assistive tech", () => {
+      grid({ category: "tees", categories: [{ id: "c1", name: "Tees", slug: "tees" }] });
+      expect(screen.getByRole("button", { name: "Tees" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "false");
     });
   });
 });

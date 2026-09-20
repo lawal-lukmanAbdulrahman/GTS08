@@ -100,7 +100,7 @@ export default function WhatsAppPanel({
   const canCreate = cartLines.length > 0 && customerName.trim() !== "" && customerPhone.trim() !== "";
 
   return (
-    <div className="flex flex-col h-full p-4 space-y-4">
+    <div className="flex flex-col h-full p-6 space-y-4">
       <div className="flex gap-2">
         <button
           type="button"

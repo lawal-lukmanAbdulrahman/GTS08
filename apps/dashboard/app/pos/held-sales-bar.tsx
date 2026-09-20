@@ -13,7 +13,7 @@ interface Props {
 export default function HeldSalesBar({ sales, onResume, onDiscard }: Props) {
   if (sales.length === 0) return null;
   return (
-    <div className="px-4 py-2 border-b border-gray-200 dark:border-[#262626] bg-amber-50 dark:bg-amber-900/10 space-y-1.5">
+    <div className="px-6 py-3 border-b border-gray-200 dark:border-[#262626] bg-amber-50 dark:bg-amber-900/10 space-y-1.5">
       <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Held sales ({sales.length})</p>
       <ul className="flex flex-wrap gap-2">
         {sales.map((sale) => {

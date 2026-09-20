@@ -12,6 +12,14 @@ export interface PosCategory {
 
 const SEARCH_DEBOUNCE_MS = 300;
 const PAGE_SIZE = 30;
+/** How long an answer for a filter is reused on screen while a fresh one is fetched. */
+const CACHE_TTL_MS = 60_000;
+
+interface CachedPage {
+  at: number;
+  products: PosProduct[];
+  hasMore: boolean;
+}
 
 /**
  * What the till shows in its product grid: the catalogue as soon as it opens
@@ -26,6 +34,7 @@ export function usePosCatalogue(query: string, category: string) {
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
+  const cache = useRef(new Map<string, CachedPage>());
   const nextPage = useRef(2);
 
   const buildPath = useCallback(
@@ -46,15 +55,27 @@ export function usePosCatalogue(query: string, category: string) {
 
   useEffect(() => {
     const id = ++requestId.current;
+    const path = buildPath(1);
     setLoading(true);
     setLoadingMore(false);
     setError(null);
+
+    // Coming back to a filter used a moment ago: show what we had at once, refresh behind it.
+    const seen = cache.current.get(path);
+    if (seen && Date.now() - seen.at < CACHE_TTL_MS) {
+      setProducts(seen.products);
+      setHasMore(seen.hasMore);
+      nextPage.current = 2;
+    }
+
     const handle = setTimeout(async () => {
-      const result = await apiCall<PosProduct[]>(buildPath(1));
+      const result = await apiCall<PosProduct[]>(path);
       if (id !== requestId.current) return;
       if (result.ok) {
+        const more = (result.meta?.page ?? 1) < (result.meta?.pages ?? 1);
+        cache.current.set(path, { at: Date.now(), products: result.data, hasMore: more });
         setProducts(result.data);
-        setHasMore((result.meta?.page ?? 1) < (result.meta?.pages ?? 1));
+        setHasMore(more);
         nextPage.current = 2;
       } else {
         setProducts([]);

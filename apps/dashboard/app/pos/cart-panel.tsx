@@ -62,7 +62,7 @@ export default function CartPanel({
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#1C1C1C] border-l border-gray-200 dark:border-[#262626]">
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-6 space-y-3">
         {lines.length === 0 ? (
           <div className="h-full flex items-center justify-center text-center text-base text-gray-500 dark:text-gray-400 px-6">
             Cart is empty. Add products from the left.
@@ -138,7 +138,7 @@ export default function CartPanel({
         )}
       </div>
 
-      <div className="border-t border-gray-200 dark:border-[#262626] p-4 space-y-3">
+      <div className="border-t border-gray-200 dark:border-[#262626] p-6 space-y-3">
         {onHold && lines.length > 0 && (
           <button
             type="button"

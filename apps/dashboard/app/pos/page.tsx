@@ -498,7 +498,7 @@ export default function PosPage() {
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#F8F7F4] dark:bg-[#1C1C1C] font-sans">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#262626] bg-white dark:bg-[#1C1C1C]">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-[#262626] bg-white dark:bg-[#1C1C1C]">
         <div className="flex items-center gap-3">
           {isAdmin && (
             <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open menu" className="lg:hidden min-w-[44px] min-h-[44px] -ml-2 text-xl text-gray-600 dark:text-gray-300">
@@ -512,14 +512,14 @@ export default function PosPage() {
             <button
               type="button"
               onClick={() => setMode("walkin")}
-              className={`px-3 py-1 rounded-full text-sm font-semibold ${mode === "walkin" ? "bg-white dark:bg-[#1C1C1C] shadow-sm" : "text-gray-500"}`}
+              className={`px-4 py-1.5 rounded-full text-sm font-semibold ${mode === "walkin" ? "bg-white dark:bg-[#1C1C1C] shadow-sm" : "text-gray-500"}`}
             >
               Walk-in
             </button>
             <button
               type="button"
               onClick={() => setMode("whatsapp")}
-              className={`px-3 py-1 rounded-full text-sm font-semibold ${mode === "whatsapp" ? "bg-white dark:bg-[#1C1C1C] shadow-sm" : "text-gray-500"}`}
+              className={`px-4 py-1.5 rounded-full text-sm font-semibold ${mode === "whatsapp" ? "bg-white dark:bg-[#1C1C1C] shadow-sm" : "text-gray-500"}`}
             >
               WhatsApp
             </button>
@@ -527,7 +527,7 @@ export default function PosPage() {
           <button
             type="button"
             onClick={openTodaysOrders}
-            className="px-3 py-1.5 text-sm font-semibold rounded-[6px] bg-gray-100 dark:bg-[#242424]"
+            className="px-4 py-2 text-sm font-semibold rounded-[8px] bg-gray-100 dark:bg-[#242424]"
           >
             Today&apos;s Orders
           </button>
@@ -537,7 +537,7 @@ export default function PosPage() {
               setReprintError(null);
               setShowFindSale(true);
             }}
-            className="px-3 py-1.5 text-xs font-semibold rounded-[6px] bg-gray-100 dark:bg-[#242424]"
+            className="px-4 py-2 text-sm font-semibold rounded-[8px] bg-gray-100 dark:bg-[#242424]"
           >
             Find a sale
           </button>

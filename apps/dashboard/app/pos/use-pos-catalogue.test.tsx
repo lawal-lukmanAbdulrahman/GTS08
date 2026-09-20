@@ -91,4 +91,44 @@ describe("usePosCatalogue", () => {
     await waitFor(() => expect(result.current.products).toHaveLength(1));
     expect(result.current.categories).toEqual([]);
   });
+
+  it("shows a category's products instantly when returning to it, then refreshes quietly", async () => {
+    let resolveSecond!: (v: unknown) => void;
+    let calls = 0;
+    mockApiCall.mockImplementation(async (path: string) => {
+      if (path.startsWith("/pos/categories")) return { ok: true, status: 200, data: [] };
+      calls += 1;
+      if (path.includes("category=b")) return page(["b1"], 1, 1);
+      if (calls <= 2) return page(["a1"], 1, 1);
+      return new Promise((r) => (resolveSecond = r)); // the refresh of "all" stays pending
+    });
+    const { result, rerender } = renderHook(({ c }) => usePosCatalogue("", c), { initialProps: { c: "all" } });
+    await waitFor(() => expect(result.current.products.map((p) => p.id)).toEqual(["a1"]));
+    rerender({ c: "b" });
+    await waitFor(() => expect(result.current.products.map((p) => p.id)).toEqual(["b1"]));
+    rerender({ c: "all" });
+    // the earlier answer for "all" is on screen straight away, without waiting for the network
+    await waitFor(() => expect(result.current.products.map((p) => p.id)).toEqual(["a1"]));
+    expect(result.current.loading).toBe(true); // ...while it refreshes in the background
+    await act(async () => { resolveSecond(page(["a1", "a2"], 1, 1)); });
+    await waitFor(() => expect(result.current.products.map((p) => p.id)).toEqual(["a1", "a2"]));
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("doesn't reuse an old answer after it has gone stale", async () => {
+    vi.setSystemTime(new Date("2026-09-20T10:00:00Z"));
+    mockApiCall.mockImplementation(async (path: string) => (path.startsWith("/pos/categories") ? { ok: true, status: 200, data: [] } : path.includes("category=b") ? page(["b1"], 1, 1) : page(["a1"], 1, 1)));
+    const { result, rerender } = renderHook(({ c }) => usePosCatalogue("", c), { initialProps: { c: "all" } });
+    await waitFor(() => expect(result.current.products).toHaveLength(1));
+    rerender({ c: "b" });
+    await waitFor(() => expect(result.current.products[0]?.id).toBe("b1"));
+    vi.setSystemTime(new Date("2026-09-20T10:05:00Z")); // 5 minutes later
+    let release!: (v: unknown) => void;
+    mockApiCall.mockImplementation(async (path: string) => (path.startsWith("/pos/categories") ? { ok: true, status: 200, data: [] } : new Promise((r) => (release = r))));
+    rerender({ c: "all" });
+    await waitFor(() => expect(release).toBeTypeOf("function")); // the refresh has started
+    expect(result.current.products.map((p) => p.id)).not.toEqual(["a1"]); // the 5-minute-old answer is not shown
+    release(page(["a9"], 1, 1));
+    await waitFor(() => expect(result.current.products.map((p) => p.id)).toEqual(["a9"]));
+  });
 });

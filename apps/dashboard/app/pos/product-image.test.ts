@@ -11,8 +11,16 @@ describe("resolveProductImageUrl", () => {
     expect(resolveProductImageUrl("products/shirt", "mycloud")).toBe("https://res.cloudinary.com/mycloud/image/upload/products/shirt");
   });
 
-  it("has no image for the old placeholder paths (those files don't exist)", () => {
-    expect(resolveProductImageUrl("/products/denim_jacket.png")).toBeNull();
+  it("serves the catalogue's own images (\"/products/...\" files shipped with the app) from this site", () => {
+    expect(resolveProductImageUrl("/products/denim_jacket.png")).toBe("/products/denim_jacket.png");
+    expect(resolveProductImageUrl("/products/hero/samsung_fridge_black.png")).toBe("/products/hero/samsung_fridge_black.png");
+    expect(resolveProductImageUrl("/products/standing_fan-removebg-preview.png")).toBe("/products/standing_fan-removebg-preview.png");
+  });
+
+  it("only serves local paths from the products folder, and never a traversal or another host", () => {
+    for (const bad of ["/etc/passwd", "/products/../secret.png", "//evil.example/x.png", "/products//evil.example/x.png", "/products/a b.png", "/products/x.png?x=1", "/products/"]) {
+      expect(resolveProductImageUrl(bad), bad).toBeNull();
+    }
   });
 
   it("has no image for empty or missing values", () => {
