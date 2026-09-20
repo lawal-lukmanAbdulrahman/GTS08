@@ -86,6 +86,19 @@ recorded against their own profile. Decisions (reviewer: project owner):
   sent. There is no forced password change on first sign-in yet.
 - **Not built:** editing or blocking other admins, transferring super admin.
 
+### D006: Privileged user columns locked (migration 00013) — SECURITY
+
+- **Found by QA (2026-09-20), confirmed against the live database:** the
+  `users_update_own` policy let any signed-in user update every column of their
+  own row through Supabase's public REST API, so a customer could set
+  `role = 'admin'`. The API trusts `users.role`, so this was a full privilege
+  escalation. (Insert rights on all other tables were probed and are denied.)
+- **Fix:** a `BEFORE UPDATE` trigger allows an owner to change only name, phone,
+  avatar and marketing opt-out. Everything else needs the service role or a
+  direct database session.
+- **After applying:** review every account with a role other than `customer`
+  and confirm each is a person you know.
+
 ## Spec Corrections
 
 - `gts_03_cashier_spec.md` Part 9's documented paths (`/pos/orders`,
