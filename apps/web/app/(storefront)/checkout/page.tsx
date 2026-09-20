@@ -772,17 +772,10 @@ export default function CheckoutPage() {
   const handleApplyPromo = (e: React.FormEvent) => {
     e.preventDefault();
     setPromoError("");
-    const clean = promoCode.trim().toUpperCase();
-    if (!clean) return;
-    if (clean === "GTS10" || clean === "WELCOME10") {
-      setAppliedPromo({ code: clean, discountPercent: 10 });
-      setPromoCode("");
-    } else if (clean === "GTS20" || clean === "SUMMER20") {
-      setAppliedPromo({ code: clean, discountPercent: 20 });
-      setPromoCode("");
-    } else {
-      setPromoError("Invalid code. Try WELCOME10 for 10% off.");
-    }
+    if (!promoCode.trim()) return;
+    // The server prices the order and applies no client-side discount, so a code that only
+    // changed this page's total would promise a saving the customer is never given.
+    setPromoError("Promo codes can't be applied at checkout yet.");
   };
 
   // ── Order math ──
@@ -910,20 +903,10 @@ export default function CheckoutPage() {
         phone: chosenPhone,
       },
       address: chosenAddress,
-      items: cartItems.map((c) => ({
-        id: c.product.id,
-        title: c.product.title,
-        price: c.product.priceNum,
-        image: c.product.image,
-        size: c.size,
-        color: c.color,
-        quantity: c.quantity,
-        sku: c.product.sku,
-      })),
+      // Only what to buy and how many: the server looks up prices and decides discounts.
+      items: cartItems.map((c) => ({ variant_id: c.product.id, quantity: c.quantity })),
       deliveryOption: selectedDelivery,
       paymentMethod: selectedPayment,
-      promoCode: appliedPromo?.code,
-      discountPercent: appliedPromo?.discountPercent || 0,
     };
 
     try {
