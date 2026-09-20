@@ -51,6 +51,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Couldn't update your password. Please try again.", code: "PASSWORD_UPDATE_FAILED" }, { status: 500 });
   }
 
+  // They now hold a password of their own. (A database without the column yet just skips this.)
+  const { error: clearError } = await serviceClient.from("users").update({ must_change_password: false }).eq("id", staff.user.id);
+  if (clearError && !/must_change_password/.test(clearError.message ?? "")) {
+    console.error("[staff/me/password] could not clear must_change_password:", clearError.message);
+  }
+
   await logActivity(serviceClient, {
     actorId: staff.user.id,
     action: "profile.change_password",

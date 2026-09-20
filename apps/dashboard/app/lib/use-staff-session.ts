@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiCall } from "./staff-api";
-import { signOut as endSession } from "./session";
+import { goToPasswordChange, signOut as endSession } from "./session";
 import type { StaffProfileView } from "./staff-types";
 
 /**
@@ -22,7 +22,11 @@ export function useStaffSession() {
     setError(null);
     apiCall<StaffProfileView>("/staff/me").then((result) => {
       if (cancelled) return;
-      if (result.ok) setProfile(result.data);
+      if (result.ok) {
+        setProfile(result.data);
+        // Signed in with a one-time password: nothing else works until it's replaced.
+        if (result.data.must_change_password) goToPasswordChange();
+      }
       else setError(result.message);
       setLoading(false);
     });

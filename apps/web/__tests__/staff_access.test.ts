@@ -319,3 +319,36 @@ describe("optionalStaff (public routes that show more to staff)", () => {
     expect(s?.isAdmin).toBe(true);
   });
 });
+
+describe("a staff account that must change its one-time password", () => {
+  const at = (path: string) => new NextRequest(`http://localhost:3000${path}`);
+  beforeEach(() => {
+    mockGetUser.mockReset();
+    mockGetUser.mockResolvedValue({ id: "u1", email: "new@gts.ng" });
+    profile({ role: "cashier", must_change_password: true }, { can_process_pos: true });
+  });
+
+  it.each(["/api/v1/pos/orders", "/api/v1/inventory", "/api/v1/staff/me/sales", "/api/v1/staff/me/activity", "/api/v1/flags"])(
+    "is refused on %s until the password is changed",
+    async (path) => {
+      await denied(requireStaff(at(path)), 403, "PASSWORD_CHANGE_REQUIRED");
+      await denied(requirePosAccess(at(path)), 403, "PASSWORD_CHANGE_REQUIRED");
+    }
+  );
+
+  it.each(["/api/v1/staff/me", "/api/v1/staff/me/password"])("can still reach %s so it can be done", async (path) => {
+    const r = await requireStaff(at(path));
+    expect(r.ok && r.mustChangePassword).toBe(true);
+  });
+
+  it("is a normal account once the flag is cleared", async () => {
+    profile({ role: "cashier", must_change_password: false }, { can_process_pos: true });
+    const r = await requireStaff(at("/api/v1/pos/orders"));
+    expect(r.ok && r.mustChangePassword).toBe(false);
+  });
+
+  it("treats a database without the column yet (migration pending) as no requirement", async () => {
+    profile({ role: "cashier" }, { can_process_pos: true });
+    expect((await requireStaff(at("/api/v1/pos/orders"))).ok).toBe(true);
+  });
+});

@@ -1,4 +1,4 @@
-import { API_BASE, getToken, signOut } from "./session";
+import { API_BASE, getToken, goToPasswordChange, signOut } from "./session";
 
 export interface PageMeta {
   total: number;
@@ -53,6 +53,7 @@ export async function apiCall<T = unknown>(path: string, init: CallInit = {}): P
 
   if (res.status === 401) void signOut({ reason: "expired", revoke: false });
   else if (res.status === 403 && body?.code === "ACCOUNT_BLOCKED") void signOut({ reason: "blocked", revoke: false });
+  else if (res.status === 403 && body?.code === "PASSWORD_CHANGE_REQUIRED") goToPasswordChange();
 
   return {
     ok: false,

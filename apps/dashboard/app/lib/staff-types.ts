@@ -59,5 +59,7 @@ export interface StaffProfileView {
   is_admin: boolean;
   /** The one admin who can add people. */
   is_super_admin?: boolean;
+  /** Signed in with a one-time password that must be replaced first. */
+  must_change_password?: boolean;
   permissions: PermissionsView;
 }

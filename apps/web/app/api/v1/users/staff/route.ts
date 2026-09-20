@@ -100,14 +100,13 @@ export async function POST(request: NextRequest) {
     await serviceClient.auth.admin.deleteUser(userId);
   };
 
-  const { error: profileError } = await serviceClient.from("users").upsert({
-    id: userId,
-    email,
-    full_name,
-    role,
-    is_blocked: false,
-    email_verified_at: new Date().toISOString(),
-  });
+  const profileRow = { id: userId, email, full_name, role, is_blocked: false, email_verified_at: new Date().toISOString() };
+  // They sign in with a one-time password, so they must replace it first.
+  let { error: profileError } = await serviceClient.from("users").upsert({ ...profileRow, must_change_password: true });
+  if (profileError && /must_change_password/.test(profileError.message ?? "")) {
+    // Migration 00012 isn't applied yet: create the account without the requirement rather than fail.
+    ({ error: profileError } = await serviceClient.from("users").upsert(profileRow));
+  }
   if (profileError) {
     await undo(false);
     return NextResponse.json({ error: "Could not create the staff profile.", code: "CREATE_FAILED" }, { status: 500 });

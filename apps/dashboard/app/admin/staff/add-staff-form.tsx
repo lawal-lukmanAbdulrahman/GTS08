@@ -105,7 +105,7 @@ export default function AddStaffForm({ onCreate, onClose, onDone }: Props) {
               </div>
             </div>
             <p className="text-sm text-amber-700 dark:text-amber-300">
-              This password won&apos;t be shown again. Give it to {created.full_name} now and ask them to change it from their profile after signing in.
+              This password won&apos;t be shown again. Give it to {created.full_name} now. They'll be asked to choose their own password the first time they sign in.
             </p>
             <button type="button" onClick={onDone} className="w-full py-2.5 text-base font-bold rounded-[8px] bg-[#EDCF5D] text-[#010101]">
               Done

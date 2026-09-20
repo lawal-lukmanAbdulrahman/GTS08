@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
       role: staff.role,
       is_admin: staff.isAdmin,
       is_super_admin: staff.isSuperAdmin,
+      must_change_password: staff.mustChangePassword,
       permissions: staff.permissions,
     },
   });

@@ -3,8 +3,9 @@ import { renderHook, waitFor, act } from "@testing-library/react";
 
 const mockApiCall = vi.fn();
 const mockSignOut = vi.fn();
+const mockGoToPasswordChange = vi.fn();
 vi.mock("./staff-api", () => ({ apiCall: (...a: unknown[]) => mockApiCall(...a) }));
-vi.mock("./session", () => ({ signOut: (...a: unknown[]) => mockSignOut(...a), getSessionUser: () => null }));
+vi.mock("./session", () => ({ signOut: (...a: unknown[]) => mockSignOut(...a), getSessionUser: () => null, goToPasswordChange: (...a: unknown[]) => mockGoToPasswordChange(...a) }));
 
 import { useStaffSession } from "./use-staff-session";
 
@@ -22,6 +23,21 @@ describe("useStaffSession", () => {
   beforeEach(() => {
     mockApiCall.mockReset();
     mockSignOut.mockReset();
+    mockGoToPasswordChange.mockReset();
+  });
+
+  it("sends someone with a one-time password to set a new one", async () => {
+    mockApiCall.mockResolvedValue({ ok: true, status: 200, data: { ...PROFILE, must_change_password: true } });
+    const { result } = renderHook(() => useStaffSession());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(mockGoToPasswordChange).toHaveBeenCalled();
+  });
+
+  it("leaves everyone else alone", async () => {
+    mockApiCall.mockResolvedValue({ ok: true, status: 200, data: PROFILE });
+    const { result } = renderHook(() => useStaffSession());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(mockGoToPasswordChange).not.toHaveBeenCalled();
   });
 
   it("loads the signed-in staff member's profile and permissions", async () => {

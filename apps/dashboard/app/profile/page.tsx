@@ -11,6 +11,7 @@ import { reauthenticate, getSessionUser, signOut } from "../lib/session";
 import { useStaffSession } from "../lib/use-staff-session";
 import type { ActivityEntryView, SalesRangeId, SalesRecordView } from "../lib/staff-types";
 import MyFlags, { type MyFlag } from "./my-flags";
+import MustChangeNotice from "./must-change-notice";
 import PasswordForm, { type PasswordChangeInput, type PasswordChangeOutcome } from "./password-form";
 import PermissionList from "./permission-list";
 import PhoneForm, { type PhoneSaveResult } from "./phone-form";
@@ -32,6 +33,8 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 export default function ProfilePage() {
   const session = useStaffSession();
   const { profile } = session;
+  // Signed in with a one-time password: nothing else works until it's replaced, so nothing else loads.
+  const mustChange = !!profile?.must_change_password;
 
   const idle = useIdleLock({ enabled: !!profile });
 
@@ -42,7 +45,7 @@ export default function ProfilePage() {
   const [salesError, setSalesError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!profile) return;
+    if (!profile || mustChange) return;
     let cancelled = false;
     setSalesLoading(true);
     setSalesError(null);
@@ -55,7 +58,7 @@ export default function ProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, [profile, range]);
+  }, [profile, range, mustChange]);
 
   // Activity (newest first, paged backwards)
   const [activity, setActivity] = useState<ActivityEntryView[]>([]);
@@ -79,8 +82,8 @@ export default function ProfilePage() {
   }, []);
 
   useEffect(() => {
-    if (profile) void loadActivity();
-  }, [profile, loadActivity]);
+    if (profile && !mustChange) void loadActivity();
+  }, [profile, mustChange, loadActivity]);
 
   // Flags raised by this person (only relevant to POS staff)
   const [flags, setFlags] = useState<MyFlag[]>([]);
@@ -88,14 +91,14 @@ export default function ProfilePage() {
   const [flagsError, setFlagsError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!profile?.permissions.can_process_pos) return;
+    if (!profile?.permissions.can_process_pos || mustChange) return;
     setFlagsLoading(true);
     apiCall<MyFlag[]>("/pos/flags").then((r) => {
       if (r.ok) setFlags(r.data);
       else setFlagsError(r.message);
       setFlagsLoading(false);
     });
-  }, [profile]);
+  }, [profile, mustChange]);
 
   async function savePhone(phone: string): Promise<PhoneSaveResult> {
     const r = await apiCall<{ phone: string | null }>("/staff/me", { method: "PATCH", json: { phone } });
@@ -104,6 +107,7 @@ export default function ProfilePage() {
 
   async function changePassword(input: PasswordChangeInput): Promise<PasswordChangeOutcome> {
     const r = await apiCall("/staff/me/password", { method: "POST", json: input });
+    if (r.ok && mustChange) window.location.assign("/"); // password replaced: on to their work
     return r.ok ? { ok: true } : { ok: false, message: r.message, fieldErrors: r.details };
   }
 
@@ -142,6 +146,14 @@ export default function ProfilePage() {
         />
       </header>
 
+      {mustChange ? (
+        <main className="mx-auto max-w-xl p-4 lg:p-6 space-y-6">
+          <MustChangeNotice name={profile.full_name ?? ""} />
+          <Section title="Choose a new password">
+            <PasswordForm onSubmit={changePassword} />
+          </Section>
+        </main>
+      ) : (
       <main className="mx-auto max-w-4xl p-4 lg:p-6 space-y-10">
         <Section title="Your details">
           <dl className="grid grid-cols-[7rem_1fr] gap-y-1.5 text-sm">
@@ -183,6 +195,7 @@ export default function ProfilePage() {
           <PasswordForm onSubmit={changePassword} />
         </Section>
       </main>
+      )}
 
       <IdleLockScreen
         state={idle.state}

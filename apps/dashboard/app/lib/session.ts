@@ -89,6 +89,12 @@ export async function signOut(
   navigate(reason ? `/login?reason=${reason}` : "/login");
 }
 
+/** Sends someone who must replace their one-time password to the screen where they do it. */
+export function goToPasswordChange(navigate: (url: string) => void = (url) => window.location.assign(url)): void {
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/profile")) return; // already there
+  navigate("/profile");
+}
+
 /** What the login page tells someone who was sent back to it. */
 export function signOutMessage(reason: string | null): string | null {
   switch (reason) {

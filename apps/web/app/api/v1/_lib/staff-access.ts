@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
 
 const STAFF_ROLES = ["admin", "cashier", "inventory_staff"];
+const PASSWORD_CHANGE_PATHS = ["/api/v1/staff/me", "/api/v1/staff/me/password"];
 
 export interface StaffPermissions {
   can_process_pos: boolean;
@@ -23,6 +24,8 @@ export interface StaffContext {
   isAdmin: boolean;
   /** The one admin who can add people (D004). Always false for non-admins. */
   isSuperAdmin: boolean;
+  /** Signed in with a one-time password that hasn't been replaced yet. */
+  mustChangePassword: boolean;
   fullName: string;
   phone: string | null;
   /** Effective permissions: an admin has every one implicitly. */
@@ -99,6 +102,7 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
     role: string;
     is_blocked?: boolean;
     is_super_admin?: boolean;
+    must_change_password?: boolean;
     employee_permissions?: Record<string, unknown> | Array<Record<string, unknown>> | null;
   };
   // A one-to-one embed comes back as an object; tolerate the array form too.
@@ -109,6 +113,12 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
   if (row.is_blocked) return deny(403, "Your account access has been suspended.", "ACCOUNT_BLOCKED");
   if (!STAFF_ROLES.includes(row.role)) return deny(403, "This area is for staff only.", "FORBIDDEN");
 
+  const mustChangePassword = row.must_change_password === true;
+  // Until they choose their own password the only things they can reach are their profile and the change itself.
+  if (mustChangePassword && !PASSWORD_CHANGE_PATHS.includes(new URL(request.url).pathname)) {
+    return deny(403, "Please set a new password before continuing.", "PASSWORD_CHANGE_REQUIRED");
+  }
+
   const isAdmin = row.role === "admin";
   return {
     ok: true,
@@ -116,6 +126,7 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
     role: row.role,
     isAdmin,
     isSuperAdmin: isAdmin && row.is_super_admin === true,
+    mustChangePassword,
     fullName: row.full_name ?? "",
     phone: row.phone ?? null,
     permissions: effectivePermissions(permissionRow, isAdmin),

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { authFetch, authHeader, clearSession, getSessionUser, reauthenticate, signOut, signOutMessage } from "./session";
+import { authFetch, authHeader, goToPasswordChange, clearSession, getSessionUser, reauthenticate, signOut, signOutMessage } from "./session";
 
 function setCookie(name: string) {
   document.cookie = `${name}=x; path=/`;
@@ -195,5 +195,13 @@ describe("authHeader", () => {
     expect(authHeader()).toEqual({});
     localStorage.setItem("gts_token", "t1");
     expect(authHeader()).toEqual({ Authorization: "Bearer t1" });
+  });
+});
+
+describe("goToPasswordChange", () => {
+  it("navigates to the profile", () => {
+    const navigate = vi.fn();
+    goToPasswordChange(navigate);
+    expect(navigate).toHaveBeenCalledWith("/profile");
   });
 });

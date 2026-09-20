@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockSignOut = vi.fn();
+const mockGoToPasswordChange = vi.fn();
 vi.mock("./session", async (importActual) => ({
   ...(await importActual<typeof import("./session")>()),
   signOut: (...a: unknown[]) => mockSignOut(...a),
+  goToPasswordChange: (...a: unknown[]) => mockGoToPasswordChange(...a),
 }));
 
 import { apiCall } from "./staff-api";
@@ -35,6 +37,15 @@ describe("apiCall", () => {
     fetchMock.mockReturnValue(reply(200, { data: [1, 2], meta: { total: 9, page: 1, limit: 2, pages: 5 } }));
     const r = await apiCall<number[]>("/pos/products/search");
     expect(r).toMatchObject({ ok: true, data: [1, 2], meta: { total: 9, page: 1, limit: 2, pages: 5 } });
+  });
+
+  it("sends someone with a one-time password to set a new one (and doesn't sign them out)", async () => {
+    mockGoToPasswordChange.mockClear();
+    fetchMock.mockReturnValue(reply(403, { error: "Please set a new password before continuing.", code: "PASSWORD_CHANGE_REQUIRED" }));
+    const r = await apiCall("/pos/orders");
+    expect(r.ok).toBe(false);
+    expect(mockGoToPasswordChange).toHaveBeenCalled();
+    expect(mockSignOut).not.toHaveBeenCalled();
   });
 
   it("sends a JSON body with the right header", async () => {

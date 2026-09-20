@@ -234,3 +234,45 @@ describe("POST /api/v1/staff/me/password", () => {
     expect(mockLog).not.toHaveBeenCalled();
   });
 });
+
+describe("must_change_password (one-time passwords)", () => {
+  const body = { current_password: "OldPass123!", new_password: "NewPass456!", confirm_password: "NewPass456!" };
+  const post = (b: unknown) => new NextRequest("http://localhost:3000/api/v1/staff/me/password", { method: "POST", body: JSON.stringify(b) });
+
+  beforeEach(() => {
+    calls.length = 0;
+    results = {};
+    mockRequireStaff.mockResolvedValue({ ...STAFF, mustChangePassword: true });
+    mockSignIn.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    mockUpdateUser.mockResolvedValue({ error: null });
+  });
+
+  it("GET /staff/me tells the app the password must be changed", async () => {
+    const res = await GET(new NextRequest("http://localhost:3000/api/v1/staff/me"));
+    expect((await res.json()).data.must_change_password).toBe(true);
+  });
+
+  it("GET /staff/me says false for a normal account", async () => {
+    mockRequireStaff.mockResolvedValue({ ...STAFF, mustChangePassword: false });
+    const res = await GET(new NextRequest("http://localhost:3000/api/v1/staff/me"));
+    expect((await res.json()).data.must_change_password).toBe(false);
+  });
+
+  it("changing the password clears the requirement", async () => {
+    const res = await changePassword(post(body));
+    expect(res.status).toBe(200);
+    const update = calls.find((c) => c.table === "users" && c.method === "update");
+    expect(update?.args[0]).toMatchObject({ must_change_password: false });
+  });
+
+  it("doesn't clear it if the password change failed", async () => {
+    mockUpdateUser.mockResolvedValue({ error: { message: "nope" } });
+    await changePassword(post(body));
+    expect(calls.find((c) => c.table === "users" && c.method === "update")).toBeUndefined();
+  });
+
+  it("still succeeds if the flag column doesn't exist yet (migration pending)", async () => {
+    results.users = { error: { message: 'column "must_change_password" does not exist' } };
+    expect((await changePassword(post(body))).status).toBe(200);
+  });
+});
