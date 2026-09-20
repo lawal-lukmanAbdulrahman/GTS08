@@ -29,6 +29,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      - name: Dependency audit (production)
+        run: pnpm audit --prod
+
       - name: Typecheck
         run: pnpm typecheck
 
