@@ -112,7 +112,7 @@ describe("StoreSettingsForm", () => {
     const preview = () => screen.getByTestId("receipt-header-preview").textContent!;
     expect(preview()).toContain("GTS");
     expect(preview()).toContain("12 Allen Avenue, Ikeja, Lagos");
-    expect(preview()).toContain("Tel: 0803 123 4567");
+    expect(preview()).toContain("0803 123 4567");
 
     type(/store name/i, "Acme Stores");
     type(/address/i, "");

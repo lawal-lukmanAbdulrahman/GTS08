@@ -38,6 +38,28 @@ describe("buildReceiptText (spec Part 5.3: printable / shareable receipt)", () =
     expect(withoutDiscount).not.toMatch(/discount/i);
   });
 
+  it("follows the handwritten receipt: name, phone, date, receipt no, total arrow, thanks, website", () => {
+    const lines = buildReceiptText(SAMPLE_RECEIPT).split("\n");
+    expect(lines[0]).toBe("GTS WEARS");
+    expect(lines[1]).toBe("08148308129");
+    expect(lines.some((l) => l.startsWith("Date: "))).toBe(true);
+    expect(lines).toContain("Receipt No: GTS-202609-000143");
+    expect(lines).toContain("Total -> ₦70,000");
+    expect(lines.at(-2)).toBe("Thanks for your patronage.");
+    expect(lines.at(-1)).toBe("Order also: www.GTS08.com");
+  });
+
+  it("lists each item as qty, description, unit price and amount", () => {
+    const text = buildReceiptText(SAMPLE_RECEIPT);
+    expect(text).toContain("2 x GTS Oxford Shirt (L / Black) @ ₦15,000 = ₦30,000");
+    expect(text).toContain("1 x Denim Jacket @ ₦45,000 = ₦45,000");
+  });
+
+  it("uses the store name and phone from settings when given, and marks a reprint", () => {
+    const text = buildReceiptText({ ...SAMPLE_RECEIPT, duplicate: true, store: { name: "Acme", phone: "0801 000 1111" } });
+    expect(text.split("\n").slice(0, 3)).toEqual(["ACME", "0801 000 1111", "*** DUPLICATE ***"]);
+  });
+
   it("names the cashier and payment method", () => {
     const text = buildReceiptText(SAMPLE_RECEIPT);
     expect(text).toContain("Chidinma O.");

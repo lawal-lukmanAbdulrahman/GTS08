@@ -64,8 +64,10 @@ describe("ReceiptScreen", () => {
     const text = sheet().textContent!;
     expect(text).toContain("GTS Oxford Shirt");
     expect(text).toContain("L / Black");
-    expect(text).toContain("2 x ₦15,000");
-    expect(text).toMatch(/TOTAL\s+₦30,000/);
+    expect(text).toMatch(/2\s+GTS Oxford Shirt/);
+    expect(text).toContain("₦15,000");
+    expect(text).toMatch(/Total -+> +₦30,000/);
+    expect(text).toContain("Receipt No:");
     expect(text).toMatch(/Cash received\s+₦50,000/);
     expect(text).toMatch(/Change\s+₦20,000/);
     expect(text).toContain("Chidinma O.");
@@ -92,7 +94,7 @@ describe("ReceiptScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: label }));
     expect(screen.getByRole("button", { name: label })).toHaveAttribute("aria-pressed", "true");
     for (const l of sheetLines()) expect(l.length).toBeLessThanOrEqual(PAPER_SIZES[paper].chars);
-    expect(sheetLines().some((l) => l === "=".repeat(PAPER_SIZES[paper].chars))).toBe(true);
+    expect(sheetLines().some((l) => l === "-".repeat(PAPER_SIZES[paper].chars))).toBe(true);
     expect(pageRule()).toMatch(pageRe);
   });
 
@@ -107,14 +109,21 @@ describe("ReceiptScreen", () => {
     const text = sheet().textContent!;
     expect(text).toContain("ACME STORES");
     expect(text).toContain("5 Broad Street, Lagos");
-    expect(text).toContain("Tel: 0801 234 5678");
+    expect(text).toContain("0801 234 5678");
   });
 
-  it("still prints a plain 'GTS' header when no store details are available", () => {
+  it("prints the shop's own header when no store details are available", () => {
     render(<ReceiptScreen sale={SALE} onNewTransaction={vi.fn()} />);
     const text = sheet().textContent!;
-    expect(text).toContain("GTS");
-    expect(text).not.toMatch(/Tel:/);
+    expect(text).toContain("GTS WEARS");
+    expect(text).toContain("08148308129");
+  });
+
+  it("ends with the thanks and the website to order from", () => {
+    render(<ReceiptScreen sale={SALE} onNewTransaction={vi.fn()} />);
+    const text = sheet().textContent!;
+    expect(text).toContain("Thanks for your patronage.");
+    expect(text).toContain("Order also: www.GTS08.com");
   });
 
   it("re-lays the header when the store details change", () => {

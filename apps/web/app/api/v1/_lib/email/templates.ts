@@ -1,4 +1,4 @@
-import { formatKobo } from "@gts/utils";
+import { formatKobo, receiptBrand } from "@gts/utils";
 import { esc } from "./html";
 
 export interface StoreInfo {
@@ -78,15 +78,28 @@ interface Line {
 
 const variantOf = (l: Line) => [l.size, l.color].filter(Boolean).join(" / ");
 
-function itemsTable(items: Line[]): string {
+/** Qty / Description / Unit price / Amount, the columns of the shop's handwritten receipt. */
+function receiptTable(items: Line[]): string {
+  const th = (label: string, align: string) => `<th align="${align}" style="font-size:12px;color:#6b7280;padding-bottom:4px;">${label}</th>`;
   const rows = items
     .map((l) => {
       const v = variantOf(l);
-      return `<tr><td style="padding:8px 0;border-bottom:1px solid #eee;font-size:14px;">${esc(l.name)}${v ? `<br><span style="color:#6b7280;font-size:12px;">${esc(v)}</span>` : ""}</td><td style="padding:8px 8px;border-bottom:1px solid #eee;font-size:14px;text-align:center;">${esc(l.quantity)}</td><td style="padding:8px 0;border-bottom:1px solid #eee;font-size:14px;text-align:right;">${esc(formatKobo(l.lineTotal))}</td></tr>`;
+      const unit = l.unitPrice ?? Math.round(l.lineTotal / l.quantity);
+      const td = (html: string, align = "left") => `<td align="${align}" style="padding:8px 4px;border-bottom:1px solid #eee;font-size:14px;">${html}</td>`;
+      return `<tr>${td(esc(l.quantity))}${td(`${esc(l.name)}${v ? `<br><span style="color:#6b7280;font-size:12px;">${esc(v)}</span>` : ""}`)}${td(esc(formatKobo(unit)), "right")}${td(esc(formatKobo(l.lineTotal)), "right")}</tr>`;
     })
     .join("");
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 16px;"><tr><th align="left" style="font-size:12px;color:#6b7280;padding-bottom:4px;">Item</th><th style="font-size:12px;color:#6b7280;padding-bottom:4px;">Qty</th><th align="right" style="font-size:12px;color:#6b7280;padding-bottom:4px;">Amount</th></tr>${rows}</table>`;
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 16px;"><tr>${th("Qty", "left")}${th("Description", "left")}${th("Unit price", "right")}${th("Amount", "right")}</tr>${rows}</table>`;
 }
+
+const receiptLine = (l: Line) => {
+  const v = variantOf(l);
+  const unit = l.unitPrice ?? Math.round(l.lineTotal / l.quantity);
+  return `${l.quantity} x ${l.name}${v ? ` (${v})` : ""} @ ${formatKobo(unit)} = ${formatKobo(l.lineTotal)}`;
+};
+
+const receiptFooterHtml = (b: ReturnType<typeof receiptBrand>) =>
+  `<p style="margin:18px 0 4px;text-align:center;font-size:15px;">${esc(b.thanks)}</p><p style="margin:0 0 14px;text-align:center;font-size:15px;font-weight:700;">${esc(b.orderAlso)}</p>`;
 
 const PAYMENT_LABEL = { cash: "Cash", pos_terminal: "Card" } as const;
 
@@ -101,36 +114,64 @@ export function posReceiptEmail(o: {
   paymentMethod: keyof typeof PAYMENT_LABEL;
   cashierName: string;
 }): Rendered {
+  const brand = receiptBrand({ name: o.store.name, phone: o.store.phone });
+  const store = { ...o.store, name: brand.name, phone: brand.phone };
   const row = (label: string, value: string, strong = false) =>
     `<tr><td style="padding:3px 0;font-size:14px;${strong ? "font-weight:800;font-size:16px;" : ""}">${esc(label)}</td><td align="right" style="padding:3px 0;font-size:14px;${strong ? "font-weight:800;font-size:16px;" : ""}">${esc(value)}</td></tr>`;
   const totals =
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">` +
-    row("Subtotal", formatKobo(o.subtotal)) +
-    (o.discountAmount > 0 ? row("Discount", `-${formatKobo(o.discountAmount)}`) : "") +
-    row("Total", formatKobo(o.total), true) +
+    (o.discountAmount > 0 ? row("Subtotal", formatKobo(o.subtotal)) + row("Discount", `-${formatKobo(o.discountAmount)}`) : "") +
+    row("Total \u2192", formatKobo(o.total), true) +
     row("Paid by", PAYMENT_LABEL[o.paymentMethod]) +
     `</table>`;
-  const lines = o.items.map((l) => `${l.quantity} x ${l.name}${variantOf(l) ? ` (${variantOf(l)})` : ""}: ${formatKobo(l.lineTotal)}`);
   return {
-    subject: `Your receipt from ${o.store.name}: ${o.orderNumber}`,
-    html: shell(o.store, "Thank you for your purchase", p(`Order <strong>${esc(o.orderNumber)}</strong> · ${esc(o.dateText)}`) + itemsTable(o.items) + totals + p(`<span style="color:#6b7280;font-size:13px;">Served by ${esc(o.cashierName)}. Keep this email for returns.</span>`)),
-    text: [`Receipt from ${o.store.name}`, `Order ${o.orderNumber} · ${o.dateText}`, ...lines, o.discountAmount > 0 ? `Discount: -${formatKobo(o.discountAmount)}` : "", `Total: ${formatKobo(o.total)}`, `Paid by: ${PAYMENT_LABEL[o.paymentMethod]}`, `Served by ${o.cashierName}`].filter(Boolean).join("\n"),
+    subject: `Your receipt from ${brand.name}: ${o.orderNumber}`,
+    html: shell(
+      store,
+      "Thank you for your purchase",
+      p(`${esc(brand.name)} · ${esc(brand.phone)}`) +
+        p(`<strong>Date:</strong> ${esc(o.dateText)}<br><strong>Receipt No:</strong> ${esc(o.orderNumber)}`) +
+        receiptTable(o.items) +
+        totals +
+        p(`<span style="color:#6b7280;font-size:13px;">Served by ${esc(o.cashierName)}.</span>`) +
+        receiptFooterHtml(brand)
+    ),
+    text: [
+      brand.name,
+      brand.phone,
+      "",
+      `Date: ${o.dateText}`,
+      `Receipt No: ${o.orderNumber}`,
+      "",
+      ...o.items.map(receiptLine),
+      "",
+      ...(o.discountAmount > 0 ? [`Subtotal: ${formatKobo(o.subtotal)}`, `Discount: -${formatKobo(o.discountAmount)}`] : []),
+      `Total -> ${formatKobo(o.total)}`,
+      `Paid by: ${PAYMENT_LABEL[o.paymentMethod]}`,
+      `Served by ${o.cashierName}`,
+      "",
+      brand.thanks,
+      brand.orderAlso,
+    ].join("\n"),
   };
 }
 
 export function orderPaidEmail(o: { store: StoreInfo; name: string; orderNumber: string; items: Line[]; total: number; trackUrl: string }): Rendered {
+  const brand = receiptBrand({ name: o.store.name, phone: o.store.phone });
+  const store = { ...o.store, name: brand.name, phone: brand.phone };
   return {
     subject: `Payment received: order ${o.orderNumber}`,
     html: shell(
-      o.store,
+      store,
       "We've received your payment",
       p(`Thank you, ${esc(o.name)}. Your payment for order <strong>${esc(o.orderNumber)}</strong> was successful.`) +
-        itemsTable(o.items) +
-        p(`<strong>Total paid: ${esc(formatKobo(o.total))}</strong>`) +
+        receiptTable(o.items) +
+        p(`<strong>Total paid \u2192 ${esc(formatKobo(o.total))}</strong>`) +
         p("Track your order any time with your order number and this email address.") +
-        button(o.trackUrl, "Track my order")
+        button(o.trackUrl, "Track my order") +
+        receiptFooterHtml(brand)
     ),
-    text: `Thank you, ${o.name}. Your payment for order ${o.orderNumber} was successful.\n\n${o.items.map((l) => `${l.quantity} x ${l.name}: ${formatKobo(l.lineTotal)}`).join("\n")}\n\nTotal paid: ${formatKobo(o.total)}\n\nTrack your order: ${o.trackUrl}`,
+    text: `Thank you, ${o.name}. Your payment for order ${o.orderNumber} was successful.\n\n${o.items.map(receiptLine).join("\n")}\n\nTotal paid -> ${formatKobo(o.total)}\n\nTrack your order: ${o.trackUrl}\n\n${brand.thanks}\n${brand.orderAlso}`,
   };
 }
 

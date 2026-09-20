@@ -43,43 +43,66 @@ describe.each(PAPERS)("layoutReceipt on %s paper", (paper) => {
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(width);
   });
 
-  it("centres the store name and draws full-width rules", () => {
+  it("opens with the shop name and phone, centred, like the handwritten receipt", () => {
     const lines = layoutReceipt(BASE, paper);
-    const header = lines.find((l) => l.trim() === "GTS")!;
-    expect(header.length - header.trimStart().length).toBe(Math.floor((width - 3) / 2));
-    expect(lines.some((l) => l === "=".repeat(width))).toBe(true);
+    expect(lines[0]!.trim()).toBe("GTS");
+    expect(lines[0]!.length - lines[0]!.trimStart().length).toBe(Math.floor((width - 3) / 2));
+    expect(lines.some((l) => l.trim() === "0803 123 4567")).toBe(true);
     expect(lines.some((l) => l === "-".repeat(width))).toBe(true);
   });
 
-  it("puts the total on a full-width row with the amount flush right", () => {
-    const total = line(layoutReceipt(BASE, paper), "TOTAL");
-    expect(total.length).toBe(width);
-    expect(total.endsWith("₦70,000")).toBe(true);
+  it("puts Date and Receipt No before the table, in that order", () => {
+    const lines = layoutReceipt(BASE, paper);
+    const date = lines.findIndex((l) => l.startsWith("Date:"));
+    const no = lines.findIndex((l) => l.startsWith("Receipt No:"));
+    const table = lines.findIndex((l) => l.startsWith("Qty"));
+    expect(date).toBeGreaterThan(-1);
+    expect(no).toBe(date + 1);
+    expect(table).toBeGreaterThan(no);
+    expect(lines[no]).toContain("GTS-202609-000143");
   });
 
-  it("shows order number, date, channel and cashier", () => {
+  it("draws the total with an arrow to a flush-right amount", () => {
+    const total = line(layoutReceipt(BASE, paper), "Total");
+    expect(total.length).toBe(width);
+    expect(total).toMatch(/^Total -+> +₦70,000$/);
+  });
+
+  it("shows receipt number, date and cashier", () => {
     const text = renderReceiptText(BASE, paper);
     expect(text).toContain("GTS-202609-000143");
     expect(text).toContain(formatWAT(BASE.createdAt));
-    expect(text).toContain("Walk-in");
     expect(text).toContain("Chidinma O.");
   });
 
-  it("lays each item out as name, variant, then qty x unit price with the line total flush right", () => {
+  it("lists each item with Qty, Description, Unit price and Amount", () => {
     const lines = layoutReceipt(BASE, paper);
-    const nameIdx = lines.findIndex((l) => l.startsWith("GTS Oxford Shirt"));
-    expect(nameIdx).toBeGreaterThan(-1);
-    expect(lines[nameIdx + 1]).toBe("  L / Black");
-    const qty = lines[nameIdx + 2]!;
-    expect(qty.startsWith("  2 x ₦15,000")).toBe(true);
-    expect(qty.endsWith("₦30,000")).toBe(true);
-    expect(qty.length).toBe(width);
+    const header = line(lines, "Qty");
+    if (width >= 48) {
+      expect(header).toMatch(/^Qty\s+Description\s+Unit price\s+Amount$/);
+      const row = lines.find((l) => l.startsWith("2   GTS Oxford Shirt"))!;
+      expect(row).toBeDefined();
+      expect(row.length).toBe(width);
+      const idx = lines.indexOf(row);
+      expect((row + lines[idx + 1]).replace(/\s+/g, " ")).toContain("(L / Black)");
+      expect(row).toContain("₦15,000");
+      expect(row.endsWith("₦30,000")).toBe(true);
+    } else {
+      expect(header).toBe("Qty Description");
+      const idx = lines.findIndex((l) => l.startsWith("2   GTS Oxford Shirt"));
+      expect(idx).toBeGreaterThan(-1);
+      const priceRow = lines.slice(idx).find((l) => l.includes("@ ₦15,000"))!;
+      expect(priceRow.startsWith("    @ ₦15,000")).toBe(true);
+      expect(priceRow.endsWith("₦30,000")).toBe(true);
+      expect(priceRow.length).toBe(width);
+    }
   });
 
-  it("omits the variant line for items without size or colour", () => {
+  it("omits the variant for items without size or colour", () => {
     const lines = layoutReceipt(BASE, paper);
-    const idx = lines.findIndex((l) => l.startsWith("Denim Jacket"));
-    expect(lines[idx + 1]!.startsWith("  1 x ₦45,000")).toBe(true);
+    const jacket = lines.find((l) => l.startsWith("1   Denim Jacket"))!;
+    expect(jacket).toBeDefined();
+    expect(jacket).not.toContain("(");
   });
 
   it("wraps a long product name on word boundaries without losing any text", () => {
@@ -89,22 +112,28 @@ describe.each(PAPERS)("layoutReceipt on %s paper", (paper) => {
       paper
     );
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(width);
+    const start = lines.findIndex((l) => l.startsWith("1   Samsung"));
+    expect(start).toBeGreaterThan(-1);
+    const descEnd = width >= 48 ? width - 26 : width;
     const words = lines
-      .filter((l) => !l.startsWith("  1 x") && /Samsung|Bespoke|Door|French|Refrigerator|Water|Dispenser|with|4-Door/.test(l))
+      .slice(start)
+      .filter((l) => !l.includes("@ ₦") || l.startsWith("1   "))
+      .slice(0, 6)
+      .map((l) => l.slice(4, descEnd))
       .join(" ")
       .split(/\s+/)
-      .filter(Boolean);
+      .filter((w) => name.split(" ").includes(w));
     expect(words.join(" ")).toBe(name);
   });
 
   it("hard-splits a single word that is longer than the paper", () => {
-    const name = "Q".repeat(width + 10);
+    const name = "Z".repeat(width + 10);
     const lines = layoutReceipt(
       { ...BASE, items: [{ name, size: null, color: null, quantity: 1, unitPrice: 100, lineTotal: 100 }] },
       paper
     );
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(width);
-    expect(lines.join("").split("Q").length - 1).toBe(width + 10);
+    expect(lines.join("").split("Z").length - 1).toBe(width + 10);
   });
 
   it("fits seven-figure amounts on the narrowest paper", () => {
@@ -114,7 +143,7 @@ describe.each(PAPERS)("layoutReceipt on %s paper", (paper) => {
       paper
     );
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(width);
-    expect(line(lines, "TOTAL").endsWith("₦3,750,000")).toBe(true);
+    expect(line(lines, "Total").endsWith("₦3,750,000")).toBe(true);
   });
 
   it("shows a discount line only when a discount was applied", () => {
@@ -150,14 +179,15 @@ describe.each(PAPERS)("layoutReceipt on %s paper", (paper) => {
     expect(renderReceiptText(BASE, paper)).not.toContain("Ngozi");
   });
 
-  it("prints store address and phone only when configured", () => {
+  it("prints the store address only when configured, and the shop's own phone if none is set", () => {
     const withStore = renderReceiptText(BASE, paper);
     expect(withStore).toContain("Allen Avenue");
     expect(withStore).toContain("0803 123 4567");
 
     const bare = renderReceiptText({ ...BASE, store: { name: "GTS" } }, paper);
     expect(bare).not.toContain("Allen Avenue");
-    expect(bare).not.toMatch(/Tel:/);
+    expect(bare).toContain("08148308129");
+    expect(renderReceiptText({ ...BASE, store: undefined }, paper)).toContain("GTS WEARS");
   });
 
   it("stays within width for a 60-line order", () => {
@@ -171,12 +201,13 @@ describe.each(PAPERS)("layoutReceipt on %s paper", (paper) => {
     }));
     const lines = layoutReceipt({ ...BASE, items }, paper);
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(width);
-    expect(lines.length).toBeGreaterThan(180);
+    expect(lines.length).toBeGreaterThan(150);
   });
 
-  it("ends with a thank-you footer", () => {
-    const lines = layoutReceipt(BASE, paper);
-    expect(lines.join("\n")).toMatch(/thank you/i);
+  it("ends with the thanks and the website, as the handwritten receipt does", () => {
+    const lines = layoutReceipt(BASE, paper).filter((l) => l.trim());
+    expect(lines.at(-2)!.trim()).toBe("Thanks for your patronage.");
+    expect(lines.at(-1)!.trim()).toBe("Order also: www.GTS08.com");
   });
 });
 
@@ -185,13 +216,13 @@ describe("paper sizes compared", () => {
     expect(PAPERS).toEqual(["58mm", "80mm", "a4"]);
   });
 
-  it("uses more lines on narrower paper for the same receipt", () => {
+  it("never uses fewer lines on narrower paper for the same receipt", () => {
     const item = { name: "Samsung Bespoke 4-Door French Door Refrigerator", size: null, color: null, quantity: 1, unitPrice: 250000000, lineTotal: 250000000 };
     const data = { ...BASE, items: [item] };
     const n58 = layoutReceipt(data, "58mm").length;
     const n80 = layoutReceipt(data, "80mm").length;
     const nA4 = layoutReceipt(data, "a4").length;
-    expect(n58).toBeGreaterThan(n80);
+    expect(n58).toBeGreaterThanOrEqual(n80);
     expect(n80).toBeGreaterThanOrEqual(nA4);
   });
 
@@ -262,10 +293,11 @@ describe("parseWhatsAppContact", () => {
 });
 
 describe.each(PAPERS)("a reprinted receipt on %s paper", (paper) => {
-  it("is marked DUPLICATE, right under the title", () => {
+  it("is marked DUPLICATE, above the items", () => {
     const lines = layoutReceipt({ ...BASE, duplicate: true }, paper);
-    const title = lines.findIndex((l) => l.includes("SALES RECEIPT"));
-    expect(lines[title + 1]).toContain("DUPLICATE");
+    const mark = lines.findIndex((l) => l.includes("DUPLICATE"));
+    expect(mark).toBeGreaterThan(-1);
+    expect(mark).toBeLessThan(lines.findIndex((l) => l.startsWith("Qty")));
   });
 
   it("carries no marker on the original", () => {

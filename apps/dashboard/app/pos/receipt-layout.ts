@@ -1,4 +1,4 @@
-import { formatKobo, formatWAT } from "@gts/utils";
+import { formatKobo, formatWAT, receiptBrand } from "@gts/utils";
 import type { ReceiptData, ReceiptItem } from "./receipt";
 
 export type PaperSize = "58mm" | "80mm" | "a4";
@@ -99,51 +99,86 @@ function unitPriceOf(item: ReceiptItem): number {
   return item.unitPrice ?? Math.round(item.lineTotal / item.quantity);
 }
 
+const QTY_COL = 4;
+const MONEY_COL = 13;
+/** Below this width there's no room for four columns, so the price row drops under the description. */
+const TABLE_MIN_WIDTH = 48;
+
+const padLeft = (text: string, width: number) => " ".repeat(Math.max(0, width - text.length)) + text;
+const padRight = (text: string, width: number) => text + " ".repeat(Math.max(0, width - text.length));
+
+function itemRows(item: ReceiptItem, width: number): string[] {
+  const variant = [item.size, item.color].filter(Boolean).join(" / ");
+  const description = variant ? `${item.name} (${variant})` : item.name;
+  const unit = formatKobo(unitPriceOf(item));
+  const amount = formatKobo(item.lineTotal);
+  const qty = padRight(String(item.quantity), QTY_COL);
+  const blank = " ".repeat(QTY_COL);
+
+  if (width >= TABLE_MIN_WIDTH) {
+    const descWidth = width - QTY_COL - MONEY_COL * 2;
+    const [first = "", ...rest] = wrap(description, descWidth);
+    return [
+      qty + padRight(first, descWidth) + padLeft(unit, MONEY_COL) + padLeft(amount, MONEY_COL),
+      ...rest.map((l) => blank + l),
+    ];
+  }
+  return [
+    ...wrap(description, width - QTY_COL).map((l, i) => (i === 0 ? qty : blank) + l),
+    ...twoCol(`@ ${unit}`, amount, width - QTY_COL).map((l) => blank + l),
+  ];
+}
+
+/** "Total -------> ₦7,350,000", the arrow the shop draws by hand. */
+function totalRow(amount: string, width: number): string {
+  const dashes = width - "Total ".length - "> ".length - amount.length;
+  if (dashes < 1) return twoCol("Total", amount, width).join("\n");
+  return `Total ${"-".repeat(dashes)}> ${amount}`;
+}
+
 /**
- * The receipt as fixed-width text lines for the given paper. This one
- * function drives both the on-screen preview and the printed page, so what
- * the cashier sees is what comes out of the printer.
+ * The receipt as fixed-width text lines for the given paper, in the shop's
+ * handwritten order: name and phone, date, receipt number, an
+ * Qty / Description / Unit price / Amount table, the total, thanks, and the
+ * website. One function drives the on-screen preview and the printed page, so
+ * what the cashier sees is what comes out of the printer.
  */
 export function layoutReceipt(receipt: ReceiptData, paper: PaperSize): string[] {
   const width = PAPER_SIZES[paper].chars;
-  const heavy = "=".repeat(width);
   const light = "-".repeat(width);
+  const brand = receiptBrand({ name: receipt.store?.name, phone: receipt.store?.phone });
   const lines: string[] = [];
 
-  const store = receipt.store ?? { name: "GTS" };
-  lines.push(...centerWrapped(store.name.toUpperCase(), width));
-  if (store.address) lines.push(...centerWrapped(store.address, width));
-  if (store.phone) lines.push(...centerWrapped(`Tel: ${store.phone}`, width));
-  lines.push(heavy);
-  lines.push(center("SALES RECEIPT", width));
-  if (receipt.duplicate) lines.push(center("*** DUPLICATE ***", width));
-  lines.push(light);
+  lines.push(...centerWrapped(brand.name.toUpperCase(), width));
+  if (receipt.store?.address) lines.push(...centerWrapped(receipt.store.address, width));
+  lines.push(...centerWrapped(brand.phone, width));
+  lines.push("");
 
-  lines.push(...twoCol("Order:", receipt.orderNumber, width));
   lines.push(...twoCol("Date:", formatWAT(receipt.createdAt), width));
-  lines.push(...twoCol("Channel:", CHANNEL_LABEL[receipt.channel ?? "walk_in"], width));
+  lines.push(...twoCol("Receipt No:", receipt.orderNumber, width));
   lines.push(...twoCol("Cashier:", receipt.cashierName, width));
   if (receipt.channel === "whatsapp") {
+    lines.push(...twoCol("Channel:", CHANNEL_LABEL.whatsapp, width));
     if (receipt.customerName) lines.push(...twoCol("Customer:", receipt.customerName, width));
     if (receipt.customerPhone) lines.push(...twoCol("Phone:", receipt.customerPhone, width));
   }
+  if (receipt.duplicate) lines.push(center("*** DUPLICATE ***", width));
   lines.push(light);
 
-  lines.push(...twoCol("ITEM", "AMOUNT", width));
+  lines.push(
+    width >= TABLE_MIN_WIDTH
+      ? padRight("Qty", QTY_COL) + padRight("Description", width - QTY_COL - MONEY_COL * 2) + padLeft("Unit price", MONEY_COL) + padLeft("Amount", MONEY_COL)
+      : "Qty Description"
+  );
   lines.push(light);
-  for (const item of receipt.items) {
-    lines.push(...wrap(item.name, width));
-    const variant = [item.size, item.color].filter(Boolean).join(" / ");
-    if (variant) lines.push(...wrap(variant, width, "  "));
-    lines.push(...twoCol(`  ${item.quantity} x ${formatKobo(unitPriceOf(item))}`, formatKobo(item.lineTotal), width));
-  }
+  for (const item of receipt.items) lines.push(...itemRows(item, width));
   lines.push(light);
 
-  lines.push(...twoCol("Subtotal", formatKobo(receipt.subtotal), width));
   if (receipt.discountAmount > 0) {
+    lines.push(...twoCol("Subtotal", formatKobo(receipt.subtotal), width));
     lines.push(...twoCol("Discount", `-${formatKobo(receipt.discountAmount)}`, width));
   }
-  lines.push(...twoCol("TOTAL", formatKobo(receipt.total), width));
+  lines.push(totalRow(formatKobo(receipt.total), width));
   lines.push(light);
 
   lines.push(...twoCol("Payment", PAYMENT_LABEL[receipt.paymentMethod], width));
@@ -153,9 +188,9 @@ export function layoutReceipt(receipt: ReceiptData, paper: PaperSize): string[] 
     if (change > 0) lines.push(...twoCol("Change", formatKobo(change), width));
   }
 
-  lines.push(heavy);
-  lines.push(...centerWrapped("Thank you for shopping at GTS!", width));
-  lines.push(...centerWrapped("Keep this receipt for returns.", width));
+  lines.push("");
+  lines.push(...centerWrapped(brand.thanks, width));
+  lines.push(...centerWrapped(brand.orderAlso, width));
 
   return lines;
 }

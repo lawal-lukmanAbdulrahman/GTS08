@@ -1,4 +1,4 @@
-import { formatKobo, formatWAT } from "@gts/utils";
+import { formatKobo, formatWAT, receiptBrand } from "@gts/utils";
 
 export interface ReceiptItem {
   name: string;
@@ -37,39 +37,46 @@ const PAYMENT_METHOD_LABEL: Record<ReceiptData["paymentMethod"], string> = {
   pos_terminal: "Card Terminal",
 };
 
+function unitPriceOf(item: ReceiptItem): number {
+  return item.unitPrice ?? Math.round(item.lineTotal / item.quantity);
+}
+
 function itemLine(item: ReceiptItem): string {
   const variant = [item.size, item.color].filter(Boolean).join(" / ");
   const label = variant ? `${item.name} (${variant})` : item.name;
-  return `${item.quantity} x ${label} — ${formatKobo(item.lineTotal)}`;
+  return `${item.quantity} x ${label} @ ${formatKobo(unitPriceOf(item))} = ${formatKobo(item.lineTotal)}`;
 }
 
 /**
- * Plain-text receipt shared by both the print view (spec Part 5.3) and the
- * WhatsApp share link. Kept as plain text (not HTML) so it renders cleanly
- * inside a WhatsApp message body.
+ * Plain-text receipt for the WhatsApp share link, in the shop's handwritten
+ * order. Plain text (not HTML) so it renders cleanly inside a WhatsApp message.
  */
 export function buildReceiptText(receipt: ReceiptData): string {
+  const brand = receiptBrand({ name: receipt.store?.name, phone: receipt.store?.phone });
   const lines = [
-    "GTS",
+    brand.name.toUpperCase(),
+    brand.phone,
     ...(receipt.duplicate ? ["*** DUPLICATE ***"] : []),
-    `Order ${receipt.orderNumber}`,
-    formatWAT(receipt.createdAt),
     "",
+    `Date: ${formatWAT(receipt.createdAt)}`,
+    `Receipt No: ${receipt.orderNumber}`,
+    "",
+    "Qty x Description @ Unit price = Amount",
     ...receipt.items.map(itemLine),
     "",
-    `Subtotal: ${formatKobo(receipt.subtotal)}`,
   ];
 
   if (receipt.discountAmount > 0) {
-    lines.push(`Discount: -${formatKobo(receipt.discountAmount)}`);
+    lines.push(`Subtotal: ${formatKobo(receipt.subtotal)}`, `Discount: -${formatKobo(receipt.discountAmount)}`);
   }
 
   lines.push(
-    `Total: ${formatKobo(receipt.total)}`,
+    `Total -> ${formatKobo(receipt.total)}`,
     `Payment: ${PAYMENT_METHOD_LABEL[receipt.paymentMethod]}`,
     `Served by: ${receipt.cashierName}`,
     "",
-    "Thank you for shopping with GTS!"
+    brand.thanks,
+    brand.orderAlso
   );
 
   return lines.join("\n");

@@ -34,7 +34,7 @@ const toForm = (d: StoreDetails): FormValues => ({
 const FIELDS: Array<{ key: keyof StoreDetails; label: string; hint?: string; type?: string }> = [
   { key: "store_name", label: "Store name", hint: "Printed at the top of every receipt." },
   { key: "store_address", label: "Address", hint: "Printed under the store name. Leave blank to omit." },
-  { key: "support_phone", label: "Phone number", hint: "Printed as “Tel: …” on receipts." },
+  { key: "support_phone", label: "Phone number", hint: "Printed under the store name on receipts." },
   { key: "whatsapp_number", label: "WhatsApp number", hint: "Shown to customers on the storefront." },
   { key: "support_email", label: "Support email", type: "email" },
 ];
@@ -50,7 +50,7 @@ const SAMPLE_SALE = {
   createdAt: new Date().toISOString(),
 };
 
-/** The top of a receipt (through the rule under "SALES RECEIPT") for the given store details. */
+/** The top of a receipt (name, address, phone) for the given store details. */
 function receiptHeader(values: FormValues): string {
   const lines = layoutReceipt(
     {
@@ -63,8 +63,7 @@ function receiptHeader(values: FormValues): string {
     },
     "80mm"
   );
-  const titleAt = lines.findIndex((l) => l.trim() === "SALES RECEIPT");
-  return lines.slice(0, titleAt + 2).join("\n");
+  return lines.slice(0, lines.indexOf("")).join("\n");
 }
 
 export default function StoreSettingsForm({ initial, onSave }: Props) {

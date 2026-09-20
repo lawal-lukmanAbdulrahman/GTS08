@@ -68,6 +68,19 @@ describe("posReceiptEmail", () => {
     expect(m.text).toContain("₦70,000");
   });
 
+  it("follows the handwritten receipt: header, Date, Receipt No, four-column table, thanks and website", () => {
+    const m = posReceiptEmail(sale);
+    for (const s of ["GTS Stores", "0803 000 0000", "Date:", "Receipt No:", "GTS-202609-000123", "Qty", "Description", "Unit price", "Amount", "₦15,000", "Thanks for your patronage.", "Order also: www.GTS08.com"]) expect(m.html, s).toContain(s);
+    expect(m.text).toContain("Receipt No: GTS-202609-000123");
+    expect(m.text).toContain("2 x Oxford Shirt (L / Black) @ ₦15,000 = ₦30,000");
+    expect(m.text.split("\n").slice(-2)).toEqual(["Thanks for your patronage.", "Order also: www.GTS08.com"]);
+  });
+
+  it("falls back to the shop's own name and phone when Store Details has none", () => {
+    const m = posReceiptEmail({ ...sale, store: { name: "" , phone: null } });
+    expect(m.html).toContain("08148308129");
+  });
+
   it("leaves out the discount row when there is none", () => {
     const m = posReceiptEmail({ ...sale, discountAmount: 0, total: 7500000 });
     expect(m.html).not.toMatch(/discount/i);
@@ -80,6 +93,16 @@ describe("posReceiptEmail", () => {
   it("escapes product names", () => {
     const m = posReceiptEmail({ ...sale, items: [{ ...sale.items[0]!, name: EVIL }] });
     expect(m.html).not.toContain("<img src=x");
+  });
+});
+
+describe("orderPaidEmail closing lines", () => {
+  it("ends with the thanks and the website like the shop's receipt", () => {
+    const m = orderPaidEmail({ store: STORE, name: "Ngozi", orderNumber: "GTS-202609-000200", items: [{ name: "Standing Fan", quantity: 1, unitPrice: 3500000, lineTotal: 3500000 }], total: 3500000, trackUrl: "https://gts.ng/track" });
+    expect(m.html).toContain("Thanks for your patronage.");
+    expect(m.html).toContain("Order also: www.GTS08.com");
+    expect(m.text).toContain("Order also: www.GTS08.com");
+    expect(m.html).toContain("Unit price");
   });
 });
 
