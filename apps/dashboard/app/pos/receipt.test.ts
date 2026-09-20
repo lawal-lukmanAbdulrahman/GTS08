@@ -49,6 +49,11 @@ describe("buildReceiptText (spec Part 5.3: printable / shareable receipt)", () =
     expect(lines.at(-1)).toBe("Order also: www.GTS08.com");
   });
 
+  it("uses the website from Store Details", () => {
+    const text = buildReceiptText({ ...SAMPLE_RECEIPT, store: { name: "GTS", website: "gtswears.com" } });
+    expect(text.split("\n").at(-1)).toBe("Order also: gtswears.com");
+  });
+
   it("lists each item as qty, description, unit price and amount", () => {
     const text = buildReceiptText(SAMPLE_RECEIPT);
     expect(text).toContain("2 x GTS Oxford Shirt (L / Black) @ ₦15,000 = ₦30,000");

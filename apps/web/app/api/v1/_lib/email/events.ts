@@ -11,9 +11,13 @@ const SETTINGS_ID = "00000000-0000-0000-0000-000000000001";
 /** The shop's name, address and phone for the message header and footer; a plain "GTS" if settings can't be read. */
 async function storeInfo(client: Client): Promise<StoreInfo> {
   try {
-    const { data } = await client.from("settings").select("store_name, store_address, support_phone").eq("id", SETTINGS_ID).maybeSingle();
-    const row = data as { store_name?: string; store_address?: string | null; support_phone?: string | null } | null;
-    return { name: row?.store_name || "GTS", address: row?.store_address ?? null, phone: row?.support_phone ?? null };
+    type Row = { store_name?: string; store_address?: string | null; support_phone?: string | null; store_website?: string | null };
+    const read = (columns: string) => client.from("settings").select(columns).eq("id", SETTINGS_ID).maybeSingle();
+    const first = await read("store_name, store_address, support_phone, store_website");
+    // Migration 00014 adds the website column; until then read the rest.
+    const missing = first.error && /store_website/.test((first.error as { message?: string }).message ?? "");
+    const row = (missing ? (await read("store_name, store_address, support_phone")).data : first.data) as Row | null;
+    return { name: row?.store_name || "GTS", address: row?.store_address ?? null, phone: row?.support_phone ?? null, website: row?.store_website ?? null };
   } catch {
     return { name: "GTS" };
   }

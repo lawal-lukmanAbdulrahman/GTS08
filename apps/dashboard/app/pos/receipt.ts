@@ -13,6 +13,7 @@ export interface ReceiptStore {
   name: string;
   address?: string;
   phone?: string;
+  website?: string;
 }
 
 export interface ReceiptData {
@@ -52,7 +53,7 @@ function itemLine(item: ReceiptItem): string {
  * order. Plain text (not HTML) so it renders cleanly inside a WhatsApp message.
  */
 export function buildReceiptText(receipt: ReceiptData): string {
-  const brand = receiptBrand({ name: receipt.store?.name, phone: receipt.store?.phone });
+  const brand = receiptBrand({ name: receipt.store?.name, phone: receipt.store?.phone, website: receipt.store?.website });
   const lines = [
     brand.name.toUpperCase(),
     brand.phone,

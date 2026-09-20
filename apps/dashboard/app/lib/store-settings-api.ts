@@ -32,7 +32,7 @@ export async function saveStoreDetails(values: StoreDetails): Promise<SaveResult
       body: JSON.stringify(values),
     });
     const body = await res.json();
-    if (res.ok) return { ok: true, saved: body.data as StoreDetails };
+    if (res.ok) return { ok: true, saved: body.data as StoreDetails, ...(body.warning ? { warning: String(body.warning) } : {}) };
     if (res.status === 401) return { ok: false, message: "Your session has expired. Please sign in again." };
     return {
       ok: false,
@@ -51,5 +51,6 @@ export function toReceiptStore(details: StoreDetails | null): ReceiptStore {
     name: details.store_name,
     address: details.store_address ?? undefined,
     phone: details.support_phone ?? undefined,
+    website: details.store_website ?? undefined,
   };
 }

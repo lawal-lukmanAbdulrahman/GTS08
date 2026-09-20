@@ -72,6 +72,26 @@ describe("StoreSettingsForm", () => {
     expect(saveButton()).toBeDisabled();
   });
 
+  it("has a Website field that is saved with the other details, and rejects text that isn't an address", async () => {
+    const onSave = ok({ ...INITIAL, store_website: "www.gtswears.com" });
+    render(<StoreDetailsForm onSave={onSave} />);
+    type(/website/i, "not a site");
+    fireEvent.click(saveButton());
+    expect(await screen.findByText(/web address/i)).toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+    type(/website/i, "www.gtswears.com");
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ store_website: "www.gtswears.com" })));
+  });
+
+  it("shows the server's warning after saving", async () => {
+    const onSave = vi.fn().mockResolvedValue({ ok: true, saved: INITIAL, warning: "The website couldn't be saved yet: the database needs migration 00014." });
+    render(<StoreDetailsForm onSave={onSave} />);
+    type(/address/i, "x");
+    fireEvent.click(saveButton());
+    expect(await screen.findByText(/needs migration 00014/i)).toBeInTheDocument();
+  });
+
   it("shows a saving state and prevents double submits", async () => {
     let finish!: (v: unknown) => void;
     const onSave = vi.fn(() => new Promise((res) => (finish = res)));

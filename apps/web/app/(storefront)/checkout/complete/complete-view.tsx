@@ -33,6 +33,16 @@ function Complete() {
   const [last, setLast] = useState<LastCheckout | null>(null);
   const [password, setPassword] = useState("");
   const [claimStatus, setClaimStatus] = useState<string | null>(null);
+  const [store, setStore] = useState<{ name?: string; phone?: string | null; website?: string | null } | undefined>();
+
+  // The receipt's name, phone and website are the shop's own Store Details; the defaults apply if they can't be read.
+  useEffect(() => {
+    if (typeof fetch !== "function") return;
+    fetch("/api/v1/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => b?.data && setStore({ name: b.data.store_name, phone: b.data.support_phone, website: b.data.store_website }))
+      .catch(() => undefined);
+  }, []);
 
   // The cart is emptied only once the server confirms payment, never just because the customer came back.
   useEffect(() => {
@@ -70,7 +80,7 @@ function Complete() {
               <h1 className="font-athelas text-3xl font-extrabold text-[#010101]">Payment received</h1>
               <p className="text-sm text-gray-500">Thank you. Your order is confirmed and we&apos;re getting it ready.</p>
             </div>
-            <OrderReceipt order={order} />
+            <OrderReceipt order={order} store={store} />
 
             {!user && last && (
               <form onSubmit={claim} className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-left">

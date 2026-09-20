@@ -9,6 +9,8 @@ let roleResult: { data: unknown; error: unknown } = { data: null, error: null };
 let settingsRead: { data: unknown; error: unknown } = { data: null, error: null };
 let upsertResult: { data: unknown; error: unknown } = { data: null, error: null };
 const upsertSpy = vi.fn();
+const readQueue: Array<{ data: unknown; error: unknown }> = [];
+const upsertQueue: Array<{ data: unknown; error: unknown }> = [];
 
 function makeFrom(table: string) {
   const stub: any = {
@@ -18,8 +20,8 @@ function makeFrom(table: string) {
       upsertSpy(table, ...args);
       return stub;
     }),
-    single: vi.fn(() => Promise.resolve(table === "users" ? roleResult : upsertResult)),
-    maybeSingle: vi.fn(() => Promise.resolve(table === "users" ? roleResult : settingsRead)),
+    single: vi.fn(() => Promise.resolve(table === "users" ? roleResult : upsertQueue.shift() ?? upsertResult)),
+    maybeSingle: vi.fn(() => Promise.resolve(table === "users" ? roleResult : readQueue.shift() ?? settingsRead)),
   };
   return stub;
 }
@@ -65,11 +67,37 @@ describe("GET /api/v1/settings", () => {
     expect(data.store_address).toBeNull();
   });
 
+  it("still returns the details, with the default website, if the website column isn't in the database yet", async () => {
+    readQueue.push({ data: null, error: { message: "column settings.store_website does not exist" } });
+    settingsRead = { data: STORE, error: null };
+    const res = await GET(new NextRequest("http://localhost:3000/api/v1/settings"));
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toMatchObject({ store_name: "GTS", store_website: null });
+  });
+
   it("reports a database error", async () => {
     settingsRead = { data: null, error: { message: "boom" } };
     const res = await GET(new NextRequest("http://localhost:3000/api/v1/settings"));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe("DATABASE_ERROR");
+  });
+});
+
+describe("PATCH /api/v1/settings website (before the column exists)", () => {
+  beforeEach(() => {
+    upsertSpy.mockReset();
+    mockGetUser.mockResolvedValue({ id: "admin-1", email: "admin@gts.ng" });
+    roleResult = { data: { role: "admin", is_blocked: false }, error: null };
+  });
+
+  it("saves the other fields and says the website couldn't be saved yet", async () => {
+    upsertQueue.push({ data: null, error: { message: "Could not find the 'store_website' column of 'settings' in the schema cache" } });
+    upsertResult = { data: STORE, error: null };
+    const res = await PATCH(patch({ store_name: "GTS", store_website: "gtswears.com" }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.warning).toMatch(/website/i);
+    expect(upsertSpy.mock.calls.at(-1)![1]).not.toHaveProperty("store_website");
   });
 });
 

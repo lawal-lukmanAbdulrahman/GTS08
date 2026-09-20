@@ -76,6 +76,12 @@ describe("posReceiptEmail", () => {
     expect(m.text.split("\n").slice(-2)).toEqual(["Thanks for your patronage.", "Order also: www.GTS08.com"]);
   });
 
+  it("uses the website from Store Details in the closing line", () => {
+    const m = posReceiptEmail({ ...sale, store: { ...STORE, website: "https://www.gtswears.com/" } });
+    expect(m.html).toContain("Order also: www.gtswears.com");
+    expect(m.text.split("\n").at(-1)).toBe("Order also: www.gtswears.com");
+  });
+
   it("falls back to the shop's own name and phone when Store Details has none", () => {
     const m = posReceiptEmail({ ...sale, store: { name: "" , phone: null } });
     expect(m.html).toContain("08148308129");

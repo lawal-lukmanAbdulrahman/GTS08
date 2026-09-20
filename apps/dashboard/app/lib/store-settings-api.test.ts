@@ -56,6 +56,11 @@ describe("store settings API client", () => {
       expect(JSON.parse(init.body)).toEqual(STORE);
     });
 
+    it("passes on the server's warning, e.g. that the website couldn't be saved yet", async () => {
+      fetchMock.mockReturnValue(reply(200, { data: STORE, warning: "The website couldn't be saved yet." }));
+      expect(await saveStoreDetails(STORE)).toEqual({ ok: true, saved: STORE, warning: "The website couldn't be saved yet." });
+    });
+
     it("maps server validation errors onto their fields", async () => {
       fetchMock.mockReturnValue(
         reply(400, {

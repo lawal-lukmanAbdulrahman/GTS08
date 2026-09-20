@@ -5,6 +5,7 @@ export interface StoreInfo {
   name: string;
   address?: string | null;
   phone?: string | null;
+  website?: string | null;
 }
 
 export interface Rendered {
@@ -114,7 +115,7 @@ export function posReceiptEmail(o: {
   paymentMethod: keyof typeof PAYMENT_LABEL;
   cashierName: string;
 }): Rendered {
-  const brand = receiptBrand({ name: o.store.name, phone: o.store.phone });
+  const brand = receiptBrand({ name: o.store.name, phone: o.store.phone, website: o.store.website });
   const store = { ...o.store, name: brand.name, phone: brand.phone };
   const row = (label: string, value: string, strong = false) =>
     `<tr><td style="padding:3px 0;font-size:14px;${strong ? "font-weight:800;font-size:16px;" : ""}">${esc(label)}</td><td align="right" style="padding:3px 0;font-size:14px;${strong ? "font-weight:800;font-size:16px;" : ""}">${esc(value)}</td></tr>`;
@@ -157,7 +158,7 @@ export function posReceiptEmail(o: {
 }
 
 export function orderPaidEmail(o: { store: StoreInfo; name: string; orderNumber: string; items: Line[]; total: number; trackUrl: string }): Rendered {
-  const brand = receiptBrand({ name: o.store.name, phone: o.store.phone });
+  const brand = receiptBrand({ name: o.store.name, phone: o.store.phone, website: o.store.website });
   const store = { ...o.store, name: brand.name, phone: brand.phone };
   return {
     subject: `Payment received: order ${o.orderNumber}`,

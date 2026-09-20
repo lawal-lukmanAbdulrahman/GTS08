@@ -10,10 +10,11 @@ export interface StoreDetails {
   support_phone: string | null;
   whatsapp_number: string | null;
   support_email: string;
+  store_website?: string | null;
 }
 
 export type SaveResult =
-  | { ok: true; saved: StoreDetails }
+  | { ok: true; saved: StoreDetails; warning?: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string> };
 
 interface Props {
@@ -29,6 +30,7 @@ const toForm = (d: StoreDetails): FormValues => ({
   support_phone: d.support_phone ?? "",
   whatsapp_number: d.whatsapp_number ?? "",
   support_email: d.support_email,
+  store_website: d.store_website ?? "",
 });
 
 const FIELDS: Array<{ key: keyof StoreDetails; label: string; hint?: string; type?: string }> = [
@@ -37,6 +39,7 @@ const FIELDS: Array<{ key: keyof StoreDetails; label: string; hint?: string; typ
   { key: "support_phone", label: "Phone number", hint: "Printed under the store name on receipts." },
   { key: "whatsapp_number", label: "WhatsApp number", hint: "Shown to customers on the storefront." },
   { key: "support_email", label: "Support email", type: "email" },
+  { key: "store_website", label: "Website", hint: "Printed at the foot of receipts as “Order also: …”. Leave blank to use www.GTS08.com." },
 ];
 
 const SAMPLE_SALE = {
@@ -72,6 +75,7 @@ export default function StoreSettingsForm({ initial, onSave }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [warning, setWarning] = useState<string | null>(null);
 
   const dirty = (Object.keys(values) as Array<keyof FormValues>).some((k) => values[k] !== saved[k]);
   const preview = useMemo(() => receiptHeader(values), [values]);
@@ -105,6 +109,7 @@ export default function StoreSettingsForm({ initial, onSave }: Props) {
       setSaved(next);
       setValues(next);
       setErrors({});
+      setWarning(result.warning ?? null);
       setStatus("saved");
     } else {
       setStatus("idle");
@@ -146,6 +151,9 @@ export default function StoreSettingsForm({ initial, onSave }: Props) {
           <p role="alert" className="text-xs text-red-600 dark:text-red-400">
             {formError}
           </p>
+        )}
+        {status === "saved" && warning && (
+          <p role="status" className="text-sm text-amber-700 dark:text-amber-300">{warning}</p>
         )}
         {status === "saved" && (
           <p role="status" className="text-xs text-emerald-600 dark:text-emerald-400">

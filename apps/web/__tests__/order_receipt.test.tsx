@@ -50,6 +50,13 @@ describe("OrderReceipt (the online confirmation, in the shop's receipt format)",
     expect(screen.getByText(/Discount/)).toBeInTheDocument();
   });
 
+  it("uses the name, phone and website from Store Details when given", () => {
+    render(<OrderReceipt order={ORDER} store={{ name: "GTS Menswear", phone: "0803 111 2222", website: "https://gtswears.com/" }} />);
+    expect(screen.getByText("GTS MENSWEAR")).toBeInTheDocument();
+    expect(screen.getByText("0803 111 2222")).toBeInTheDocument();
+    expect(screen.getByText("Order also: gtswears.com")).toBeInTheDocument();
+  });
+
   it("ends with the thanks and the website to order from", () => {
     render(<OrderReceipt order={ORDER} />);
     expect(screen.getByText("Thanks for your patronage.")).toBeInTheDocument();

@@ -19,6 +19,12 @@ describe("receiptBrand (the words every receipt shares)", () => {
     expect(b.orderAlso).toBe("Order also: www.GTS08.com");
   });
 
+  it("uses the website from Store Details, shown without the scheme or trailing slash", () => {
+    expect(receiptBrand({ website: "https://www.gtswears.com/" }).orderAlso).toBe("Order also: www.gtswears.com");
+    expect(receiptBrand({ website: "gtswears.com" }).website).toBe("gtswears.com");
+    expect(receiptBrand({ website: "  " }).website).toBe("www.GTS08.com");
+  });
+
   it("ignores blank values rather than printing an empty header", () => {
     expect(receiptBrand({ name: "  ", phone: null }).name).toBe("GTS Wears");
     expect(receiptBrand({ name: "", phone: "" }).phone).toBe("08148308129");

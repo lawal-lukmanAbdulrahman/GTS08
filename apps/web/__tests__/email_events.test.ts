@@ -44,6 +44,24 @@ describe("notifyStaffWelcome", () => {
   });
 });
 
+describe("the website in receipts", () => {
+  const sale = { to: "c@example.com", orderNumber: "GTS-1", createdAt: "2026-09-20T09:15:00Z", items: [{ name: "Shirt", size: null, color: null, quantity: 1, unitPrice: 1000, lineTotal: 1000 }], subtotal: 1000, discountAmount: 0, total: 1000, paymentMethod: "cash" as const, cashierName: "Ada" };
+
+  it("comes from Store Details", async () => {
+    db.results.settings = { data: { store_name: "GTS", store_address: null, support_phone: null, store_website: "gtswears.com" }, error: null };
+    await notifyPosReceipt(db.client, sale);
+    expect(sent()[0]!.text).toContain("Order also: gtswears.com");
+  });
+
+  it("falls back to the default when the database doesn't have the column yet", async () => {
+    let calls = 0;
+    db.results.settings = () => (++calls === 1 ? { data: null, error: { message: "column settings.store_website does not exist" } } : { data: { store_name: "GTS Stores", store_address: null, support_phone: null }, error: null });
+    await notifyPosReceipt(db.client, sale);
+    expect(sent()[0]!.text).toContain("GTS Stores");
+    expect(sent()[0]!.text).toContain("Order also: www.GTS08.com");
+  });
+});
+
 describe("notifyPasswordChanged", () => {
   it("sends a security notice to the account's own address", async () => {
     await notifyPasswordChanged(db.client, { name: "Ada", email: "ada@gts.ng" });

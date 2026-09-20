@@ -2,8 +2,8 @@ import { formatKobo, formatWAT, receiptBrand } from "@gts/utils";
 import type { PaidOrder } from "../_lib/checkout-client";
 
 /** The online order confirmation, laid out like the shop's handwritten receipt. Every figure is the server's. */
-export default function OrderReceipt({ order }: { order: PaidOrder }) {
-  const brand = receiptBrand();
+export default function OrderReceipt({ order, store }: { order: PaidOrder; store?: { name?: string | null; phone?: string | null; website?: string | null } }) {
+  const brand = receiptBrand(store);
   const th = "py-1 text-xs font-semibold text-gray-500";
   const td = "py-2 align-top text-sm text-[#010101]";
 

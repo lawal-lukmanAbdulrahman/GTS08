@@ -101,4 +101,20 @@ describe("validateStoreSettings", () => {
     const e = errors({ store_name: "", support_phone: "abc", support_email: "nope" });
     expect(Object.keys(e).sort()).toEqual(["store_name", "support_email", "support_phone"]);
   });
+
+  describe("store_website", () => {
+    it("accepts a domain or a full address, trimmed", () => {
+      expect(ok({ store_website: " www.gtswears.com " }).store_website).toBe("www.gtswears.com");
+      expect(ok({ store_website: "https://gtswears.com/shop" }).store_website).toBe("https://gtswears.com/shop");
+    });
+    it("clears when blank or null", () => {
+      expect(ok({ store_website: "" }).store_website).toBeNull();
+      expect(ok({ store_website: null }).store_website).toBeNull();
+    });
+    it("rejects text that isn't a web address", () => {
+      for (const bad of ["not a site", "javascript:alert(1)", "www", "a".repeat(300) + ".com", 5]) {
+        expect(validateStoreSettings({ store_website: bad }).ok, String(bad)).toBe(false);
+      }
+    });
+  });
 });

@@ -204,6 +204,11 @@ describe.each(PAPERS)("layoutReceipt on %s paper", (paper) => {
     expect(lines.length).toBeGreaterThan(150);
   });
 
+  it("prints the website from Store Details in the last line", () => {
+    const lines = layoutReceipt({ ...BASE, store: { name: "GTS", website: "https://www.gtswears.com/" } }, paper).filter((l) => l.trim());
+    expect(lines.at(-1)!.trim()).toBe("Order also: www.gtswears.com");
+  });
+
   it("ends with the thanks and the website, as the handwritten receipt does", () => {
     const lines = layoutReceipt(BASE, paper).filter((l) => l.trim());
     expect(lines.at(-2)!.trim()).toBe("Thanks for your patronage.");

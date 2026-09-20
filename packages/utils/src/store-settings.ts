@@ -4,6 +4,7 @@ export interface StoreSettingsInput {
   support_phone?: string | null;
   whatsapp_number?: string | null;
   support_email?: string;
+  store_website?: string | null;
 }
 
 export type StoreSettingsValidation =
@@ -11,6 +12,8 @@ export type StoreSettingsValidation =
   | { ok: false; errors: Record<string, string> };
 
 const PHONE = /^[0-9+\-()\s]+$/;
+// A domain with a dot and a real ending, optionally with http(s):// and a path. No other schemes.
+const WEBSITE = /^(https?:\/\/)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(\/\S*)?$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Collapsing whitespace also strips newlines, which would otherwise break the
@@ -41,7 +44,7 @@ export function validateStoreSettings(input: unknown): StoreSettingsValidation {
   }
 
   const optionalText = (
-    key: "store_address" | "support_phone" | "whatsapp_number",
+    key: "store_address" | "support_phone" | "whatsapp_number" | "store_website",
     label: string,
     max: number,
     pattern?: RegExp
@@ -59,13 +62,14 @@ export function validateStoreSettings(input: unknown): StoreSettingsValidation {
     const v = clean(raw);
     if (!v) value[key] = null;
     else if (v.length > max) errors[key] = `${label} must be ${max} characters or fewer.`;
-    else if (pattern && !pattern.test(v)) errors[key] = `${label} can only contain digits, spaces, +, - and brackets.`;
+    else if (pattern && !pattern.test(v)) errors[key] = pattern === WEBSITE ? `${label} must be a web address like www.example.com.` : `${label} can only contain digits, spaces, +, - and brackets.`;
     else value[key] = v;
   };
 
   optionalText("store_address", "Address", 255);
   optionalText("support_phone", "Phone number", 20, PHONE);
   optionalText("whatsapp_number", "WhatsApp number", 20, PHONE);
+  optionalText("store_website", "Website", 255, WEBSITE);
 
   if ("support_email" in body) {
     if (typeof body.support_email !== "string") errors.support_email = "Email must be text.";

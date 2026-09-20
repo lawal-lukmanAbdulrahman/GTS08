@@ -146,7 +146,7 @@ function totalRow(amount: string, width: number): string {
 export function layoutReceipt(receipt: ReceiptData, paper: PaperSize): string[] {
   const width = PAPER_SIZES[paper].chars;
   const light = "-".repeat(width);
-  const brand = receiptBrand({ name: receipt.store?.name, phone: receipt.store?.phone });
+  const brand = receiptBrand({ name: receipt.store?.name, phone: receipt.store?.phone, website: receipt.store?.website });
   const lines: string[] = [];
 
   lines.push(...centerWrapped(brand.name.toUpperCase(), width));

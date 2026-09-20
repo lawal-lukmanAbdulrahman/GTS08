@@ -1,7 +1,7 @@
 # QA Fix Results (Phases 0–5)
 
 Companion to `qa-report.md` (what was found) and `qa-fix-plan.md` (what was planned).
-**Branch:** `store-front` · **Verified:** 1,150 web + 527 dashboard unit tests, both typechecks clean, lint ratchet clean, live API regression (see §5).
+**Branch:** `store-front` · **Verified:** 1,160 web + 534 dashboard unit tests, both typechecks clean, lint ratchet clean, live API regression (see §5).
 
 ## 1. Every issue in the QA report
 
@@ -27,7 +27,7 @@ Companion to `qa-report.md` (what was found) and `qa-fix-plan.md` (what was plan
 | UX §6.3 | Storefront | ✅ mostly | per-page titles (was "Aura — Aura V1 Pro Vacuum"); fonts self-hosted (Satoshi) with **no** third-party font requests and the CSP untouched; skip link; touch targets 154 → 0 buttons/inputs under 44 px on mobile; **first-visit cart and wishlist start empty** (they were pre-filled with demo items) |
 | §7 | Coverage gaps | ✅ Built, ⚠️ not all executed | see §3 |
 | Live | Notifications, on-shift avatars, POS stock and staff audit were static or stale | ✅ Built (polling) | `GET /live/summary` drives the bell badge/list and on-shift avatars; the POS grid refreshes stock every 15 s and after a sale and reconciles the open cart; the admin staff record refreshes every 10 s. Polling, not Supabase Realtime: Realtime would need the dashboard to hold a Supabase client plus a migration adding tables to the publication and staff read policies. |
-| Receipt | Receipt didn't match the shop's handwritten format | ✅ Done | Name/phone header, Date, Receipt No, Qty / Description / Unit price / Amount, Total arrow, 'Thanks for your patronage.', 'Order also: www.GTS08.com' on print, on-screen, WhatsApp, email and the online confirmation. The website is fixed text (Store Details has no field for it yet). |
+| Receipt | Receipt didn't match the shop's handwritten format | ✅ Done | Name/phone header, Date, Receipt No, Qty / Description / Unit price / Amount, Total arrow, 'Thanks for your patronage.', 'Order also: www.GTS08.com' on print, on-screen, WhatsApp, email and the online confirmation. The website is editable in Store Details (migration 00014, **pending**: until applied the receipt prints www.GTS08.com and saving a website shows a warning). |
 | Email | No transactional email | ✅ Built (Resend) | welcome (password only if the admin opts in), password-changed, POS receipt, online payment confirmation, flag update, access change. Best-effort and after-response: a missing key or a provider outage never fails the action. Needs `RESEND_API_KEY` + `EMAIL_FROM`. |
 | §8 | Order `GTS-202609-000004` | ⏳ Waiting on you | same-day void rule blocks it; needs a +1 Pixel stock adjustment |
 
@@ -65,8 +65,8 @@ Companion to `qa-report.md` (what was found) and `qa-fix-plan.md` (what was plan
 
 | Check | Result |
 |---|---|
-| Web unit/route/component tests | 1,150 pass (6 perf benchmarks are the opt-in `test:perf` job) |
-| Dashboard tests | 527 pass |
+| Web unit/route/component tests | 1,160 pass (6 perf benchmarks are the opt-in `test:perf` job) |
+| Dashboard tests | 534 pass |
 | Typecheck, web and dashboard | clean (web was previously failing on a missing dependency) |
 | Lint ratchet | no new errors (132 legacy errors recorded in `.lint-baseline.json`) |
 | **Live API regression** — last run *before* the email, checkout and upload changes; re-run `node scripts/qa/api-e2e.cjs` (with `QA_ADMIN_EMAIL`/`QA_ADMIN_PASSWORD`) to confirm. Earlier result: (`scripts/qa/api-e2e.cjs`, 219 checks incl. auth, authorization, security fixes, POS rules, concurrency races, WhatsApp, flags, staff, public/security, rate limiting) | **219 / 219 pass**, 0 rate-limit retries (the first full run needed 17) |
