@@ -219,21 +219,21 @@
       "backgroundColor": "#010101"
     },
     "createdAt": "2026-09-05T19:45:57.007Z",
-    "updatedAt": "2026-09-19T05:44:10.304Z",
+    "updatedAt": "2026-09-20T06:13:18.271Z",
     "analytics": {
-      "impressions": 13,
+      "impressions": 14,
       "uniqueVisitors": 1,
-      "avgAttentionSeconds": 113.2,
+      "avgAttentionSeconds": 106,
       "clicks": 0,
       "ctrPct": 0,
-      "dismissals": 9,
-      "desktopPct": 85,
-      "mobilePct": 15,
+      "dismissals": 10,
+      "desktopPct": 86,
+      "mobilePct": 14,
       "retentionBreakdown": {
         "under2s": 0,
-        "twoTo5s": 11,
+        "twoTo5s": 10,
         "fiveTo10s": 0,
-        "over10s": 89
+        "over10s": 90
       }
     },
     "rebroadcastedAt": "2026-09-05T21:47:40.567Z"

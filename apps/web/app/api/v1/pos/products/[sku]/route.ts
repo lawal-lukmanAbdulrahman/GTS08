@@ -13,6 +13,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ sku
   if (!access.ok) return access.response;
 
   const { sku } = await context.params;
+  // Real SKUs are short and plain. Anything else can't match, and shouldn't reach the database.
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(sku)) {
+    return NextResponse.json({ error: "No product found for that SKU.", code: "SKU_NOT_FOUND" }, { status: 404 });
+  }
   const serviceClient = createServiceClient();
 
   const { data, error } = await serviceClient

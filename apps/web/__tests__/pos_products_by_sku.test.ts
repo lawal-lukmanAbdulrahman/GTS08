@@ -63,4 +63,14 @@ describe("GET /api/v1/pos/products/:sku (barcode scan, spec Part 7)", () => {
     expect(body.data.variant.available).toBe(3);
     expect(body.data.product.name).toBe("GTS Oxford Shirt");
   });
+
+  it.each(["x') or 1=1--", "a;b", "", "x".repeat(200), "../etc/passwd"])(
+    "answers 404 for a value that can't be a SKU (%s) without querying the database",
+    async (sku) => {
+      variantResult = { data: null, error: { message: "<!DOCTYPE html>blocked" } };
+      const res = await GET(new NextRequest("http://localhost:3000/api/v1/pos/products/x"), ctx(sku));
+      expect(res.status).toBe(404);
+      expect((await res.json()).code).toBe("SKU_NOT_FOUND");
+    }
+  );
 });
