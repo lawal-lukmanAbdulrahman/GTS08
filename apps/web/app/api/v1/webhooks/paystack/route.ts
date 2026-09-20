@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
 
     await finish();
     return NextResponse.json({ received: true }, { status: 200 });
-  } catch (err) {
+  } catch {
     // A real failure must not look like success, or Paystack stops retrying and the payment is lost.
     return NextResponse.json(
       { error: "Webhook processing failed.", code: "WEBHOOK_FAILED" },

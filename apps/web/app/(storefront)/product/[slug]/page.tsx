@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { createClient } from "@gts/database/client";
 import { Footer } from "../../_components/landing/footer";
 import { ProductCard } from "../../_components/ui/product-card";
-import { getProductById, REAL_PRODUCTS } from "../../_data/products";
+import { getProductById } from "../../_data/products";
 import type { ProductItem } from "../../_data/products";
 import { useCart } from "../../_components/cart-context";
 import { useWishlist } from "../../_components/wishlist-context";
@@ -133,7 +133,7 @@ export default function ProductDetailPage({
           query = query.ilike("slug", decodedSlug);
         }
 
-        const { data: dbProduct, error: queryErr } = await query.maybeSingle();
+        const { data: dbProduct, error: _queryErr } = await query.maybeSingle();
 
         let matched = dbProduct;
 
@@ -1796,7 +1796,7 @@ interface ReviewItem {
 function ProductTabs({
   product,
   rating: initialRating,
-  reviewsCount: initialReviewsCount,
+  reviewsCount: _initialReviewsCount,
   onOpenZoom,
 }: {
   product?: ProductItem;
@@ -1873,7 +1873,7 @@ function ProductTabs({
       if (saved) {
         setReviews(JSON.parse(saved));
       }
-    } catch (e) {}
+    } catch {}
 
     const fetchLiveReviews = async () => {
       try {
@@ -1900,7 +1900,7 @@ function ProductTabs({
             });
           }
         }
-      } catch (err) {
+      } catch {
         // Silently fallback to mock / local state
       }
     };
@@ -2109,7 +2109,7 @@ function ProductTabs({
       if (savedLikes) setLikeCounts((prev) => ({ ...prev, ...JSON.parse(savedLikes) }));
       const savedDislikes = localStorage.getItem("gts_review_dislikes");
       if (savedDislikes) setDislikeCounts((prev) => ({ ...prev, ...JSON.parse(savedDislikes) }));
-    } catch (e) {}
+    } catch {}
   }, []);
 
   const handleLike = (id: string) => {
@@ -2141,7 +2141,7 @@ function ProductTabs({
       localStorage.setItem("gts_review_reactions", JSON.stringify(newReactions));
       localStorage.setItem("gts_review_likes", JSON.stringify(newLikes));
       localStorage.setItem("gts_review_dislikes", JSON.stringify(newDislikes));
-    } catch (e) {}
+    } catch {}
   };
 
   const handleDislike = (id: string) => {
@@ -2173,7 +2173,7 @@ function ProductTabs({
       localStorage.setItem("gts_review_reactions", JSON.stringify(newReactions));
       localStorage.setItem("gts_review_likes", JSON.stringify(newLikes));
       localStorage.setItem("gts_review_dislikes", JSON.stringify(newDislikes));
-    } catch (e) {}
+    } catch {}
   };
 
   // Reply state
@@ -2209,7 +2209,7 @@ function ProductTabs({
       if (typeof window !== "undefined" && product?.id) {
         try {
           localStorage.setItem(`gts_reviews_${product.id}`, JSON.stringify(updated));
-        } catch (e) {}
+        } catch {}
       }
       return updated;
     });
@@ -2234,7 +2234,7 @@ function ProductTabs({
       };
       const existingNotifs = JSON.parse(localStorage.getItem("gts_inbox_notifications") || "[]");
       localStorage.setItem("gts_inbox_notifications", JSON.stringify([inboxNotification, ...existingNotifs]));
-    } catch (e) {}
+    } catch {}
   };
 
   // Write Review & Verification gating state
@@ -2362,7 +2362,7 @@ function ProductTabs({
         if (typeof window !== "undefined" && product?.id) {
           try {
             localStorage.setItem(`gts_reviews_${product.id}`, JSON.stringify(updated));
-          } catch (e) {}
+          } catch {}
         }
         return updated;
       });

@@ -99,8 +99,7 @@ export default function ProductInfoDrawer({
   product,
   isOpen,
   onClose,
-  onEdit,
-}: ProductInfoDrawerProps) {
+  }: ProductInfoDrawerProps) {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
@@ -171,11 +170,11 @@ export default function ProductInfoDrawer({
   const costPriceKobo = product.cost_price || Math.round(basePriceKobo * 0.7);
   const profitPerUnitKobo = Math.max(0, basePriceKobo - costPriceKobo);
   const totalRevenueKobo = totalSold * basePriceKobo;
-  const totalProfitKobo = totalSold * profitPerUnitKobo;
+  const _totalProfitKobo = totalSold * profitPerUnitKobo;
   const profitMarginPct = basePriceKobo > 0 ? Math.round((profitPerUnitKobo / basePriceKobo) * 100) : 30;
 
   // Unique colors and sizes
-  const uniqueColors: { color: string; hex: string; img?: string }[] = Array.from(
+  const _uniqueColors: { color: string; hex: string; img?: string }[] = Array.from(
     new Map(
       (product.variants || []).map((v: any) => [
         v.color,
@@ -210,7 +209,7 @@ export default function ProductInfoDrawer({
   }));
 
   // Handle color click (switches active image if color variant has image)
-  const handleSelectColor = (c: { color: string; hex: string; img?: string }) => {
+  const _handleSelectColor = (c: { color: string; hex: string; img?: string }) => {
     setSelectedColor(c.color);
     if (c.img) {
       setSelectedImage(c.img);

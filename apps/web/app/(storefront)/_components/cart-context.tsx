@@ -42,7 +42,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to load cart from localStorage", e);
     }
     setHydrated(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Save to localStorage whenever cart changes (after initial hydration)

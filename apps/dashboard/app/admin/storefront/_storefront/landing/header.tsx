@@ -235,7 +235,7 @@ export function Header() {
     };
   }, [user]);
 
-  const displayName =
+  const _displayName =
     customer?.full_name?.trim() ||
     (user?.user_metadata?.full_name as string)?.trim() ||
     (user?.user_metadata?.name as string)?.trim() ||
@@ -243,7 +243,7 @@ export function Header() {
     user?.email?.split("@")[0] ||
     "Shopper";
 
-  const avatarInitial = (
+  const _avatarInitial = (
     customer?.full_name?.trim() ||
     (user?.user_metadata?.full_name as string)?.trim() ||
     (user?.user_metadata?.name as string)?.trim() ||

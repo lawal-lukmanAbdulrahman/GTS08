@@ -1,7 +1,7 @@
 "use client";
 
 import { API_BASE } from "../lib/api-base";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signOutMessage } from "../lib/session";
 
@@ -11,7 +11,7 @@ import { signOutMessage } from "../lib/session";
 function sanitizeSqlInput(input: unknown): string {
   if (typeof input !== "string") return "";
 
-  let sanitized = input
+  const sanitized = input
     .trim()
     .replace(/\0/g, "")
     .replace(/[\b\t\n\r\x1a]/g, "");
@@ -25,7 +25,7 @@ function sanitizeEmail(email: unknown): string {
   return sanitizeSqlInput(email).toLowerCase();
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTarget = searchParams.get("redirect") || "/admin";
@@ -138,7 +138,7 @@ export default function LoginPage() {
       } else {
         router.push("/pending");
       }
-    } catch (err: any) {
+    } catch {
       // Clean, professional network failure handling without emojis
       setGeneralError("Unable to connect to the GTS server. Please check your network connection and try again.");
       triggerShake("all");
@@ -328,5 +328,14 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** The form reads the URL (useSearchParams), which a statically built page needs a Suspense boundary for. */
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

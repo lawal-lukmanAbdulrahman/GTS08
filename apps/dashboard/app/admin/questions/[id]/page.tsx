@@ -317,7 +317,7 @@ export default function AdminQuestionDetailPage() {
 
         // Fetch inventory levels for variants
         const variantIds = (pData.product_variants || []).map((v: any) => v.id);
-        let stockMap: Record<string, number> = {};
+        const stockMap: Record<string, number> = {};
 
         if (variantIds.length > 0) {
           const { data: invData } = await supabase

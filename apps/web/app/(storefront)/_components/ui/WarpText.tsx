@@ -348,8 +348,8 @@ export default function WarpText({
     let raf = 0;
     let disposed = false;
     let visible = true;
-    let pageVisible = !document.hidden;
-    let reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const pageVisible = !document.hidden;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     let rasterVersion = 0;
 
     const pointer = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5, active: 0, activeTarget: 0 };

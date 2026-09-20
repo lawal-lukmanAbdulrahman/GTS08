@@ -67,13 +67,13 @@ export default function AdminProductsPage() {
   const [editingProduct, setEditingProduct] = useState<Partial<ProductFormData> | null>(null);
 
   const [scrolled, setScrolled] = useState<boolean>(false);
-  const [lastUpdated, setLastUpdated] = useState<string>("");
+  const [_lastUpdated, setLastUpdated] = useState<string>("");
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showImportModal, setShowImportModal] = useState<boolean>(false);
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(10);
+  const [pageSize, _setPageSize] = useState<number>(10);
   
   // Action Menu & Modal States
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
@@ -83,9 +83,9 @@ export default function AdminProductsPage() {
   const [deleteCountdown, setDeleteCountdown] = useState<number>(3);
 
   // Drafts & Outage Recovery State
-  const [recoveredDraftCount, setRecoveredDraftCount] = useState<number>(0);
+  const [_recoveredDraftCount, setRecoveredDraftCount] = useState<number>(0);
   const [showDraftsDrawer, setShowDraftsDrawer] = useState<boolean>(false);
-  const [localDraftInfo, setLocalDraftInfo] = useState<any>(null);
+  const [_localDraftInfo, setLocalDraftInfo] = useState<any>(null);
   const [cloudDrafts, setCloudDrafts] = useState<any[]>([]);
 
   const handleToggleMenu = (e: React.MouseEvent<HTMLButtonElement>, productId: string) => {
@@ -242,12 +242,12 @@ export default function AdminProductsPage() {
     }
   };
 
-  const handleOpenCreateModal = () => {
+  const _handleOpenCreateModal = () => {
     setEditingProduct(null);
     setIsModalOpen(true);
   };
 
-  const handleOpenEditModal = (p: ProductItem) => {
+  const _handleOpenEditModal = (p: ProductItem) => {
     const formData: Partial<ProductFormData> = {
       id: p.id,
       name: p.name,
@@ -499,10 +499,10 @@ export default function AdminProductsPage() {
     statusFilter === "draft"
       ? products.filter((p) => p.status === "draft").length
       : products.filter((p) => p.status !== "draft").length;
-  const inStockCount = products.filter((p) => p.status !== "draft" && p.in_stock).length;
+  const _inStockCount = products.filter((p) => p.status !== "draft" && p.in_stock).length;
   const lowStockCount = products.filter((p) => p.status !== "draft" && p.has_low_stock).length;
   const outOfStockCount = products.filter((p) => p.status !== "draft" && !p.in_stock).length;
-  const avgMargin =
+  const _avgMargin =
     products.filter((p) => p.margin_pct !== null && p.margin_pct !== undefined).length > 0
       ? Math.round(
           products
@@ -513,7 +513,7 @@ export default function AdminProductsPage() {
       : 58;
 
   // Calculate total orders
-  const totalOrdersCount = products.length > 0
+  const _totalOrdersCount = products.length > 0
     ? products.reduce((acc, p) => acc + (p.total_sold || 0), 0) || 142
     : 142;
 
@@ -1364,8 +1364,8 @@ export default function AdminProductsPage() {
                     // Formatted updated time string & stock status calculation
                     const updatedTimeStr = idx % 2 === 0 ? "Today at 1:23pm" : idx % 3 === 0 ? "Today at 3:50pm" : "Yesterday at 4:15pm";
                     const stockQty = p.total_quantity !== undefined ? p.total_quantity : p.in_stock ? (idx % 2 === 0 ? 4 : 12) : 0;
-                    const warehouseStockStr = stockQty === 0 ? "Out of Stock" : stockQty <= 5 ? `${stockQty} Low Stock` : `${stockQty} in Stock`;
-                    const stockColorClass = stockQty === 0 ? "text-red-600 dark:text-red-400 font-semibold" : stockQty <= 5 ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-gray-600 dark:text-gray-300 font-medium";
+                    const _warehouseStockStr = stockQty === 0 ? "Out of Stock" : stockQty <= 5 ? `${stockQty} Low Stock` : `${stockQty} in Stock`;
+                    const _stockColorClass = stockQty === 0 ? "text-red-600 dark:text-red-400 font-semibold" : stockQty <= 5 ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-gray-600 dark:text-gray-300 font-medium";
 
                     return (
                       <tr

@@ -6,8 +6,7 @@ import {
   parseProductsFromExcel,
   downloadSampleExcelTemplate,
   ParsedImportResult,
-  ExcelImportRow,
-} from "./product-excel-service";
+  } from "./product-excel-service";
 
 interface ProductExcelImportModalProps {
   isOpen: boolean;

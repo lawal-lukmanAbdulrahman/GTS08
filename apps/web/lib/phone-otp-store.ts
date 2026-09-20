@@ -1,5 +1,4 @@
 import { hashOtp, verifyOtpHash, normalizePhoneNumber } from "./termii";
-import crypto from "crypto";
 
 interface StoredOtpRecord {
   phone: string;

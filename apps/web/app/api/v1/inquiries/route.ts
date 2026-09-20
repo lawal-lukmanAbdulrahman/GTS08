@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
         })
         .filter(Boolean);
 
-      let productsMap: Record<string, any> = {};
+      const productsMap: Record<string, any> = {};
       if (productIds.length > 0) {
         const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const validUuids = productIds.filter((id: string) => UUID_RE.test(id));

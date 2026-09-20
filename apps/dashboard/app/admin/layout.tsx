@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import { SidebarProvider, useSidebar } from "./sidebar-context";
 import { isAdminInquiryUnread } from "../../lib/notifications";
 import { authFetch } from "../lib/session";

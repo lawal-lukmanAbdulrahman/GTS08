@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { getAuthenticatedUser } from "../auth/utils";
 import { validateStoreSettings } from "@gts/utils";
 import { requireAdmin } from "../_lib/staff-access";
 import { dbError } from "../_lib/http";

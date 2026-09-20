@@ -221,21 +221,10 @@ export async function uploadBrandLogo(
   optimizedSize?: number;
 }> {
   let fileToUpload: File | Blob = file;
-  let hasTransparentBg = true;
-  let width = 0;
-  let height = 0;
-  let originalSize = file.size;
-  let optimizedSize = file.size;
 
   if (typeof window !== "undefined" && file.type?.startsWith("image/")) {
     try {
-      const opt = await optimizeAndInspectImage(file, 320);
-      fileToUpload = opt.file;
-      hasTransparentBg = opt.hasTransparentBg;
-      width = opt.width;
-      height = opt.height;
-      originalSize = opt.originalSize;
-      optimizedSize = opt.optimizedSize;
+      fileToUpload = (await optimizeAndInspectImage(file, 320)).file;
     } catch (e) {
       console.warn("Logo compression error:", e);
     }

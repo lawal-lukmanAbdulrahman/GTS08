@@ -144,7 +144,7 @@ export async function GET() {
     }
 
     return NextResponse.json({ data: Array.from(catMap.values()) });
-  } catch (err: any) {
+  } catch {
     return NextResponse.json({ data: STOREFRONT_CATEGORIES });
   }
 }

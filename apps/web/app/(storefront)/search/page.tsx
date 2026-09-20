@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef, Suspense, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { ProductCard } from "../_components/ui/product-card";
 import { REAL_PRODUCTS, ALL_BRAND_KEYS, ProductItem } from "../_data/products";
 import { createClient } from "@gts/database/client";
@@ -509,7 +508,7 @@ function SearchPageInner() {
 
   // ── Step 3: Secondary Filters Applied on Top of Query Matches ─────────────
   const results = useMemo(() => {
-    let list = queryMatchedProducts.filter((p) => {
+    const list = queryMatchedProducts.filter((p) => {
       // Category filter
       if (activeCategory !== "All" && p.category !== activeCategory) return false;
 

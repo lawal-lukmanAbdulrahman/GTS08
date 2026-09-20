@@ -3,7 +3,6 @@
 import { API_BASE } from "../../../lib/api-base";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { SidebarToggle } from "../../sidebar-context";
 import { VariantRow } from "../product-form-modal";
 import { uploadToCloudinary, uploadBrandLogo } from "../cloudinary-upload";
@@ -147,7 +146,7 @@ export default function CreateProductPage() {
   const [descriptionImages, setDescriptionImages] = useState<DescriptionImageItem[]>([]);
   const [isUploadingHero, setIsUploadingHero] = useState(false);
   const [isDraggingHero, setIsDraggingHero] = useState(false);
-  const [heroImageStats, setHeroImageStats] = useState<{
+  const [_heroImageStats, setHeroImageStats] = useState<{
     originalSize?: number;
     optimizedSize?: number;
     width?: number;
@@ -193,7 +192,7 @@ export default function CreateProductPage() {
 
   // Drag-to-reorder Color Variants State
   const [draggedColor, setDraggedColor] = useState<string | null>(null);
-  const [dragOverColor, setDragOverColor] = useState<string | null>(null);
+  const [_dragOverColor, setDragOverColor] = useState<string | null>(null);
   const [draggedColorIndex, setDraggedColorIndex] = useState<number | null>(null);
   const [dragOverColorIndex, setDragOverColorIndex] = useState<number | null>(null);
 
@@ -1731,7 +1730,7 @@ export default function CreateProductPage() {
               ) : (
                 /* Grouped Accordions by Color */
                 <div className="space-y-4">
-                  {Array.from(groupedColorsMap.entries()).map(([colorName, group], gIdx) => {
+                  {Array.from(groupedColorsMap.entries()).map(([_colorName, group], gIdx) => {
                     return (
                       <div
                         key={gIdx}

@@ -10,13 +10,12 @@ import {
   getLocalBroadcastItems,
   setLocalBroadcastItems,
   type BroadcastItem,
-  INITIAL_BROADCAST_ITEMS,
-} from "../../../lib/notifications";
+  } from "../../../lib/notifications";
 import BroadcastAnalyticsDrawer from "./broadcast-analytics-drawer";
 import { idempotentFetch } from "@gts/utils";
 import { authHeader } from "../../lib/session";
 
-const CURATED_GRAPHIC_PRESETS = [
+const _CURATED_GRAPHIC_PRESETS = [
   {
     name: "Luxury Tailored Suiting",
     url: "https://images.unsplash.com/photo-1617137984095-74e4e5e3613f?q=80&w=1200&auto=format&fit=crop",

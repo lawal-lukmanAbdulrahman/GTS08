@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { apiCall } from "../../lib/staff-api";
 import { SidebarToggle } from "../sidebar-context";
@@ -689,7 +689,9 @@ export default function StorefrontManagementPage() {
                       <CartProvider>
                         {/* Storefront Real Header Navigation */}
                         <div className="w-full pointer-events-none select-none">
-                          <Header />
+                          <Suspense fallback={null}>
+                            <Header />
+                          </Suspense>
                         </div>
 
                         {/* ── Native Sections Stack ── */}

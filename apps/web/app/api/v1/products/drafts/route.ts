@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { getAuthenticatedUser } from "../../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../../_lib/staff-access";
 import { serverError, dbError } from "../../_lib/http";
@@ -159,7 +158,7 @@ export const DELETE = withIdempotency(async function DELETE(request: NextRequest
   try {
     const access = await requirePermission(request, "can_manage_products");
     if (!access.ok) return access.response;
-    const user = access.user;
+    const _user = access.user;
 
     const serviceClient = createServiceClient();
 

@@ -317,7 +317,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       }
     }
 
-    let finalTags = Array.isArray(tags)
+    const finalTags = Array.isArray(tags)
       ? tags.map((t: unknown) => sanitisePostStr(t, 80)).filter(Boolean)
       : [];
     if (cleanBrand && !finalTags.includes(cleanBrand)) finalTags.push(cleanBrand);
@@ -433,7 +433,7 @@ export const PUT = withIdempotency(async function PUT(request: NextRequest) {
   try {
     const access = await requirePermission(request, "can_manage_products");
     if (!access.ok) return access.response;
-    const user = access.user;
+    const _user = access.user;
 
     const serviceClient = createServiceClient();
 
@@ -536,7 +536,7 @@ export const PUT = withIdempotency(async function PUT(request: NextRequest) {
     if (description !== undefined) updatePayload.description = String(description).slice(0, 50000);
 
     // Tags — sanitise each tag individually
-    let finalTags = Array.isArray(tags)
+    const finalTags = Array.isArray(tags)
       ? tags.map((t: unknown) => sanitiseStr(t, 80)).filter(Boolean) as string[]
       : undefined;
     if (cleanBrand && finalTags && !finalTags.includes(cleanBrand)) {

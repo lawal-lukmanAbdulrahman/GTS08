@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
-import Link from "next/link";
 import Image from "next/image";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "../_components/auth-context";
@@ -62,7 +61,7 @@ const ORDER_STEPS = [
 
 function TrackOrderContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
+  const _router = useRouter();
   const { user, customer } = useAuth();
 
   const [orderNumber, setOrderNumber] = useState(searchParams.get("order_number") || "");
@@ -280,7 +279,7 @@ function TrackOrderContent() {
                     {ORDER_STEPS.map((step, idx) => {
                       const isPast = idx < currentStep;
                       const isCurrent = idx === currentStep;
-                      const isFuture = idx > currentStep;
+                      const _isFuture = idx > currentStep;
 
                       return (
                         <div

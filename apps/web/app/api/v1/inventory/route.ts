@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
 
     const serviceClient = createServiceClient();
 
-    let query = serviceClient
+    const query = serviceClient
       .from("inventory")
       .select(`
         id,

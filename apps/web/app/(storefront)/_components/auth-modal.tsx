@@ -71,7 +71,7 @@ export function AuthModal() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
-  const [passkeySupported, setPasskeySupported] = useState(false);
+  const [_passkeySupported, setPasskeySupported] = useState(false);
 
   useEffect(() => {
     checkPasskeySupport().then((res) => setPasskeySupported(res.supported));
@@ -184,7 +184,7 @@ export function AuthModal() {
 
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [shakingField, setShakingField] = useState<"email" | "password" | null>(null);
+  const [_shakingField, setShakingField] = useState<"email" | "password" | null>(null);
 
   const triggerFieldShake = (field: "email" | "password") => {
     setShakingField(field);

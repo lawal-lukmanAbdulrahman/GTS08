@@ -3,13 +3,12 @@
 import { API_BASE } from "../../../../lib/api-base";
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { SidebarToggle } from "../../../sidebar-context";
 import { VariantRow } from "../../product-form-modal";
 import { uploadToCloudinary, uploadBrandLogo } from "../../cloudinary-upload";
 import { MarkdownDescriptionEditor } from "../../markdown-description-editor";
 
-function getVariantImageForColor(colorName: string, defaultImg: string, productName: string): string {
+function _getVariantImageForColor(colorName: string, defaultImg: string, _productName: string): string {
   if (defaultImg && defaultImg !== "/products/denim_jacket.png") return defaultImg;
   return "";
 }
@@ -268,7 +267,7 @@ export default function EditProductPage() {
   // Upload & Image Optimization Stats
   const [isUploadingHero, setIsUploadingHero] = useState(false);
   const [isDraggingHero, setIsDraggingHero] = useState(false);
-  const [heroImageStats, setHeroImageStats] = useState<{
+  const [_heroImageStats, setHeroImageStats] = useState<{
     originalSize?: number;
     optimizedSize?: number;
     width?: number;
@@ -313,7 +312,7 @@ export default function EditProductPage() {
 
   // Drag-to-reorder Color Variants State
   const [draggedColor, setDraggedColor] = useState<string | null>(null);
-  const [dragOverColor, setDragOverColor] = useState<string | null>(null);
+  const [_dragOverColor, setDragOverColor] = useState<string | null>(null);
   const [draggedColorIndex, setDraggedColorIndex] = useState<number | null>(null);
   const [dragOverColorIndex, setDragOverColorIndex] = useState<number | null>(null);
 
@@ -399,7 +398,6 @@ export default function EditProductPage() {
     if (initialLoadSettled.current) {
       hasUnsavedChanges.current = true;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     name, slug, sku, brand, categoryName, subCategory,
     basePriceNaira, compareAtNaira, costPriceNaira,
@@ -761,7 +759,7 @@ export default function EditProductPage() {
   };
 
   // Per-color file input ref map for quick replacement
-  const colorGroupFileRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+  const _colorGroupFileRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
 
   // Auto slugify name if slug empty
   const handleNameChange = (val: string) => {
@@ -810,7 +808,7 @@ export default function EditProductPage() {
     }
   };
 
-  const handleUploadHero = handleUploadHeroOrColor;
+  const _handleUploadHero = handleUploadHeroOrColor;
 
   // Upload color variant image in dialog with auto compression & transparency check
   const handleUploadColorImage = async (file: File) => {
@@ -900,7 +898,7 @@ export default function EditProductPage() {
   };
 
   // Upload image for existing color group
-  const handleUploadExistingColorImage = async (colorName: string, file: File) => {
+  const _handleUploadExistingColorImage = async (colorName: string, file: File) => {
     if (!file) return;
     try {
       const res = await uploadToCloudinary(file, "gts/products/colors");
@@ -926,7 +924,7 @@ export default function EditProductPage() {
     setVariants(Array.from(map.values()));
   };
 
-  const handleUpdateGroupColorName = (oldColor: string, newColor: string) => {
+  const _handleUpdateGroupColorName = (oldColor: string, newColor: string) => {
     setVariants((prev) =>
       prev.map((v) => (v.color === oldColor ? { ...v, color: newColor } : v))
     );

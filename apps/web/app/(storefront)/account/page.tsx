@@ -277,7 +277,7 @@ function AccountContent() {
   const [isPinAuthenticated, setIsPinAuthenticated] = useState(false);
   const [authPin, setAuthPin] = useState("");
   const [pinTicket, setPinTicket] = useState<string | null>(null);
-  const [authPinLoading, setAuthPinLoading] = useState(false);
+  const [_authPinLoading, setAuthPinLoading] = useState(false);
   const [setupPin, setSetupPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [savingPin, setSavingPin] = useState(false);
@@ -1265,7 +1265,7 @@ function AccountContent() {
     );
   }
 
-  const getStatusBadge = (status: string) => {
+  const _getStatusBadge = (status: string) => {
     switch (status) {
       case "paid":
       case "confirmed":

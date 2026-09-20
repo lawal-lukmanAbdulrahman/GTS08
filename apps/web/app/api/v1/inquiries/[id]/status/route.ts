@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { getAuthenticatedUser } from "../../../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../../../_lib/staff-access";
 import { serverError, dbError } from "../../../_lib/http";
@@ -15,7 +14,7 @@ export const PATCH = withIdempotency(async function PATCH(
   try {
     const access = await requirePermission(request, "can_handle_tickets");
     if (!access.ok) return access.response;
-    const authUser = access.user;
+    const _authUser = access.user;
     const serviceClient = createServiceClient();
 
     const { id: ticketId } = await params;

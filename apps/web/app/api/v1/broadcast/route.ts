@@ -3,7 +3,6 @@ import type { NextRequest } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createServiceClient } from "@gts/database";
-import { getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { sanitizeSafeText, sanitizeUrl } from "@gts/utils";
 import type { BroadcastItem } from "../../../../lib/notifications";
@@ -226,7 +225,7 @@ export const DELETE = withIdempotency(async function DELETE(request: NextRequest
     // Only admins manage broadcasts (no development-mode bypass).
     const access = await requireAdmin(request);
     if (!access.ok) return access.response;
-    const user = access.user;
+    const _user = access.user;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
@@ -264,7 +263,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
     const access = await requireAdmin(request);
     if (!access.ok) return access.response;
-    const user = access.user;
+    const _user = access.user;
     const serviceClient = createServiceClient();
 
     const body = await request.json();

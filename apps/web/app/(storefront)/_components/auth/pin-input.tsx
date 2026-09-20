@@ -90,7 +90,7 @@ export function PinInput({
   return (
     <div className="flex items-center justify-center gap-2 sm:gap-3">
       {digits.map((digit, idx) => {
-        const isFocused = false;
+        const _isFocused = false;
         return (
           <input
             key={`${idPrefix}-${idx}`}

@@ -37,7 +37,7 @@ export default function AdminPage() {
   const router = useRouter();
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<string>("");
+  const [_lastUpdated, setLastUpdated] = useState<string>("");
   const [productCutTab, setProductCutTab] = useState<"margin" | "revenue">("margin");
   
   // Scroll state for sticky header border
@@ -47,7 +47,7 @@ export default function AdminPage() {
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(3);
 
   // Content visits traffic visualizer state
-  const [visitFilter, setVisitFilter] = useState<string>("30d");
+  const [_visitFilter, _setVisitFilter] = useState<string>("30d");
   const [hoveredVisitIndex, setHoveredVisitIndex] = useState<number | null>(29);
 
   useEffect(() => {

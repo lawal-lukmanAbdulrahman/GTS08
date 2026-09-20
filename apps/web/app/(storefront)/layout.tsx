@@ -1,7 +1,7 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ThemeProvider } from "./_components/theme-provider";
-import { ThemeToggle } from "./_components/theme-toggle";
 import { MobileNav } from "./_components/mobile-nav";
 import { ErrorBoundary } from "./_components/error-boundary";
 
@@ -20,7 +20,7 @@ function Logo() {
   );
 }
 
-function Nav() {
+function _Nav() {
   return (
     <nav className="sticky top-0 z-40 bg-page/85 dark:bg-[#DDDAD4]/85 backdrop-blur-[12px] border-b border-line dark:border-[#2A312A] transition-colors">
       <div className="max-w-[1120px] mx-auto px-7 flex items-center justify-between h-[68px]">
@@ -59,7 +59,7 @@ function Nav() {
   );
 }
 
-function Footer() {
+function _Footer() {
   return (
     <footer className="bg-ink text-[#AEB9AF] mt-[84px] relative overflow-hidden">
       <div className="max-w-[1120px] mx-auto px-7 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 py-16 relative z-[1]">
@@ -173,7 +173,10 @@ export default function StorefrontLayout({
                 <div className="w-full min-h-screen bg-white">
                   {/* ── Max-width shell: centers the entire storefront at extreme zoom-out ── */}
                   <div className="relative mx-auto w-full max-w-[1600px] min-h-screen bg-white">
-                    <Header />
+                    {/* The header reads the URL (useSearchParams), which a statically built page needs a Suspense boundary for. */}
+                    <Suspense fallback={null}>
+                      <Header />
+                    </Suspense>
                     {children}
                     <AuthModal />
                     <CookieConsentBanner />

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useRef, Suspense } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -10,7 +9,6 @@ import {
   BroadcastItem,
   CanvasElement,
   BroadcastDesignConfig,
-  INITIAL_BROADCAST_ITEMS,
   computeElementShadow,
   SHAPE_SEAL_POINTS,
   SHAPE_BURST_POINTS,
@@ -22,6 +20,8 @@ import { idempotentFetch } from "@gts/utils";
 import { SidebarToggle } from "../../sidebar-context";
 import { uploadToCloudinary } from "../../products/cloudinary-upload";
 
+// Kept for the preset picker that is not wired up yet.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const CURATED_PRESETS = [
   {
     name: "Luxury Suiting",
@@ -753,7 +753,7 @@ interface EditorHistorySnapshot {
 }
 
 function BroadcastEditorInner() {
-  const router = useRouter();
+  const _router = useRouter();
   const searchParams = useSearchParams();
   const campaignId = searchParams?.get("id");
   const isNew = searchParams?.get("new") === "true";
@@ -812,7 +812,7 @@ function BroadcastEditorInner() {
   // Floating Pill Toolbar and Clipboard State
   const [clipboardElement, setClipboardElement] = useState<CanvasElement | null>(null);
   const [isToolbarMenuOpen, setIsToolbarMenuOpen] = useState<boolean>(false);
-  const [isMovingBg, setIsMovingBg] = useState<boolean>(false);
+  const [_isMovingBg, setIsMovingBg] = useState<boolean>(false);
   const [activeGuides, setActiveGuides] = useState<AlignmentGuide[]>([]);
 
   // History State for Undo / Redo
@@ -1244,7 +1244,7 @@ function BroadcastEditorInner() {
     setElements((prev) =>
       prev.map((el) => {
         if (selectedElementIds.includes(el.id) || (el.groupId && groupsToRemove.has(el.groupId))) {
-          const { groupId, ...rest } = el;
+          const { groupId: _groupId, ...rest } = el;
           return rest as CanvasElement;
         }
         return el;
@@ -1290,7 +1290,7 @@ function BroadcastEditorInner() {
   };
 
   // Apply quick presets
-  const handleApplyPreset = (p: (typeof CURATED_PRESETS)[0]) => {
+  const _handleApplyPreset = (p: (typeof CURATED_PRESETS)[0]) => {
     setImageUrl(p.url);
     setTitle(p.title);
     setSubtitle(p.subtitle);
@@ -2136,7 +2136,7 @@ function BroadcastEditorInner() {
     };
   };
 
-  const startPan = (e: React.MouseEvent) => {
+  const _startPan = (e: React.MouseEvent) => {
     if (!isPanMode && e.button !== 1) return; // middle click or pan mode
     e.preventDefault();
     transformRef.current = {
@@ -4385,10 +4385,10 @@ function BroadcastEditorInner() {
             {(() => {
               const bgElement = elements.find((el) => el.isBackground || el.id === "bg-image");
               const foregroundElements = elements.filter((el) => !el.isBackground && el.id !== "bg-image");
-              const isBgSelected = selectedElementId === bgElement?.id;
+              const _isBgSelected = selectedElementId === bgElement?.id;
 
               // Universal renderer for all canvas component types (used in both normal layer stack and off-canvas bleed)
-              const renderCanvasElementContent = (el: CanvasElement, isBleed = false) => {
+              const renderCanvasElementContent = (el: CanvasElement, _isBleed = false) => {
                 const shadowStyle = computeElementShadow(el);
 
                 switch (el.type) {

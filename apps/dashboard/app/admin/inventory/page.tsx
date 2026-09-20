@@ -3,10 +3,8 @@
 import { putInventory } from "../../lib/inventory-api";
 import { API_BASE } from "../../lib/api-base";
 import { useEffect, useState, useMemo, useRef } from "react";
-import Link from "next/link";
 import { AdminTopStrip } from "../sidebar-context";
 import { exportInventoryToExcel } from "./inventory-excel-service";
-import { idempotentFetch } from "@gts/utils";
 
 export interface InventoryItem {
   id: string;
@@ -172,7 +170,7 @@ export default function AdminInventoryPage() {
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(10);
+  const [pageSize, _setPageSize] = useState<number>(10);
 
   // Action Menu & Modals State
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);

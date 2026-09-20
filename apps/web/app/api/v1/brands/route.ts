@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { getAuthenticatedUser } from "../auth/utils";
 import { requirePermission } from "../_lib/staff-access";
 import { serverError } from "../_lib/http";
 
@@ -66,7 +65,7 @@ export async function GET() {
 
     const combined = Array.from(brandMap.values()).sort((a, b) => a.name.localeCompare(b.name));
     return NextResponse.json({ data: combined });
-  } catch (err: any) {
+  } catch {
     return NextResponse.json({ data: DEFAULT_BRANDS });
   }
 }
@@ -75,7 +74,7 @@ export async function POST(request: NextRequest) {
   try {
     const access = await requirePermission(request, "can_manage_products");
     if (!access.ok) return access.response;
-    const user = access.user;
+    const _user = access.user;
 
     const body = await request.json();
     const { name, slug, logo_url, description, is_featured } = body;

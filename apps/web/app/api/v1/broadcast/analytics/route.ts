@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createServiceClient } from "@gts/database";
-import type { BroadcastItem, BroadcastAnalytics } from "../../../../../lib/notifications";
+import type { BroadcastItem } from "../../../../../lib/notifications";
 
 // ─── Rate Limiter (sliding window, max 120 analytics pings/min per IP) ─────────
 const rlStore = new Map<string, { count: number; windowStart: number }>();
@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
   const cleanVisitorId = typeof visitorId === "string" && visitorId.trim() ? visitorId.trim().slice(0, 64) : null;
 
   // Load campaigns store
-  let campaigns = await loadCampaignsFromDisk();
+  const campaigns = await loadCampaignsFromDisk();
   let campaign = campaigns.find((c) => c.id === id);
 
   // If not found in disk, attempt to lookup active slot from Supabase content_slots

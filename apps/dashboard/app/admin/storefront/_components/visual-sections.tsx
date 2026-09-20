@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import Image from "next/image";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. STOREFRONT HEADER PREVIEW
@@ -50,7 +49,7 @@ export function PreviewHeader() {
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. HERO SHOWCASE PREVIEW
 // ─────────────────────────────────────────────────────────────────────────────
-export function PreviewHero({ selectedHeroProductIds }: { selectedHeroProductIds?: string[] }) {
+export function PreviewHero({ selectedHeroProductIds: _selectedHeroProductIds }: { selectedHeroProductIds?: string[] }) {
   const [activeSlide, setActiveSlide] = useState<number>(0);
 
   const heroSlides = [

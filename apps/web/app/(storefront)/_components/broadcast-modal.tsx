@@ -6,7 +6,6 @@ import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@gts/database/client";
 import {
   BroadcastDesignConfig,
-  CanvasElement,
   computeElementShadow,
   SHAPE_SEAL_POINTS,
   SHAPE_BURST_POINTS,
@@ -531,7 +530,6 @@ export function BroadcastModal() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const handleClose = () => {

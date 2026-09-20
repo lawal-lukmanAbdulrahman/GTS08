@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { getAuthenticatedUser } from "../../auth/utils";
 import { validateNewStaff } from "@gts/utils";
 import { effectivePermissions, requireSuperAdmin } from "../../_lib/staff-access";
 import { clientIp, logActivity } from "../../_lib/activity";
