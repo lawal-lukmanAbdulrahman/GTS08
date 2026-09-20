@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
+import { optionalStaff } from "../_lib/staff-access";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,9 +13,10 @@ export async function GET(request: NextRequest) {
     }
 
     const serviceClient = createServiceClient();
-    const { data: userProfile } = await serviceClient.from("users").select("role").eq("id", user.id).single();
 
-    const isStaff = userProfile && ["admin", "inventory_staff", "cashier"].includes(userProfile.role);
+    // Everyone sees their own orders; only staff with the order grant see everyone's.
+    const staff = await optionalStaff(request);
+    const isStaff = !!staff && staff.permissions.can_view_all_orders;
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");

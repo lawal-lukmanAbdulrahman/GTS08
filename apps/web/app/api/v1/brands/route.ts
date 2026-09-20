@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
+import { requirePermission } from "../_lib/staff-access";
 
 const DEFAULT_BRANDS = [
   { name: "GTS", slug: "gts", logo_url: "/logo.png" },
@@ -71,10 +72,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-    }
+    const access = await requirePermission(request, "can_manage_products");
+    if (!access.ok) return access.response;
+    const user = access.user;
 
     const body = await request.json();
     const { name, slug, logo_url, description, is_featured } = body;

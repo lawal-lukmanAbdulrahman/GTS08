@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../../../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { sanitizeXss } from "@gts/utils";
+import { optionalStaff } from "../../../_lib/staff-access";
 
 // GET /api/v1/inquiries/[id]/messages
 // Secure thread retrieval: must be customer owner or staff/admin
@@ -47,13 +48,8 @@ export async function GET(
     }
 
     // Role and ownership check
-    const { data: userProfile } = await serviceClient
-      .from("users")
-      .select("role")
-      .eq("id", authUser.id)
-      .single();
-
-    const isStaff = userProfile && ["admin", "inventory_staff"].includes(userProfile.role);
+    const staffContext = await optionalStaff(request);
+    const isStaff = !!staffContext && (staffContext.isAdmin || staffContext.permissions.can_handle_tickets);
     const isOwner =
       ticket.user_id === authUser.id ||
       (authUser.email && ticket.customer_email?.toLowerCase() === authUser.email.toLowerCase());
@@ -133,13 +129,8 @@ export const POST = withIdempotency(async function POST(
     }
 
     // Role and impersonation guard
-    const { data: userProfile } = await serviceClient
-      .from("users")
-      .select("role")
-      .eq("id", authUser.id)
-      .single();
-
-    const isStaff = userProfile && ["admin", "inventory_staff"].includes(userProfile.role);
+    const staffContext = await optionalStaff(request);
+    const isStaff = !!staffContext && (staffContext.isAdmin || staffContext.permissions.can_handle_tickets);
     const isOwner =
       ticket.user_id === authUser.id ||
       (authUser.email && ticket.customer_email?.toLowerCase() === authUser.email.toLowerCase());

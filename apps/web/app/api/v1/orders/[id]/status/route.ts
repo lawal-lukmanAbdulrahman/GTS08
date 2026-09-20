@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../../../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
+import { requirePermission } from "../../../_lib/staff-access";
 
 export const PUT = withIdempotency(async function PUT(
   request: NextRequest,
@@ -10,18 +11,11 @@ export const PUT = withIdempotency(async function PUT(
 ) {
   try {
     const { id } = await params;
-    const user = await getAuthenticatedUser(request);
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-    }
+    const access = await requirePermission(request, "can_view_all_orders");
+    if (!access.ok) return access.response;
+    const user = access.user;
 
     const serviceClient = createServiceClient();
-    const { data: userProfile } = await serviceClient.from("users").select("role").eq("id", user.id).single();
-
-    if (!userProfile || !["admin", "inventory_staff"].includes(userProfile.role)) {
-      return NextResponse.json({ error: "Forbidden", code: "FORBIDDEN" }, { status: 403 });
-    }
 
     const body = await request.json();
     const { status, carrier_name, tracking_number, carrier_tracking_url, internal_notes } = body;

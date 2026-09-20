@@ -2,21 +2,14 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../../auth/utils";
+import { requireAdmin } from "../../_lib/staff-access";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-    }
+    const access = await requireAdmin(request);
+    if (!access.ok) return access.response;
 
     const serviceClient = createServiceClient();
-    const { data: userProfile } = await serviceClient.from("users").select("role").eq("id", user.id).single();
-
-    if (!userProfile || userProfile.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden", code: "FORBIDDEN" }, { status: 403 });
-    }
 
     // Fetch total revenue
     const { data: revenueData } = await serviceClient

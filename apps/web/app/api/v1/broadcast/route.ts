@@ -7,6 +7,7 @@ import { getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { sanitizeSafeText, sanitizeUrl } from "@gts/utils";
 import type { BroadcastItem } from "../../../../lib/notifications";
+import { requireAdmin } from "../_lib/staff-access";
 
 // ─── File-backed & In-memory broadcast campaigns store ───────────────────────
 let broadcastCampaigns: BroadcastItem[] = [];
@@ -221,27 +222,10 @@ export const DELETE = withIdempotency(async function DELETE(request: NextRequest
   await ensureCampaignsLoaded();
 
   try {
-    // Auth check
-    const user = await getAuthenticatedUser(request);
-    const isDev = process.env.NODE_ENV === "development";
-    if (!user && !isDev) {
-      return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-    }
-
-    if (user) {
-      const serviceClient = createServiceClient();
-      const { data: userProfile } = await serviceClient
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (!userProfile || !["admin", "inventory_staff"].includes(userProfile.role)) {
-        if (!isDev) {
-          return NextResponse.json({ error: "Forbidden", code: "FORBIDDEN" }, { status: 403 });
-        }
-      }
-    }
+    // Only admins manage broadcasts (no development-mode bypass).
+    const access = await requireAdmin(request);
+    if (!access.ok) return access.response;
+    const user = access.user;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
@@ -280,27 +264,10 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
   await ensureCampaignsLoaded();
 
   try {
-    const user = await getAuthenticatedUser(request);
-    const isDev = process.env.NODE_ENV === "development";
-
-    if (!user && !isDev) {
-      return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-    }
-
+    const access = await requireAdmin(request);
+    if (!access.ok) return access.response;
+    const user = access.user;
     const serviceClient = createServiceClient();
-    if (user) {
-      const { data: userProfile } = await serviceClient
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (!userProfile || !["admin", "inventory_staff"].includes(userProfile.role)) {
-        if (!isDev) {
-          return NextResponse.json({ error: "Forbidden", code: "FORBIDDEN" }, { status: 403 });
-        }
-      }
-    }
 
     const body = await request.json();
     const {

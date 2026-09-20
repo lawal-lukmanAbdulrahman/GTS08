@@ -6,21 +6,14 @@ import { validateNewStaff } from "@gts/utils";
 import { effectivePermissions, requireSuperAdmin } from "../../_lib/staff-access";
 import { clientIp, logActivity } from "../../_lib/activity";
 import { generateTempPassword } from "../../_lib/temp-password";
+import { requireAdmin } from "../../_lib/staff-access";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-    }
+    const access = await requireAdmin(request);
+    if (!access.ok) return access.response;
 
     const serviceClient = createServiceClient();
-    const { data: userProfile } = await serviceClient.from("users").select("role").eq("id", user.id).single();
-
-    if (!userProfile || userProfile.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden", code: "FORBIDDEN" }, { status: 403 });
-    }
 
     // Get all users who are not customer
     const { data: staffList, error } = await serviceClient

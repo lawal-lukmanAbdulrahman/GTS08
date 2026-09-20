@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
 import { validateStoreSettings } from "@gts/utils";
+import { requireAdmin } from "../_lib/staff-access";
 
 // The settings table is a one-row singleton (migration 00001).
 const SETTINGS_ID = "00000000-0000-0000-0000-000000000001";
@@ -34,16 +35,9 @@ export async function GET(_request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const user = await getAuthenticatedUser(request);
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-  }
-
+  const admin = await requireAdmin(request);
+  if (!admin.ok) return admin.response;
   const serviceClient = createServiceClient();
-  const { data: profile } = await serviceClient.from("users").select("role").eq("id", user.id).maybeSingle();
-  if ((profile as { role?: string } | null)?.role !== "admin") {
-    return NextResponse.json({ error: "Only admins can change store settings.", code: "FORBIDDEN" }, { status: 403 });
-  }
 
   let body: unknown;
   try {

@@ -3,10 +3,15 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
+import { requirePermission } from "../../_lib/staff-access";
 
 // ── GET /api/v1/products/drafts ──────────────────────────────────────────────
 // Fetch all drafts or a specific draft by product_id or draft id
 export async function GET(request: NextRequest) {
+  // Drafts are unreleased products: staff who manage products only.
+  const access = await requirePermission(request, "can_manage_products");
+  if (!access.ok) return access.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const productId = searchParams.get("product_id");
@@ -63,17 +68,11 @@ export async function GET(request: NextRequest) {
 // Create or update a draft (upsert by id or product_id)
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-    }
+    const access = await requirePermission(request, "can_manage_products");
+    if (!access.ok) return access.response;
+    const user = access.user;
 
     const serviceClient = createServiceClient();
-    const { data: userProfile } = await serviceClient.from("users").select("role").eq("id", user.id).single();
-
-    if (!userProfile || !["admin", "inventory_staff"].includes(userProfile.role)) {
-      return NextResponse.json({ error: "Forbidden", code: "FORBIDDEN" }, { status: 403 });
-    }
 
     const body = await request.json();
     const { id: draftId, product_id, title, draft_type = "new", draft_data } = body;
@@ -157,17 +156,11 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
 // Delete ONLY the draft row (leaves live product untouched!)
 export const DELETE = withIdempotency(async function DELETE(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-    }
+    const access = await requirePermission(request, "can_manage_products");
+    if (!access.ok) return access.response;
+    const user = access.user;
 
     const serviceClient = createServiceClient();
-    const { data: userProfile } = await serviceClient.from("users").select("role").eq("id", user.id).single();
-
-    if (!userProfile || !["admin", "inventory_staff"].includes(userProfile.role)) {
-      return NextResponse.json({ error: "Forbidden", code: "FORBIDDEN" }, { status: 403 });
-    }
 
     const { searchParams } = new URL(request.url);
     const draftId = searchParams.get("id");

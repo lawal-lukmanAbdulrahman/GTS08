@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { sanitizeSafeText, sanitizeXss } from "@gts/utils";
+import { requirePermission } from "../_lib/staff-access";
 
 // GET /api/v1/inquiries
 // - If ?productId=... & user authenticated: returns customer's private inquiry thread for that product.
@@ -20,19 +21,8 @@ export async function GET(request: NextRequest) {
 
     // Admin / Staff listing all inboxes
     if (isAll) {
-      if (!authUser) {
-        return NextResponse.json({ error: "Authentication required", code: "UNAUTHORIZED" }, { status: 401 });
-      }
-
-      const { data: staffProfile } = await serviceClient
-        .from("users")
-        .select("role")
-        .eq("id", authUser.id)
-        .single();
-
-      if (!staffProfile || !["admin", "inventory_staff"].includes(staffProfile.role)) {
-        return NextResponse.json({ error: "Forbidden: Staff privileges required", code: "FORBIDDEN" }, { status: 403 });
-      }
+      const access = await requirePermission(request, "can_handle_tickets");
+      if (!access.ok) return access.response;
 
       let query = serviceClient
         .from("support_tickets")

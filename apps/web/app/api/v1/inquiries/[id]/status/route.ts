@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../../../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
+import { requirePermission } from "../../../_lib/staff-access";
 
 // PATCH /api/v1/inquiries/[id]/status
 // Restricted to staff/admin, wrapped in idempotency
@@ -11,21 +12,10 @@ export const PATCH = withIdempotency(async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authUser = await getAuthenticatedUser(request);
-    if (!authUser) {
-      return NextResponse.json({ error: "Authentication required", code: "UNAUTHORIZED" }, { status: 401 });
-    }
-
+    const access = await requirePermission(request, "can_handle_tickets");
+    if (!access.ok) return access.response;
+    const authUser = access.user;
     const serviceClient = createServiceClient();
-    const { data: userProfile } = await serviceClient
-      .from("users")
-      .select("role")
-      .eq("id", authUser.id)
-      .single();
-
-    if (!userProfile || !["admin", "inventory_staff"].includes(userProfile.role)) {
-      return NextResponse.json({ error: "Forbidden: Staff credentials required", code: "FORBIDDEN" }, { status: 403 });
-    }
 
     const { id: ticketId } = await params;
     const body = await request.json();

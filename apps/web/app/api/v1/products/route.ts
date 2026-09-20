@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
+import { requirePermission } from "../_lib/staff-access";
 
 export async function GET(request: NextRequest) {
   try {
@@ -245,18 +246,11 @@ export async function GET(request: NextRequest) {
 
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-    }
+    const access = await requirePermission(request, "can_manage_products");
+    if (!access.ok) return access.response;
+    const user = access.user;
 
     const serviceClient = createServiceClient();
-    const { data: userProfile } = await serviceClient.from("users").select("role").eq("id", user.id).single();
-
-    if (!userProfile || !["admin", "inventory_staff"].includes(userProfile.role)) {
-      return NextResponse.json({ error: "Forbidden", code: "FORBIDDEN" }, { status: 403 });
-    }
 
     const body = await request.json();
     const {
@@ -442,18 +436,11 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
 
 export const PUT = withIdempotency(async function PUT(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-    }
+    const access = await requirePermission(request, "can_manage_products");
+    if (!access.ok) return access.response;
+    const user = access.user;
 
     const serviceClient = createServiceClient();
-    const { data: userProfile } = await serviceClient.from("users").select("role").eq("id", user.id).single();
-
-    if (!userProfile || !["admin", "inventory_staff"].includes(userProfile.role)) {
-      return NextResponse.json({ error: "Forbidden", code: "FORBIDDEN" }, { status: 403 });
-    }
 
     const body = await request.json();
     const {
