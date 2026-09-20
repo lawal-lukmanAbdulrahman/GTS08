@@ -1,6 +1,6 @@
 import { formatWAT } from "@gts/utils";
 import { sendEmail, type SendResult } from "./send";
-import { accountAccessEmail, orderStatusEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, type StoreInfo } from "./templates";
+import { accountAccessEmail, ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, type StoreInfo } from "./templates";
 
 type Client = { from(table: string): any };
 
@@ -100,6 +100,31 @@ export function notifyOrderStatus(client: Client, orderId: string, status: strin
     const store = await storeInfo(client);
     const mail = orderStatusEmail({ store, name: o.customer.full_name || "there", orderNumber: o.order_number, status, trackUrl: `${storefrontUrl()}/track`, carrierName: o.carrier_name, trackingNumber: o.tracking_number, trackingUrl: o.carrier_tracking_url, paid: !!o.paid_at });
     if (mail) await sendEmail({ to: o.customer.email, ...mail });
+  }, undefined);
+}
+
+type TicketRow = { reference: string; subject: string; customer_email: string; customer_name: string | null };
+
+async function loadTicket(client: Client, ticketId: string): Promise<TicketRow | null> {
+  const { data } = await client.from("support_tickets").select("reference, subject, customer_email, customer_name").eq("id", ticketId).maybeSingle();
+  return (data as TicketRow | null) ?? null;
+}
+
+/** The automatic acknowledgement when a customer opens a ticket. */
+export function notifyTicketReceived(client: Client, ticketId: string): Promise<void> {
+  return safely(async () => {
+    const t = await loadTicket(client, ticketId);
+    if (!t) return;
+    await sendEmail({ to: t.customer_email, ...ticketReceivedEmail({ store: await storeInfo(client), name: t.customer_name ?? "", reference: t.reference, subject: t.subject }) });
+  }, undefined);
+}
+
+/** A staff reply, sent to the customer who opened the ticket. */
+export function notifyTicketReply(client: Client, ticketId: string, reply: string): Promise<void> {
+  return safely(async () => {
+    const t = await loadTicket(client, ticketId);
+    if (!t) return;
+    await sendEmail({ to: t.customer_email, ...ticketReplyEmail({ store: await storeInfo(client), name: t.customer_name ?? "", reference: t.reference, subject: t.subject, reply }) });
   }, undefined);
 }
 

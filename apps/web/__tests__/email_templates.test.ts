@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { orderStatusEmail, accountAccessEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail } from "../app/api/v1/_lib/email/templates";
+import { ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, accountAccessEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail } from "../app/api/v1/_lib/email/templates";
 
 const STORE = { name: "GTS Stores", address: "12 Marina, Lagos", phone: "0803 000 0000" };
 const EVIL = `<img src=x onerror=alert(1)>"&'`;
@@ -99,6 +99,22 @@ describe("posReceiptEmail", () => {
   it("escapes product names", () => {
     const m = posReceiptEmail({ ...sale, items: [{ ...sale.items[0]!, name: EVIL }] });
     expect(m.html).not.toContain("<img src=x");
+  });
+});
+
+describe("ticket emails", () => {
+  it("acknowledges a ticket with its reference, without repeating the customer's message", () => {
+    const m = ticketReceivedEmail({ store: STORE, name: "Bola", reference: "TKT-202609-0042", subject: EVIL });
+    expect(m.subject).toContain("TKT-202609-0042");
+    expect(m.html).toContain("TKT-202609-0042");
+    expect(m.html).not.toContain("<img src=x");
+  });
+  it("delivers a staff reply with the reference, escaped", () => {
+    const m = ticketReplyEmail({ store: STORE, name: "Bola", reference: "TKT-1", subject: "Late order", reply: `Hi\n${EVIL}` });
+    expect(m.subject).toContain("TKT-1");
+    expect(m.html).toContain("Hi");
+    expect(m.html).not.toContain("<img src=x");
+    expect(m.text).toContain("Hi");
   });
 });
 

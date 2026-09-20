@@ -12,6 +12,24 @@ describe("userIdFromAuthHeader (used only to choose a bucket; the route still ve
   it.each([[null], [""], ["Basic abc"], ["Bearer nodots"], [jwt("not-a-uuid")], [jwt(undefined)], ["Bearer a.%%%.c"]])("ignores %s", (h) => expect(userIdFromAuthHeader(h as string | null)).toBeNull());
 });
 
+describe("planBuckets for public routes that can be abused", () => {
+  const ip: { ip: string; userId: string | null } = { ip: "9.9.9.9", userId: null };
+  const limitOf = (method: string, path: string, caller = ip) => planBuckets(method, path, caller).map((b) => [b.limit, b.windowMs]);
+  it("allows a support ticket 3 times in 10 minutes per address", () => {
+    expect(limitOf("POST", "/api/v1/tickets")).toEqual([[3, 600_000]]);
+    expect(limitOf("POST", "/api/v1/tickets", { ip: "9.9.9.9", userId: UID_A })[0]).toEqual([3, 600_000]);
+  });
+  it("slows promo code guessing to 20 a minute", () => {
+    expect(limitOf("POST", "/api/v1/promos/validate")).toEqual([[20, 60_000]]);
+  });
+  it("allows 30 cart additions a minute", () => {
+    expect(limitOf("POST", "/api/v1/cart/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/items")).toEqual([[30, 60_000]]);
+  });
+  it("leaves reading the cart on the general limit", () => {
+    expect(limitOf("GET", "/api/v1/cart/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")[0]![0]).toBe(100);
+  });
+});
+
 describe("planBuckets", () => {
   it("a signed-in cashier's searches are counted per person, with a shared per-address ceiling above it", () => {
     const b = planBuckets("GET", "/api/v1/pos/products/search", { ip: "1.1.1.1", userId: UID_A });

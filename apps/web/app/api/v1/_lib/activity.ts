@@ -25,7 +25,8 @@ export type ActivityAction =
   | "order.status"
   | "promo.create"
   | "promo.update"
-  | "promo.delete";
+  | "promo.delete"
+  | "ticket.update";
 
 export interface ActivityEntry {
   actorId: string;

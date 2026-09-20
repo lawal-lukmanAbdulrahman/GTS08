@@ -81,6 +81,11 @@ export function planBuckets(method: string, pathname: string, caller: Caller): B
     return [{ key: `rl:auth:${ip}`, limit: 20, windowMs: MINUTE, tier: "auth" }];
   }
 
+  // Public endpoints an abuser would hammer. These apply to everyone, signed in or not.
+  if (method === "POST" && pathname === "/api/v1/tickets") return [{ key: `rl:tickets:${ip}`, limit: 3, windowMs: 10 * MINUTE, tier: "ip" }];
+  if (method === "POST" && pathname === "/api/v1/promos/validate") return [{ key: `rl:promo:${ip}`, limit: 20, windowMs: MINUTE, tier: "ip" }];
+  if (method === "POST" && /^\/api\/v1\/cart\/[^/]+\/items$/.test(pathname)) return [{ key: `rl:cart:${ip}`, limit: 30, windowMs: MINUTE, tier: "ip" }];
+
   if (pathname === "/api/v1/checkout") {
     return [{ key: `rl:checkout:${ip}`, limit: 15, windowMs: MINUTE, tier: "ip" }];
   }

@@ -179,6 +179,23 @@ export function orderStatusEmail(o: { store: StoreInfo; name: string; orderNumbe
   };
 }
 
+export function ticketReceivedEmail(o: { store: StoreInfo; name: string; reference: string; subject: string }): Rendered {
+  return {
+    subject: `We got your message (${o.reference})`,
+    html: shell(o.store, "We've got your message", p(`Hello ${esc(o.name || "there")}, thanks for contacting ${esc(o.store.name)}.`) + p(`Your reference is <strong>${esc(o.reference)}</strong> (${esc(o.subject)}). Quote it if you write to us again. We'll reply as soon as we can.`)),
+    text: `Hello ${o.name || "there"}, thanks for contacting ${o.store.name}.\n\nYour reference is ${o.reference} (${o.subject}). We'll reply as soon as we can.`,
+  };
+}
+
+export function ticketReplyEmail(o: { store: StoreInfo; name: string; reference: string; subject: string; reply: string }): Rendered {
+  const html = esc(o.reply).replace(/\r?\n/g, "<br>");
+  return {
+    subject: `Re: ${o.subject} (${o.reference})`,
+    html: shell(o.store, `Reply to your message`, p(`Hello ${esc(o.name || "there")},`) + `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">${html}</p>` + p(`<span style="color:#6b7280;font-size:13px;">Reference ${esc(o.reference)}. Reply to this email to continue the conversation.</span>`)),
+    text: `Hello ${o.name || "there"},\n\n${o.reply}\n\nReference ${o.reference}.`,
+  };
+}
+
 export function orderPaidEmail(o: { store: StoreInfo; name: string; orderNumber: string; items: Line[]; total: number; trackUrl: string }): Rendered {
   const brand = receiptBrand({ name: o.store.name, phone: o.store.phone, website: o.store.website });
   const store = { ...o.store, name: brand.name, phone: brand.phone };

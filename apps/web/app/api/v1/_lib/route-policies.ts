@@ -107,8 +107,9 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "inquiries": { GET: "session|permission:can_handle_tickets", POST: "session" }, // GET: own; ?all=true needs the grant
   "inquiries/[id]/messages": { GET: "session|optionalStaff", POST: "session|optionalStaff" },
   "inquiries/[id]/status": { PATCH: "permission:can_handle_tickets" },
-  "tickets": stub("GET", "POST"),
-  "tickets/[id]": stub("GET", "PATCH"),
+  "tickets": { GET: "permission:can_handle_tickets", POST: "public" }, // customers may contact support; rate limited 3 per 10 minutes
+  "tickets/[id]": { GET: "permission:can_handle_tickets", PATCH: "permission:can_handle_tickets" },
+  "tickets/[id]/messages": { POST: "permission:can_handle_tickets" },
 
   // ── email, notifications, cron
   "email-campaigns": stub("GET", "POST"),
