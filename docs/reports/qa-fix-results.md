@@ -90,7 +90,7 @@ A first attempt at this run showed a burst of 500s: that was the Next dev server
 
 ## 7. Known limits
 
-- **Storefront** still keeps the cart and wishlist in the browser; the APIs exist but the storefront doesn't call them yet.
+- **Storefront cart and wishlist** are still browser-first (that is what the shopper sees); a copy is kept on the server. The cart is mirrored after each change and merged with the account's saved cart on sign-in; the wishlist is read and written for signed-in shoppers. A failed sync changes nothing on screen. Two of the bundled catalogue's 29 products don't exist in the database, so they stay browser-only.
 - **Email campaigns** have no admin screen yet, and there is no opt-in or suppression list: unsubscribing is by replying to the address in the footer. `opted_in_only` is refused until consent is recorded.
 - **Promo codes** count on payment, so a limited code can be slightly over-used by orders placed before the last payment lands.
 - **Realtime** is polling (10 to 15 seconds), not Supabase Realtime.

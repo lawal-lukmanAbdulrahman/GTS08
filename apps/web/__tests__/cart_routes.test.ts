@@ -8,7 +8,7 @@ let authUser: { id: string } | null = null;
 vi.mock("../app/api/v1/auth/utils", async (orig) => ({ ...(await orig<typeof import("../app/api/v1/auth/utils")>()), getAuthenticatedUser: async () => authUser }));
 
 import { NextRequest } from "next/server";
-import { GET as getCart, DELETE as clearCart } from "../app/api/v1/cart/[sessionId]/route";
+import { GET as getCart, PUT as replaceCart, DELETE as clearCart } from "../app/api/v1/cart/[sessionId]/route";
 import { POST as addItem } from "../app/api/v1/cart/[sessionId]/items/route";
 import { PUT as setQty, DELETE as removeItem } from "../app/api/v1/cart/[sessionId]/items/[variantId]/route";
 import { POST as validateCart } from "../app/api/v1/cart/[sessionId]/validate/route";
@@ -68,6 +68,31 @@ describe("GET /cart/[sessionId]", () => {
     const res = await getCart(req("GET"), session());
     expect(res.status).toBe(500);
     expect(JSON.stringify(await res.json())).not.toMatch(/secret_t/);
+  });
+});
+
+describe("PUT /cart/[sessionId] (replace the cart with what the browser holds)", () => {
+  it("swaps the cart's lines for the given ones, resolved and capped to stock", async () => {
+    const res = await replaceCart(req("PUT", { items: [{ product_slug: "oxford-shirt", size: "M", color: "Black", quantity: 9 }] }), session());
+    expect(res.status).toBe(200);
+    expect(db.called("cart_items", "delete")).toBeDefined();
+    expect(db.called("cart_items", "upsert")!.args[0]).toEqual([{ session_id: S, variant_id: V1, quantity: 4 }]); // 4 available
+  });
+  it("quietly drops lines it can't match and says how many", async () => {
+    db.results.products = { data: [], error: null };
+    const res = await replaceCart(req("PUT", { items: [{ product_slug: "ghost", quantity: 1 }] }), session());
+    expect((await res.json()).data.dropped).toBe(1);
+    expect(db.called("cart_items", "upsert")).toBeUndefined();
+  });
+  it("an empty list empties the cart", async () => {
+    expect((await replaceCart(req("PUT", { items: [] }), session())).status).toBe(200);
+    expect(db.called("cart_items", "delete")).toBeDefined();
+  });
+  it("validates the session and the list", async () => {
+    expect((await replaceCart(req("PUT", { items: [] }), session("nope"))).status).toBe(400);
+    expect((await replaceCart(req("PUT", {}), session())).status).toBe(400);
+    expect((await replaceCart(req("PUT", { items: Array.from({ length: 51 }, () => ({ product_slug: "x", quantity: 1 })) }), session())).status).toBe(400);
+    expect((await replaceCart(req("PUT", "{nope"), session())).status).toBe(400);
   });
 });
 

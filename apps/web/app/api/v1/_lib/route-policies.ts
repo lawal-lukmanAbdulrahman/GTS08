@@ -71,7 +71,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "storefront/sections": { GET: "public", PUT: "admin" },
 
   // ── cart, checkout, promos, wishlist
-  "cart/[sessionId]": { GET: "public", DELETE: "public" }, // the session id is a random UUID and the only key to the cart
+  "cart/[sessionId]": { GET: "public", PUT: "public", DELETE: "public" }, // the session id is a random UUID and the only key to the cart
   "cart/[sessionId]/items": { POST: "public" },
   "cart/[sessionId]/items/[variantId]": { PUT: "public", DELETE: "public" },
   "cart/[sessionId]/validate": { POST: "public" },

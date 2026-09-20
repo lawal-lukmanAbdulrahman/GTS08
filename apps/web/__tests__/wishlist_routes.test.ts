@@ -55,6 +55,12 @@ describe("POST /wishlist", () => {
     await add(req("POST", { product_id: P1, user_id: "someone-else" }));
     expect(db.called("wishlists", "upsert")!.args[0]).toMatchObject({ user_id: "u1" });
   });
+  it("also takes a product slug, which is what the storefront knows a product by", async () => {
+    db.results.products = { data: { id: P1, status: "active" }, error: null };
+    expect((await add(req("POST", { product_slug: "oxford-shirt" }))).status).toBe(200);
+    expect(db.called("products", "eq")!.args).toEqual(["slug", "oxford-shirt"]);
+    expect(db.called("wishlists", "upsert")!.args[0]).toMatchObject({ product_id: P1 });
+  });
   it("rejects a bad or unknown or unsold product", async () => {
     expect((await add(req("POST", { product_id: "nope" }))).status).toBe(400);
     expect((await add(req("POST", {}))).status).toBe(400);
@@ -71,7 +77,12 @@ describe("DELETE /wishlist/[productId] and GET /wishlist/check/[productId]", () 
     expect((await remove(req("DELETE"), ctx())).status).toBe(200);
     const eqs = db.calls.wishlists!.filter((c) => c.method === "eq").map((c) => c.args);
     expect(eqs).toEqual([["user_id", "u1"], ["product_id", P1]]);
-    expect((await remove(req("DELETE"), ctx("nope"))).status).toBe(400);
+    expect((await remove(req("DELETE"), ctx("Bad Slug!"))).status).toBe(400);
+  });
+  it("removes by slug too", async () => {
+    db.results.products = { data: { id: P1 }, error: null };
+    expect((await remove(req("DELETE"), ctx("oxford-shirt"))).status).toBe(200);
+    expect(db.calls.wishlists!.filter((c) => c.method === "eq").map((c) => c.args)).toContainEqual(["product_id", P1]);
   });
   it("says whether a product is saved", async () => {
     db.results.wishlists = { data: { id: "w1" }, error: null };

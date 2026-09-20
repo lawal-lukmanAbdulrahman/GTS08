@@ -4,7 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { isUuid } from "@gts/utils";
 import { getAuthenticatedUser } from "../auth/utils";
 import { noStore } from "../_lib/cart";
-import { isPlainObject } from "../_lib/validate";
+import { isPlainObject, SLUG } from "../_lib/validate";
 import { readJson, serverError } from "../_lib/http";
 import { variantAvailable } from "../pos/_lib/stock-status";
 
@@ -50,12 +50,16 @@ export async function POST(request: NextRequest) {
   try {
     const parsed = await readJson(request);
     if (!parsed.ok) return parsed.response;
-    const productId = isPlainObject(parsed.body) ? parsed.body.product_id : undefined;
-    if (!isUuid(productId)) return NextResponse.json({ error: "Choose a product to save.", code: "VALIDATION_ERROR" }, { status: 400 });
+    const b = isPlainObject(parsed.body) ? parsed.body : {};
+    // The storefront knows a product by its slug; other callers may use the id.
+    const byId = isUuid(b.product_id);
+    const bySlug = typeof b.product_slug === "string" && SLUG.test(b.product_slug);
+    if (!byId && !bySlug) return NextResponse.json({ error: "Choose a product to save.", code: "VALIDATION_ERROR" }, { status: 400 });
 
     const client = createServiceClient();
-    const { data: product } = await client.from("products").select("id, status").eq("id", productId).maybeSingle();
+    const { data: product } = await client.from("products").select("id, status").eq(byId ? "id" : "slug", (byId ? b.product_id : b.product_slug) as string).maybeSingle();
     if (!product || (product as { status: string }).status !== "active") return NextResponse.json({ error: "Product not found.", code: "NOT_FOUND" }, { status: 404 });
+    const productId = (product as { id: string }).id;
 
     const { error } = await client.from("wishlists").upsert({ user_id: user.id, product_id: productId }, { onConflict: "user_id,product_id" });
     if (error) return serverError(new Error(error.message));

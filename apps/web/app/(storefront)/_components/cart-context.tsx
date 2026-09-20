@@ -1,7 +1,9 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { ProductItem } from "../_data/products";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+import { ProductItem, REAL_PRODUCTS } from "../_data/products";
+import { AuthContext } from "./auth-context";
+import { getCartSessionId, linesToCartItems, mergeCart, pushCart, setCartSessionId, unionCart } from "../_lib/server-sync";
 
 export interface CartItem {
   product: ProductItem;
@@ -22,6 +24,8 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY = "gts_shopping_cart";
+/** How long the cart must sit still before its server copy is refreshed. */
+const PUSH_DELAY_MS = 800;
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   // Start with an empty cart for SSR — localStorage is only available client-side.
@@ -29,6 +33,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   // initial HTML (empty cart), preventing the hydration mismatch on the badge count.
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  // Signed in or not (the cart works outside an AuthProvider too, e.g. in tests).
+  const userId = useContext(AuthContext)?.user?.id ?? null;
+  const latest = useRef<CartItem[]>([]);
+  latest.current = cartItems;
+  const pushedOnce = useRef(false);
+  const merging = useRef(false);
+  const mergedFor = useRef<string | null>(null);
 
   // On first client render, load the visitor's saved cart. A first-time visitor starts with an empty one.
   useEffect(() => {
@@ -53,6 +64,39 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to save cart to localStorage", e);
     }
   }, [cartItems, hydrated]);
+
+  // The server keeps a copy so the cart follows a shopper who signs in. The browser copy is what they see; a failed sync changes nothing.
+  useEffect(() => {
+    if (!hydrated || merging.current) return;
+    if (cartItems.length === 0 && !pushedOnce.current) return; // a visitor who never had a cart costs the server nothing
+    const timer = setTimeout(async () => {
+      if (await pushCart(getCartSessionId(), latest.current)) pushedOnce.current = true;
+    }, PUSH_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [cartItems, hydrated]);
+
+  // On sign-in: send the browser's cart, fold it into the one saved on the account, and show the result.
+  useEffect(() => {
+    if (!hydrated || !userId || mergedFor.current === userId) return;
+    const token = typeof window !== "undefined" ? localStorage.getItem("gts_token") : null;
+    if (!token) return;
+    mergedFor.current = userId;
+    merging.current = true;
+    (async () => {
+      try {
+        const sessionId = getCartSessionId();
+        await pushCart(sessionId, latest.current);
+        const merged = await mergeCart(sessionId, token);
+        if (merged) {
+          setCartSessionId(merged.sessionId);
+          pushedOnce.current = true;
+          setCartItems((prev) => unionCart(prev, linesToCartItems(merged.lines, REAL_PRODUCTS)));
+        }
+      } finally {
+        merging.current = false;
+      }
+    })();
+  }, [hydrated, userId]);
 
   const addToCart = (
     product: ProductItem,
