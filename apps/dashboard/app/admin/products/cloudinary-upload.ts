@@ -210,8 +210,10 @@ export async function uploadToCloudinary(
     // Fallback: try backend proxy /api/v1/upload
     const proxyFormData = new FormData();
     proxyFormData.append("file", fileToUpload);
+    const proxyToken = typeof window !== "undefined" ? localStorage.getItem("gts_token") : null;
     const backendRes = await fetch(`${API_BASE}/upload`, {
       method: "POST",
+      headers: proxyToken ? { Authorization: `Bearer ${proxyToken}` } : {},
       body: proxyFormData,
     });
     if (backendRes.ok) {
