@@ -55,7 +55,7 @@ function staff(over: { id?: string; isAdmin?: boolean } = {}) {
 }
 
 const ORDER = {
-  id: "o1",
+  id: "f1584b99-5a47-4098-8ad7-5bb8d29e9734",
   order_number: "GTS-202609-000001",
   channel: "walk_in",
   status: "completed",
@@ -93,19 +93,19 @@ describe("GET /api/v1/pos/orders/[id]/receipt (reprint)", () => {
     const { NextResponse } = await import("next/server");
     mockRequirePosAccess.mockResolvedValue({ ok: false, response: NextResponse.json({ code: "POS_ACCESS_DENIED" }, { status: 403 }) });
     setup();
-    expect((await GET(req(), ctx("o1"))).status).toBe(403);
+    expect((await GET(req(), ctx("f1584b99-5a47-4098-8ad7-5bb8d29e9734"))).status).toBe(403);
   });
 
   it("404s an order that doesn't exist", async () => {
     setup({ order: null });
-    const res = await GET(req(), ctx("nope"));
+    const res = await GET(req(), ctx("4101bef8-794f-4d98-8e95-dfb54850c68b"));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe("ORDER_NOT_FOUND");
   });
 
   it("returns the receipt data for the cashier's own sale, marked as a duplicate", async () => {
     setup();
-    const res = await GET(req(), ctx("o1"));
+    const res = await GET(req(), ctx("f1584b99-5a47-4098-8ad7-5bb8d29e9734"));
     expect(res.status).toBe(200);
     const { data } = await res.json();
     expect(data).toMatchObject({
@@ -125,13 +125,13 @@ describe("GET /api/v1/pos/orders/[id]/receipt (reprint)", () => {
 
   it("does not invent how much cash was handed over", async () => {
     setup();
-    const { data } = await (await GET(req(), ctx("o1"))).json();
+    const { data } = await (await GET(req(), ctx("f1584b99-5a47-4098-8ad7-5bb8d29e9734"))).json();
     expect(data.cashReceived).toBeUndefined();
   });
 
   it("carries a WhatsApp customer's name and phone", async () => {
     setup({ order: { ...ORDER, channel: "whatsapp", internal_notes: "WhatsApp customer: Ngozi (08031234567)" } });
-    const { data } = await (await GET(req(), ctx("o1"))).json();
+    const { data } = await (await GET(req(), ctx("f1584b99-5a47-4098-8ad7-5bb8d29e9734"))).json();
     expect(data.channel).toBe("whatsapp");
     expect(data.customerName).toBe("Ngozi");
     expect(data.customerPhone).toBe("08031234567");
@@ -139,7 +139,7 @@ describe("GET /api/v1/pos/orders/[id]/receipt (reprint)", () => {
 
   it("refuses a cashier reprinting someone else's sale", async () => {
     setup({ owner: "cashier-2" });
-    const res = await GET(req(), ctx("o1"));
+    const res = await GET(req(), ctx("f1584b99-5a47-4098-8ad7-5bb8d29e9734"));
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe("NOT_YOUR_SALE");
   });
@@ -147,26 +147,26 @@ describe("GET /api/v1/pos/orders/[id]/receipt (reprint)", () => {
   it("lets an admin reprint anyone's sale", async () => {
     mockRequirePosAccess.mockResolvedValue(staff({ id: "admin-1", isAdmin: true }));
     setup({ owner: "cashier-2" });
-    expect((await GET(req(), ctx("o1"))).status).toBe(200);
+    expect((await GET(req(), ctx("f1584b99-5a47-4098-8ad7-5bb8d29e9734"))).status).toBe(200);
   });
 
   it("won't reprint a receipt for a sale that isn't completed", async () => {
     setup({ order: { ...ORDER, status: "voided" } });
-    const res = await GET(req(), ctx("o1"));
+    const res = await GET(req(), ctx("f1584b99-5a47-4098-8ad7-5bb8d29e9734"));
     expect(res.status).toBe(409);
     expect((await res.json()).code).toBe("NOT_PRINTABLE");
   });
 
   it("audits every reprint", async () => {
     setup();
-    await GET(req(), ctx("o1"));
+    await GET(req(), ctx("f1584b99-5a47-4098-8ad7-5bb8d29e9734"));
     const insert = allCalls.activity_logs?.find((c) => c.method === "insert");
-    expect(insert?.args[0]).toMatchObject({ actor_id: "cashier-1", action: "pos.receipt_reprint", target_type: "order", target_id: "o1" });
+    expect(insert?.args[0]).toMatchObject({ actor_id: "cashier-1", action: "pos.receipt_reprint", target_type: "order", target_id: "f1584b99-5a47-4098-8ad7-5bb8d29e9734" });
   });
 
   it("does not audit a refused reprint", async () => {
     setup({ owner: "cashier-2" });
-    await GET(req(), ctx("o1"));
+    await GET(req(), ctx("f1584b99-5a47-4098-8ad7-5bb8d29e9734"));
     expect(allCalls.activity_logs).toBeUndefined();
   });
 });

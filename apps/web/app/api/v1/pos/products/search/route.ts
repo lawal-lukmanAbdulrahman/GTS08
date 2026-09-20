@@ -59,7 +59,9 @@ function mapProduct(product: RawProduct) {
  * meaning. Strip them so text can't add clauses of its own.
  */
 function cleanSearch(raw: string): string {
-  return raw.replace(/[,()%*\\"]/g, " ").replace(/\s+/g, " ").trim();
+  // Also drops statement separators, quotes and comment markers: nothing a product name needs (apostrophes stay: "Levi's"),
+  // and the upstream firewall rejects them with an HTML error page.
+  return raw.replace(/[,()%*\\";]|--/g, " ").replace(/\s+/g, " ").trim();
 }
 
 const EMPTY_PAGE = (limit: number) => ({ data: [], meta: { total: 0, page: 1, limit, pages: 1 } });
@@ -116,7 +118,13 @@ export async function GET(request: NextRequest) {
     .range(offset, offset + limit - 1);
 
   if (error) {
-    return NextResponse.json({ error: error.message, code: "DATABASE_ERROR" }, { status: 500 });
+    // Paging past the last row is just an empty page (e.g. a product was removed mid-scroll).
+    if ((error as { code?: string }).code === "PGRST103") {
+      return NextResponse.json({ data: [], meta: { total: 0, page, limit, pages: 1 } });
+    }
+    // Never pass an upstream HTML error page through to the caller.
+    const message = /^\s*</.test(error.message) ? "Product search is temporarily unavailable." : error.message;
+    return NextResponse.json({ error: message, code: "DATABASE_ERROR" }, { status: 500 });
   }
 
   const products = ((data as unknown as RawProduct[]) || []).map(mapProduct);

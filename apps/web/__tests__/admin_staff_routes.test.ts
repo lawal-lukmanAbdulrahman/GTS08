@@ -42,14 +42,14 @@ vi.mock("@gts/database", () => ({
 import { NextRequest } from "next/server";
 import { GET, PATCH } from "../app/api/v1/users/[id]/route";
 
-const ADMIN = { ok: true, user: { id: "boss", email: "boss@gts.ng" }, role: "admin", isAdmin: true, fullName: "Boss", phone: null, permissions: {} };
-const ctx = (id = "u1") => ({ params: Promise.resolve({ id }) });
+const ADMIN = { ok: true, user: { id: "ceb8447c-c4ab-48d2-8c34-cd9f11e4bed2", email: "boss@gts.ng" }, role: "admin", isAdmin: true, fullName: "Boss", phone: null, permissions: {} };
+const ctx = (id = "e4774cdd-a079-4f86-814e-8b9140bb6db4") => ({ params: Promise.resolve({ id }) });
 const get = (q = "") => new NextRequest(`http://localhost:3000/api/v1/users/u1${q}`);
 const patch = (body: unknown) => new NextRequest("http://localhost:3000/api/v1/users/u1", { method: "PATCH", body: typeof body === "string" ? body : JSON.stringify(body) });
 const find = (table: string, method: string) => calls.find((c) => c.table === table && c.method === method);
 
 const CASHIER_ROW = {
-  id: "u1",
+  id: "e4774cdd-a079-4f86-814e-8b9140bb6db4",
   email: "ada@gts.ng",
   full_name: "Ada Cashier",
   phone: "0803 123 4567",
@@ -82,7 +82,7 @@ describe("GET /api/v1/users/:id (admin views a staff member's record)", () => {
 
   it("returns 404 for someone who doesn't exist", async () => {
     results.users = { data: null, error: null };
-    expect((await GET(get(), ctx("nope"))).status).toBe(404);
+    expect((await GET(get(), ctx("4101bef8-794f-4d98-8e95-dfb54850c68b"))).status).toBe(404);
   });
 
   it("won't show a customer's record (this is the staff view)", async () => {
@@ -99,7 +99,7 @@ describe("GET /api/v1/users/:id (admin views a staff member's record)", () => {
     results.activity_logs = { data: [{ id: "a1", action: "pos.sale", target_type: "order", target_id: "o1", changes: null, created_at: "2026-09-19T09:00:00Z" }], error: null };
 
     const { data } = await (await GET(get("?range=week"), ctx())).json();
-    expect(data.profile).toMatchObject({ id: "u1", email: "ada@gts.ng", full_name: "Ada Cashier", role: "cashier", is_blocked: false });
+    expect(data.profile).toMatchObject({ id: "e4774cdd-a079-4f86-814e-8b9140bb6db4", email: "ada@gts.ng", full_name: "Ada Cashier", role: "cashier", is_blocked: false });
     expect(data.profile.permissions).toMatchObject({ can_process_pos: true, can_void_orders: true, can_apply_discounts: false });
     expect(data.sales.range).toBe("week");
     expect(data.sales.summary.sales).toMatchObject({ count: 1, total: 1000000 });
@@ -107,9 +107,9 @@ describe("GET /api/v1/users/:id (admin views a staff member's record)", () => {
   });
 
   it("looks up the sales and activity of the person named in the URL, not the admin", async () => {
-    await GET(get(), ctx("u1"));
-    expect(calls.find((c) => c.table === "transactions" && c.method === "eq" && c.args[0] === "confirmed_by")?.args[1]).toBe("u1");
-    expect(calls.find((c) => c.table === "activity_logs" && c.method === "eq" && c.args[0] === "actor_id")?.args[1]).toBe("u1");
+    await GET(get(), ctx("e4774cdd-a079-4f86-814e-8b9140bb6db4"));
+    expect(calls.find((c) => c.table === "transactions" && c.method === "eq" && c.args[0] === "confirmed_by")?.args[1]).toBe("e4774cdd-a079-4f86-814e-8b9140bb6db4");
+    expect(calls.find((c) => c.table === "activity_logs" && c.method === "eq" && c.args[0] === "actor_id")?.args[1]).toBe("e4774cdd-a079-4f86-814e-8b9140bb6db4");
   });
 
   it("rejects an unknown range", async () => {
@@ -119,7 +119,7 @@ describe("GET /api/v1/users/:id (admin views a staff member's record)", () => {
 
 describe("PATCH /api/v1/users/:id (grant, revoke, block)", () => {
   beforeEach(() => {
-    results.employee_permissions = { data: { user_id: "u1", can_process_pos: true, can_void_orders: false, can_apply_discounts: true }, error: null };
+    results.employee_permissions = { data: { user_id: "e4774cdd-a079-4f86-814e-8b9140bb6db4", can_process_pos: true, can_void_orders: false, can_apply_discounts: true }, error: null };
   });
 
   it("is admin-only", async () => {
@@ -137,7 +137,7 @@ describe("PATCH /api/v1/users/:id (grant, revoke, block)", () => {
 
   it("returns 404 for someone who doesn't exist", async () => {
     results.users = { data: null, error: null };
-    expect((await PATCH(patch({ permissions: { can_void_orders: true } }), ctx("nope"))).status).toBe(404);
+    expect((await PATCH(patch({ permissions: { can_void_orders: true } }), ctx("4101bef8-794f-4d98-8e95-dfb54850c68b"))).status).toBe(404);
   });
 
   it("won't manage a customer", async () => {
@@ -150,7 +150,7 @@ describe("PATCH /api/v1/users/:id (grant, revoke, block)", () => {
   it("grants only the flags sent, recording who granted them, and ignores unknown keys", async () => {
     await PATCH(patch({ permissions: { can_apply_discounts: true, can_void_orders: false, is_admin: true, role: "admin" } }), ctx());
     const [row, options] = find("employee_permissions", "upsert")!.args as [Record<string, unknown>, unknown];
-    expect(row).toMatchObject({ user_id: "u1", can_apply_discounts: true, can_void_orders: false, granted_by: "boss" });
+    expect(row).toMatchObject({ user_id: "e4774cdd-a079-4f86-814e-8b9140bb6db4", can_apply_discounts: true, can_void_orders: false, granted_by: "ceb8447c-c4ab-48d2-8c34-cd9f11e4bed2" });
     expect(row).not.toHaveProperty("is_admin");
     expect(row).not.toHaveProperty("role");
     expect(row).not.toHaveProperty("can_process_pos");
@@ -171,15 +171,15 @@ describe("PATCH /api/v1/users/:id (grant, revoke, block)", () => {
   });
 
   it("won't let an admin block themselves and lock everyone out", async () => {
-    results.users = { data: { ...CASHIER_ROW, id: "boss", role: "admin" }, error: null };
-    const res = await PATCH(patch({ is_blocked: true }), ctx("boss"));
+    results.users = { data: { ...CASHIER_ROW, id: "ceb8447c-c4ab-48d2-8c34-cd9f11e4bed2", role: "admin" }, error: null };
+    const res = await PATCH(patch({ is_blocked: true }), ctx("ceb8447c-c4ab-48d2-8c34-cd9f11e4bed2"));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe("CANNOT_BLOCK_SELF");
   });
 
   it("won't change another admin, whose access is implicit", async () => {
-    results.users = { data: { ...CASHIER_ROW, id: "other", role: "admin" }, error: null };
-    const res = await PATCH(patch({ permissions: { can_void_orders: true } }), ctx("other"));
+    results.users = { data: { ...CASHIER_ROW, id: "795f3202-b17c-46bc-8d4b-771d8c6c9eaf", role: "admin" }, error: null };
+    const res = await PATCH(patch({ permissions: { can_void_orders: true } }), ctx("795f3202-b17c-46bc-8d4b-771d8c6c9eaf"));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe("CANNOT_MODIFY_ADMIN");
   });
@@ -189,10 +189,10 @@ describe("PATCH /api/v1/users/:id (grant, revoke, block)", () => {
     expect(mockLog).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        actorId: "boss",
+        actorId: "ceb8447c-c4ab-48d2-8c34-cd9f11e4bed2",
         action: "staff.permissions_update",
         targetType: "user",
-        targetId: "u1",
+        targetId: "e4774cdd-a079-4f86-814e-8b9140bb6db4",
         changes: { granted: ["can_apply_discounts"], revoked: ["can_void_orders"], is_blocked: false },
       })
     );

@@ -93,7 +93,7 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
         if (isUpdate) return { data: null, error: null };
         return {
           data: {
-            id: "order-1",
+            id: "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744",
             status: "completed",
             created_at: TODAY_ISO,
             cashier_id: "cashier-1",
@@ -113,12 +113,12 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
       ok: false,
       response: NextResponse.json({ error: "denied", code: "POS_ACCESS_DENIED" }, { status: 403 }),
     });
-    const res = await PUT(makeRequest({ reason: "wrong item" }), ctx("order-1"));
+    const res = await PUT(makeRequest({ reason: "wrong item" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(res.status).toBe(403);
   });
 
   it("returns 400 when no reason is given", async () => {
-    const res = await PUT(makeRequest({}), ctx("order-1"));
+    const res = await PUT(makeRequest({}), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     const body = await res.json();
     expect(res.status).toBe(400);
     expect(body.code).toBe("REASON_REQUIRED");
@@ -126,7 +126,7 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
 
   it("returns 404 when the order does not exist", async () => {
     tableConfig.orders = () => ({ data: null, error: null });
-    const res = await PUT(makeRequest({ reason: "wrong item" }), ctx("missing"));
+    const res = await PUT(makeRequest({ reason: "wrong item" }), ctx("ea21841d-a70e-4405-8f19-fabc4ff8bdd9"));
     expect(res.status).toBe(404);
   });
 
@@ -135,7 +135,7 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
       if (calls.some((c) => c.method === "update")) return { data: null, error: null };
       return {
         data: {
-          id: "order-1",
+          id: "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744",
           status: "completed",
           created_at: "2020-01-01T00:00:00.000Z",
           cashier_id: "cashier-1",
@@ -144,21 +144,21 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
         error: null,
       };
     };
-    const res = await PUT(makeRequest({ reason: "wrong item" }), ctx("order-1"));
+    const res = await PUT(makeRequest({ reason: "wrong item" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     const body = await res.json();
     expect(res.status).toBe(409);
     expect(body.code).toBe("NOT_TODAYS_ORDER");
   });
 
   it("voids the order, restores inventory, and logs a void stock movement", async () => {
-    const res = await PUT(makeRequest({ reason: "customer changed mind" }), ctx("order-1"));
+    const res = await PUT(makeRequest({ reason: "customer changed mind" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.data.status).toBe("voided");
 
     expect(mockTransition).toHaveBeenCalledWith(
       expect.anything(),
-      "order-1",
+      "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744",
       "completed",
       expect.objectContaining({ status: "voided", internal_notes: "customer changed mind" })
     );
@@ -170,7 +170,7 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
         variant_id: "v1",
         delta: 2,
         reason: "void",
-        order_id: "order-1",
+        order_id: "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744",
         actor_id: "cashier-1",
         notes: "customer changed mind",
       },
@@ -179,23 +179,23 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
 
   it("refuses to void an order that is not completed (e.g. still pending)", async () => {
     tableConfig.orders = () => ({
-      data: { id: "order-1", status: "pending_payment", created_at: TODAY_ISO, cashier_id: "cashier-1", items: [] },
+      data: { id: "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744", status: "pending_payment", created_at: TODAY_ISO, cashier_id: "cashier-1", items: [] },
       error: null,
     });
-    const res = await PUT(makeRequest({ reason: "wrong item" }), ctx("order-1"));
+    const res = await PUT(makeRequest({ reason: "wrong item" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(res.status).toBe(409);
     expect((await res.json()).code).toBe("NOT_VOIDABLE");
   });
 
   it("does not restock twice when two voids race", async () => {
     mockTransition.mockResolvedValue(false);
-    const res = await PUT(makeRequest({ reason: "wrong item" }), ctx("order-1"));
+    const res = await PUT(makeRequest({ reason: "wrong item" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(res.status).toBe(409);
     expect(mockAdjustAll).not.toHaveBeenCalled();
   });
 
   it("requires the void permission, not just POS access", async () => {
-    await PUT(makeRequest({ reason: "wrong item" }), ctx("order-1"));
+    await PUT(makeRequest({ reason: "wrong item" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(mockRequirePosAccess).toHaveBeenCalledWith(expect.anything(), "can_void_orders");
   });
 
@@ -213,7 +213,7 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
     it("refuses a cashier voiding a sale someone else took payment for", async () => {
       paidByBen();
       mockRequirePosAccess.mockResolvedValue(staff({ id: "cashier-9" }));
-      const res = await PUT(makeRequest({ reason: "x" }), ctx("order-1"));
+      const res = await PUT(makeRequest({ reason: "x" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
       expect(res.status).toBe(403);
       expect((await res.json()).code).toBe("NOT_YOUR_SALE");
       expect(mockTransition).not.toHaveBeenCalled();
@@ -223,27 +223,27 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
     it("goes by who took the payment, not who recorded the order", async () => {
       paidByBen();
       mockRequirePosAccess.mockResolvedValue(staff({ id: "ana" })); // recorded it, didn't take payment
-      expect((await PUT(makeRequest({ reason: "x" }), ctx("order-1"))).status).toBe(403);
+      expect((await PUT(makeRequest({ reason: "x" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"))).status).toBe(403);
 
       mockRequirePosAccess.mockResolvedValue(staff({ id: "ben" }));
-      expect((await PUT(makeRequest({ reason: "x" }), ctx("order-1"))).status).toBe(200);
+      expect((await PUT(makeRequest({ reason: "x" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"))).status).toBe(200);
     });
 
     it("lets an admin void anyone's sale", async () => {
       paidByBen();
       mockRequirePosAccess.mockResolvedValue(staff({ id: "boss", isAdmin: true }));
-      expect((await PUT(makeRequest({ reason: "x" }), ctx("order-1"))).status).toBe(200);
+      expect((await PUT(makeRequest({ reason: "x" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"))).status).toBe(200);
     });
   });
 
   it("records the void in the audit log with the reason", async () => {
-    await PUT(makeRequest({ reason: "customer changed mind" }), ctx("order-1"));
+    await PUT(makeRequest({ reason: "customer changed mind" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     const row = allCalls.activity_logs!.find((c) => c.method === "insert")!.args[0];
     expect(row).toMatchObject({
       actor_id: "cashier-1",
       action: "pos.void",
       target_type: "order",
-      target_id: "order-1",
+      target_id: "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744",
       changes: expect.objectContaining({ reason: "customer changed mind" }),
     });
   });
@@ -252,7 +252,7 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
     afterEach(() => vi.useRealTimers());
     const orderAt = (created_at: string) => {
       tableConfig.orders = () => ({
-        data: { id: "order-1", status: "completed", created_at, cashier_id: "cashier-1", items: [{ variant_id: "v1", quantity: 1 }] },
+        data: { id: "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744", status: "completed", created_at, cashier_id: "cashier-1", items: [{ variant_id: "v1", quantity: 1 }] },
         error: null,
       });
     };
@@ -261,14 +261,14 @@ describe("PUT /api/v1/pos/orders/:id/void (spec Part 6)", () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date("2026-09-19T00:10:00Z"));
       orderAt("2026-09-18T23:30:00Z");
-      expect((await PUT(makeRequest({ reason: "x" }), ctx("order-1"))).status).toBe(200);
+      expect((await PUT(makeRequest({ reason: "x" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"))).status).toBe(200);
     });
 
     it("refuses a sale from 23:30 the previous Lagos day", async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date("2026-09-19T00:10:00Z"));
       orderAt("2026-09-18T22:30:00Z");
-      const res = await PUT(makeRequest({ reason: "x" }), ctx("order-1"));
+      const res = await PUT(makeRequest({ reason: "x" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
       expect(res.status).toBe(409);
       expect((await res.json()).code).toBe("NOT_TODAYS_ORDER");
     });

@@ -71,7 +71,7 @@ describe("POST /api/v1/pos/flags (a cashier raises a product flag)", () => {
   beforeEach(() => {
     results.products = { data: { id: PRODUCT, name: "Air Fryer" }, error: null };
     results.product_variants = { data: { id: VARIANT }, error: null };
-    results.product_flags = { data: { id: "f1", product_id: PRODUCT, reason: "wrong_price", status: "open", created_at: "2026-09-19T09:00:00Z" }, error: null };
+    results.product_flags = { data: { id: "bd19836d-db62-411c-85ab-251ccaca5645", product_id: PRODUCT, reason: "wrong_price", status: "open", created_at: "2026-09-19T09:00:00Z" }, error: null };
   });
 
   it("passes through a refusal without touching the database", async () => {
@@ -148,7 +148,7 @@ describe("POST /api/v1/pos/flags (a cashier raises a product flag)", () => {
         actorId: "u1",
         action: "product_flag.raise",
         targetType: "product_flag",
-        targetId: "f1",
+        targetId: "bd19836d-db62-411c-85ab-251ccaca5645",
         changes: { product_id: PRODUCT, reason: "wrong_price" },
       })
     );
@@ -162,7 +162,7 @@ describe("GET /api/v1/pos/flags (my flags)", () => {
   });
 
   it("lists only the caller's flags, newest first, with the product's name and any resolution note", async () => {
-    results.product_flags = { data: [{ id: "f1", reason: "damaged", status: "resolved", resolution_note: "Replaced", product: { name: "Air Fryer" } }], error: null };
+    results.product_flags = { data: [{ id: "bd19836d-db62-411c-85ab-251ccaca5645", reason: "damaged", status: "resolved", resolution_note: "Replaced", product: { name: "Air Fryer" } }], error: null };
     const res = await myFlags(new NextRequest("http://localhost:3000/api/v1/pos/flags"));
     expect((await res.json()).data).toHaveLength(1);
     expect(find("product_flags", "eq")?.args).toEqual(["raised_by", "u1"]);
@@ -183,7 +183,7 @@ describe("GET /api/v1/flags (admin review queue)", () => {
 
   it("shows open flags by default, with who raised them", async () => {
     results.product_flags = {
-      data: [{ id: "f1", status: "open", reason: "wrong_price", product: { id: PRODUCT, name: "Air Fryer" }, raiser: { full_name: "Ada", email: "ada@gts.ng" } }],
+      data: [{ id: "bd19836d-db62-411c-85ab-251ccaca5645", status: "open", reason: "wrong_price", product: { id: PRODUCT, name: "Air Fryer" }, raiser: { full_name: "Ada", email: "ada@gts.ng" } }],
       error: null,
     };
     const { data } = await (await listFlags(listReq())).json();
@@ -214,10 +214,10 @@ describe("GET /api/v1/flags (admin review queue)", () => {
 
 describe("PATCH /api/v1/flags/:id (admin reviews a flag)", () => {
   const patch = (body: unknown) => new NextRequest("http://localhost:3000/api/v1/flags/f1", { method: "PATCH", body: JSON.stringify(body) });
-  const ctx = { params: Promise.resolve({ id: "f1" }) };
+  const ctx = { params: Promise.resolve({ id: "bd19836d-db62-411c-85ab-251ccaca5645" }) };
 
   beforeEach(() => {
-    results.product_flags = { data: { id: "f1", status: "resolved", resolution_note: "Price fixed" }, error: null };
+    results.product_flags = { data: { id: "bd19836d-db62-411c-85ab-251ccaca5645", status: "resolved", resolution_note: "Price fixed" }, error: null };
   });
 
   it("is admin-only", async () => {
@@ -253,7 +253,7 @@ describe("PATCH /api/v1/flags/:id (admin reviews a flag)", () => {
     await reviewFlag(patch({ status: "resolved", resolution_note: "Price fixed" }), ctx);
     expect(mockLog).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ actorId: "boss", action: "product_flag.update", targetId: "f1", changes: { status: "resolved" } })
+      expect.objectContaining({ actorId: "boss", action: "product_flag.update", targetId: "bd19836d-db62-411c-85ab-251ccaca5645", changes: { status: "resolved" } })
     );
   });
 });

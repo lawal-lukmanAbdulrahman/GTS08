@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { startOfWATDay } from "@gts/utils";
+import { startOfWATDay, isUuid } from "@gts/utils";
 import { requirePosPermission } from "../../../_lib/access";
 import { clientIp, logActivity } from "../../../../_lib/activity";
 import { adjustAll, type InventoryChange } from "../../../_lib/inventory";
@@ -21,6 +21,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
   if (!access.ok) return access.response;
 
   const { id } = await context.params;
+  if (!isUuid(id)) return NextResponse.json({ error: "Order not found.", code: "ORDER_NOT_FOUND" }, { status: 404 });
 
   let body: { reason?: string };
   try {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
+import { isUuid } from "@gts/utils";
 import type { SalesRange } from "@gts/utils";
 import { PERMISSION_KEYS, effectivePermissions, requireAdmin, type PermissionKey } from "../../_lib/staff-access";
 import { clientIp, logActivity } from "../../_lib/activity";
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest, { params }: Context) {
   if (!admin.ok) return admin.response;
 
   const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "Staff member not found.", code: "NOT_FOUND" }, { status: 404 });
   const range = (new URL(request.url).searchParams.get("range") || "today") as SalesRange;
   if (!SALES_RANGES.includes(range)) {
     return NextResponse.json({ error: "range must be today, week or month.", code: "INVALID_RANGE" }, { status: 400 });
@@ -81,6 +83,7 @@ export async function PATCH(request: NextRequest, { params }: Context) {
   if (!admin.ok) return admin.response;
 
   const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "Staff member not found.", code: "NOT_FOUND" }, { status: 404 });
 
   let body: Record<string, unknown>;
   try {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
+import { isUuid } from "@gts/utils";
 import { requirePosAccess } from "../../../_lib/access";
 import { adjustAll, type InventoryChange } from "../../../_lib/inventory";
 import { transitionOrderStatus } from "../../../_lib/order-status";
@@ -20,6 +21,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
   if (!access.ok) return access.response;
 
   const { ref: id } = await context.params;
+  if (!isUuid(id)) return NextResponse.json({ error: "Order not found.", code: "ORDER_NOT_FOUND" }, { status: 404 });
 
   let body: { payment_method?: string };
   try {

@@ -75,7 +75,7 @@ function staff(overrides: { isAdmin?: boolean; can_apply_discounts?: boolean } =
 }
 
 const VALID_BODY = {
-  items: [{ variant_id: "v1", quantity: 2 }],
+  items: [{ variant_id: "11111111-1111-4111-8111-111111111111", quantity: 2 }],
   payment_method: "cash",
 };
 
@@ -93,7 +93,7 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
       product_variants: () => ({
         data: [
           {
-            id: "v1",
+            id: "11111111-1111-4111-8111-111111111111",
             size: "M",
             color: "Black",
             sku: "GTS-SHIRT-M-BLK",
@@ -149,7 +149,7 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
     tableConfig.product_variants = () => ({
       data: [
         {
-          id: "v1",
+          id: "11111111-1111-4111-8111-111111111111",
           size: "M",
           color: "Black",
           sku: "GTS-SHIRT-M-BLK",
@@ -160,11 +160,11 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
       ],
       error: null,
     });
-    const res = await POST(makeRequest({ ...VALID_BODY, items: [{ variant_id: "v1", quantity: 5 }] }));
+    const res = await POST(makeRequest({ ...VALID_BODY, items: [{ variant_id: "11111111-1111-4111-8111-111111111111", quantity: 5 }] }));
     const body = await res.json();
     expect(res.status).toBe(409);
     expect(body.code).toBe("INSUFFICIENT_STOCK");
-    expect(body.details[0]).toMatchObject({ variantId: "v1", requested: 5, available: 1 });
+    expect(body.details[0]).toMatchObject({ variantId: "11111111-1111-4111-8111-111111111111", requested: 5, available: 1 });
   });
 
   it("creates a completed walk-in order, decrements stock, and logs a sale_pos movement", async () => {
@@ -193,13 +193,13 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
     });
 
     expect(mockAdjustAll).toHaveBeenCalledWith(expect.anything(), [
-      { variantId: "v1", deltaQuantity: -2, requireAvailable: 2 },
+      { variantId: "11111111-1111-4111-8111-111111111111", deltaQuantity: -2, requireAvailable: 2 },
     ]);
 
     const movementInsertCall = allCalls.stock_movements!.find((c) => c.method === "insert");
     expect(movementInsertCall?.args[0]).toEqual([
       {
-        variant_id: "v1",
+        variant_id: "11111111-1111-4111-8111-111111111111",
         delta: -2,
         reason: "sale_pos",
         order_id: "order-1",
@@ -213,18 +213,18 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
       ok: false,
       reason: "INSUFFICIENT_STOCK",
       available: 0,
-      failedVariantId: "v1",
+      failedVariantId: "11111111-1111-4111-8111-111111111111",
     });
     const res = await POST(makeRequest(VALID_BODY));
     const body = await res.json();
     expect(res.status).toBe(409);
     expect(body.code).toBe("INSUFFICIENT_STOCK");
-    expect(body.details[0]).toMatchObject({ variantId: "v1", requested: 2, available: 0 });
+    expect(body.details[0]).toMatchObject({ variantId: "11111111-1111-4111-8111-111111111111", requested: 2, available: 0 });
     expect(allCalls.orders).toBeUndefined();
   });
 
   it("returns 503 when stock is too contended to update safely", async () => {
-    mockAdjustAll.mockResolvedValue({ ok: false, reason: "CONTENTION", failedVariantId: "v1" });
+    mockAdjustAll.mockResolvedValue({ ok: false, reason: "CONTENTION", failedVariantId: "11111111-1111-4111-8111-111111111111" });
     const res = await POST(makeRequest(VALID_BODY));
     expect(res.status).toBe(503);
     expect((await res.json()).code).toBe("STOCK_BUSY");
@@ -235,7 +235,7 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
     const res = await POST(makeRequest(VALID_BODY));
     expect(res.status).toBe(500);
     expect(mockRollback).toHaveBeenCalledWith(expect.anything(), [
-      { variantId: "v1", deltaQuantity: -2, requireAvailable: 2 },
+      { variantId: "11111111-1111-4111-8111-111111111111", deltaQuantity: -2, requireAvailable: 2 },
     ]);
   });
 
@@ -320,6 +320,22 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
         expect(res.status).toBe(400);
         expect((await res.json()).code).toBe("INVALID_DISCOUNT");
       }
+    });
+  });
+  describe("cart line validation (QA: these used to reach the database and 500)", () => {
+    const bad: Array<[string, unknown]> = [
+      ["quantity 0", [{ variant_id: "11111111-1111-4111-8111-111111111111", quantity: 0 }]],
+      ["negative quantity", [{ variant_id: "11111111-1111-4111-8111-111111111111", quantity: -2 }]],
+      ["fractional quantity", [{ variant_id: "11111111-1111-4111-8111-111111111111", quantity: 1.5 }]],
+      ["string quantity", [{ variant_id: "11111111-1111-4111-8111-111111111111", quantity: "2" }]],
+      ["non-uuid variant", [{ variant_id: "abc", quantity: 1 }]],
+    ];
+    it.each(bad)("returns 400 INVALID_ITEMS for %s, before touching stock or the database", async (_n, items) => {
+      mockAdjustAll.mockClear();
+      const res = await POST(makeRequest({ ...VALID_BODY, items }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe("INVALID_ITEMS");
+      expect(mockAdjustAll).not.toHaveBeenCalled();
     });
   });
 });

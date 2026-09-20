@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { validateFlagUpdate } from "@gts/utils";
+import { validateFlagUpdate, isUuid } from "@gts/utils";
 import { requireAdmin } from "../../_lib/staff-access";
 import { clientIp, logActivity } from "../../_lib/activity";
 
@@ -11,6 +11,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (!admin.ok) return admin.response;
 
   const { id } = await context.params;
+  if (!isUuid(id)) return NextResponse.json({ error: "Flag not found.", code: "FLAG_NOT_FOUND" }, { status: 404 });
 
   let body: unknown;
   try {

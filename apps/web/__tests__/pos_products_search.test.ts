@@ -176,4 +176,28 @@ describe("GET /api/v1/pos/products/search", () => {
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe("DATABASE_ERROR");
   });
+
+  describe("QA regressions", () => {
+    it("a page past the end is an empty page, not a 500", async () => {
+      results.products = { data: null, count: 0, error: { code: "PGRST103", message: "Requested range not satisfiable" } };
+      const res = await GET(req("?page=9999"));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ data: [], meta: { page: 9999 } });
+    });
+
+    it("statement separators and comment markers never reach the database query", async () => {
+      await GET(req("?q=" + encodeURIComponent("';drop table products;--")));
+      const filter = call("products", "or")!.args[0] as string;
+      expect(filter).not.toMatch(/;|--/);
+    });
+
+    it("never echoes an upstream HTML error page to the caller", async () => {
+      results.products = { data: null, count: 0, error: { message: "<!DOCTYPE html><html>blocked</html>" } };
+      const res = await GET(req("?q=oxford"));
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).not.toContain("<");
+      expect(body.code).toBe("DATABASE_ERROR");
+    });
+  });
 });

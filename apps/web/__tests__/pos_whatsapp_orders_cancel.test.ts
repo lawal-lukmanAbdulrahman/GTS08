@@ -45,7 +45,7 @@ function makeRequest(body: unknown) {
 }
 
 const PENDING_ORDER = {
-  id: "order-1",
+  id: "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744",
   channel: "whatsapp",
   status: "pending_payment",
   internal_notes: "WhatsApp customer: Ngozi A. (08099998888)",
@@ -73,45 +73,45 @@ describe("PUT /api/v1/pos/whatsapp-orders/:id/cancel", () => {
       ok: false,
       response: NextResponse.json({ error: "denied", code: "POS_ACCESS_DENIED" }, { status: 403 }),
     });
-    const res = await PUT(makeRequest({ reason: "customer went quiet" }), ctx("order-1"));
+    const res = await PUT(makeRequest({ reason: "customer went quiet" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(res.status).toBe(403);
   });
 
   it("requires a reason", async () => {
-    const res = await PUT(makeRequest({}), ctx("order-1"));
+    const res = await PUT(makeRequest({}), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe("REASON_REQUIRED");
   });
 
   it("returns 404 for an unknown order", async () => {
     orderResult = { data: null, error: null };
-    const res = await PUT(makeRequest({ reason: "x" }), ctx("nope"));
+    const res = await PUT(makeRequest({ reason: "x" }), ctx("4101bef8-794f-4d98-8e95-dfb54850c68b"));
     expect(res.status).toBe(404);
   });
 
   it("only cancels WhatsApp orders (a walk-in sale must be voided instead)", async () => {
     orderResult = { data: { ...PENDING_ORDER, channel: "walk_in", status: "completed" }, error: null };
-    const res = await PUT(makeRequest({ reason: "x" }), ctx("order-1"));
+    const res = await PUT(makeRequest({ reason: "x" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(res.status).toBe(409);
     expect((await res.json()).code).toBe("NOT_CANCELLABLE");
   });
 
   it("refuses an order that is already paid", async () => {
     orderResult = { data: { ...PENDING_ORDER, status: "completed" }, error: null };
-    const res = await PUT(makeRequest({ reason: "x" }), ctx("order-1"));
+    const res = await PUT(makeRequest({ reason: "x" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(res.status).toBe(409);
     expect((await res.json()).code).toBe("ORDER_NOT_PENDING");
     expect(mockAdjustAll).not.toHaveBeenCalled();
   });
 
   it("cancels the order, keeps the contact note, and records the reason", async () => {
-    const res = await PUT(makeRequest({ reason: "customer went quiet" }), ctx("order-1"));
+    const res = await PUT(makeRequest({ reason: "customer went quiet" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(res.status).toBe(200);
     expect((await res.json()).data.status).toBe("cancelled");
 
     expect(mockTransition).toHaveBeenCalledWith(
       expect.anything(),
-      "order-1",
+      "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744",
       "pending_payment",
       expect.objectContaining({
         status: "cancelled",
@@ -121,7 +121,7 @@ describe("PUT /api/v1/pos/whatsapp-orders/:id/cancel", () => {
   });
 
   it("releases the reserved stock for every line", async () => {
-    await PUT(makeRequest({ reason: "customer went quiet" }), ctx("order-1"));
+    await PUT(makeRequest({ reason: "customer went quiet" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(mockAdjustAll).toHaveBeenCalledWith(expect.anything(), [
       { variantId: "v1", deltaReserved: -2 },
       { variantId: "v2", deltaReserved: -1 },
@@ -130,20 +130,20 @@ describe("PUT /api/v1/pos/whatsapp-orders/:id/cancel", () => {
 
   it("releases nothing if a cashier confirmed the order a moment earlier", async () => {
     mockTransition.mockResolvedValue(false);
-    const res = await PUT(makeRequest({ reason: "x" }), ctx("order-1"));
+    const res = await PUT(makeRequest({ reason: "x" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(res.status).toBe(409);
     expect(mockAdjustAll).not.toHaveBeenCalled();
   });
 
   it("records the cancellation and its reason in the audit log", async () => {
-    await PUT(makeRequest({ reason: "customer went quiet" }), ctx("order-1"));
+    await PUT(makeRequest({ reason: "customer went quiet" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(mockLog).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         actorId: "cashier-1",
         action: "pos.whatsapp_cancel",
         targetType: "order",
-        targetId: "order-1",
+        targetId: "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744",
         changes: { reason: "customer went quiet" },
         ip: "9.9.9.9",
       })
@@ -152,7 +152,7 @@ describe("PUT /api/v1/pos/whatsapp-orders/:id/cancel", () => {
 
   it("logs nothing when the order was already confirmed", async () => {
     mockTransition.mockResolvedValue(false);
-    await PUT(makeRequest({ reason: "x" }), ctx("order-1"));
+    await PUT(makeRequest({ reason: "x" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(mockLog).not.toHaveBeenCalled();
   });
 });

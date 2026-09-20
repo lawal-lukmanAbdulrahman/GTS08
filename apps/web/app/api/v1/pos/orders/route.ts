@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../_lib/access";
 import { sanitizeEmail } from "../../auth/utils";
-import { checkManualDiscount, computeCartTotals, type PosCartLine } from "@gts/utils";
+import { checkManualDiscount, computeCartTotals, type PosCartLine, validateOrderItems } from "@gts/utils";
 import { checkStockSufficiency } from "../_lib/stock-sufficiency";
 import { variantAvailable } from "../_lib/stock-status";
 import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
@@ -68,13 +68,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body.", code: "INVALID_BODY" }, { status: 400 });
   }
 
-  const items = body.items || [];
-  if (items.length === 0) {
+  if (!Array.isArray(body.items) || body.items.length === 0) {
     return NextResponse.json(
       { error: "Cart is empty. Add products before confirming payment.", code: "EMPTY_CART" },
       { status: 400 }
     );
   }
+  const validItems = validateOrderItems(body.items);
+  if (!validItems.ok) {
+    return NextResponse.json({ error: validItems.message, code: "INVALID_ITEMS" }, { status: 400 });
+  }
+  const items = validItems.items;
 
   if (!PAYMENT_METHODS.includes(body.payment_method as PaymentMethod)) {
     return NextResponse.json(

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { parseWhatsAppContact } from "@gts/utils";
+import { parseWhatsAppContact, isUuid } from "@gts/utils";
 import { requirePosAccess } from "../../../_lib/access";
 import { clientIp, logActivity } from "../../../../_lib/activity";
 
@@ -34,6 +34,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   if (!access.ok) return access.response;
 
   const { id } = await context.params;
+  if (!isUuid(id)) return NextResponse.json({ error: "Order not found.", code: "ORDER_NOT_FOUND" }, { status: 404 });
   const serviceClient = createServiceClient();
 
   const { data, error } = await serviceClient

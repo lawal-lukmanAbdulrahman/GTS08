@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../_lib/access";
 import { sanitizeEmail, sanitizeSqlInput } from "../../auth/utils";
-import { computeCartTotals, parseWhatsAppContact, type PosCartLine } from "@gts/utils";
+import { computeCartTotals, parseWhatsAppContact, type PosCartLine, validateOrderItems } from "@gts/utils";
 import { checkStockSufficiency } from "../_lib/stock-sufficiency";
 import { variantAvailable } from "../_lib/stock-status";
 import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
@@ -94,10 +94,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body.", code: "INVALID_BODY" }, { status: 400 });
   }
 
-  const items = body.items || [];
-  if (items.length === 0) {
+  if (!Array.isArray(body.items) || body.items.length === 0) {
     return NextResponse.json({ error: "No items given.", code: "EMPTY_CART" }, { status: 400 });
   }
+  const validItems = validateOrderItems(body.items);
+  if (!validItems.ok) {
+    return NextResponse.json({ error: validItems.message, code: "INVALID_ITEMS" }, { status: 400 });
+  }
+  const items = validItems.items;
 
   const customerName = body.customer_name ? sanitizeSqlInput(body.customer_name) : "";
   const customerPhone = body.customer_phone ? sanitizeSqlInput(body.customer_phone) : "";

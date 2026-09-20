@@ -55,7 +55,7 @@ function makeRequest(body: unknown) {
 }
 
 const VALID_BODY = {
-  items: [{ variant_id: "v1", quantity: 1 }],
+  items: [{ variant_id: "11111111-1111-4111-8111-111111111111", quantity: 1 }],
   customer_name: "Chidinma O.",
   customer_phone: "08031234567",
 };
@@ -78,7 +78,7 @@ describe("POST /api/v1/pos/whatsapp-orders (create pending order, D001)", () => 
       product_variants: () => ({
         data: [
           {
-            id: "v1",
+            id: "11111111-1111-4111-8111-111111111111",
             size: "M",
             color: "Black",
             sku: "GTS-SHIRT-M-BLK",
@@ -119,7 +119,7 @@ describe("POST /api/v1/pos/whatsapp-orders (create pending order, D001)", () => 
     tableConfig.product_variants = () => ({
       data: [
         {
-          id: "v1",
+          id: "11111111-1111-4111-8111-111111111111",
           size: "M",
           color: "Black",
           sku: "GTS-SHIRT-M-BLK",
@@ -149,7 +149,7 @@ describe("POST /api/v1/pos/whatsapp-orders (create pending order, D001)", () => 
     });
 
     expect(mockAdjustAll).toHaveBeenCalledWith(expect.anything(), [
-      { variantId: "v1", deltaReserved: 1, requireAvailable: 1 },
+      { variantId: "11111111-1111-4111-8111-111111111111", deltaReserved: 1, requireAvailable: 1 },
     ]);
   });
 
@@ -158,7 +158,7 @@ describe("POST /api/v1/pos/whatsapp-orders (create pending order, D001)", () => 
       ok: false,
       reason: "INSUFFICIENT_STOCK",
       available: 0,
-      failedVariantId: "v1",
+      failedVariantId: "11111111-1111-4111-8111-111111111111",
     });
     const res = await POST(makeRequest(VALID_BODY));
     expect(res.status).toBe(409);
@@ -170,7 +170,7 @@ describe("POST /api/v1/pos/whatsapp-orders (create pending order, D001)", () => 
     const res = await POST(makeRequest(VALID_BODY));
     expect(res.status).toBe(500);
     expect(mockRollback).toHaveBeenCalledWith(expect.anything(), [
-      { variantId: "v1", deltaReserved: 1, requireAvailable: 1 },
+      { variantId: "11111111-1111-4111-8111-111111111111", deltaReserved: 1, requireAvailable: 1 },
     ]);
   });
 
@@ -186,5 +186,19 @@ describe("POST /api/v1/pos/whatsapp-orders (create pending order, D001)", () => 
     });
     expect(JSON.stringify(row)).not.toContain("08031234567");
   });
-});
 
+  describe("cart line validation", () => {
+    it.each([
+      ["quantity 0", [{ variant_id: "11111111-1111-4111-8111-111111111111", quantity: 0 }]],
+      ["negative quantity", [{ variant_id: "11111111-1111-4111-8111-111111111111", quantity: -1 }]],
+      ["fractional quantity", [{ variant_id: "11111111-1111-4111-8111-111111111111", quantity: 0.5 }]],
+      ["non-uuid variant", [{ variant_id: "nope", quantity: 1 }]],
+    ])("returns 400 INVALID_ITEMS for %s", async (_n, items) => {
+      mockAdjustAll.mockClear();
+      const res = await POST(makeRequest({ ...VALID_BODY, items }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe("INVALID_ITEMS");
+      expect(mockAdjustAll).not.toHaveBeenCalled();
+    });
+  });
+});
