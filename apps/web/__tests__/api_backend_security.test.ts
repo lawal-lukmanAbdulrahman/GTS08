@@ -62,6 +62,10 @@ vi.mock("@gts/database", () => {
               data: { id: "cust-1", role: "customer", is_blocked: false },
               error: null,
             }),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: { id: "cust-1", role: "customer", is_blocked: false },
+              error: null,
+            }),
           };
         }
         if (table === "orders") {
