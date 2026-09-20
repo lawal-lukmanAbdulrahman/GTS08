@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { apiCall } from "../../lib/staff-api";
 import { SidebarToggle } from "../sidebar-context";
 import { Header } from "./_storefront/landing/header";
 import { Hero } from "./_storefront/landing/hero";
@@ -108,6 +109,7 @@ export default function StorefrontManagementPage() {
   const [selectedSectionId, setSelectedSectionId] = useState<string>("hero");
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"sections" | "hero_products">("sections");
   const [heroProducts, setHeroProducts] = useState<HeroProductChoice[]>(DEFAULT_HERO_PRODUCTS);
 
@@ -297,28 +299,23 @@ export default function StorefrontManagementPage() {
 
   const handleSave = async () => {
     setIsSaving(true);
-    try {
-      localStorage.setItem("gts_storefront_sections_order", JSON.stringify(sections));
+    setSaveError(null);
+    localStorage.setItem("gts_storefront_sections_order", JSON.stringify(sections));
 
-      const selectedHeroIds = heroProducts.filter((p) => p.selected).map((p) => p.id);
-      await fetch("/api/v1/storefront/sections", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sections,
-          heroProductIds: selectedHeroIds,
-        }),
-      }).catch(() => {});
+    const selectedHeroIds = heroProducts.filter((p) => p.selected).map((p) => p.id);
+    // The layout is only "saved live" once the server (admin-only) accepts it.
+    const result = await apiCall("/storefront/sections", {
+      method: "PUT",
+      json: { sections, heroProductIds: selectedHeroIds },
+    });
 
+    if (result.ok) {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch {
-      localStorage.setItem("gts_storefront_sections_order", JSON.stringify(sections));
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } finally {
-      setIsSaving(false);
+    } else {
+      setSaveError(result.message);
     }
+    setIsSaving(false);
   };
 
   const handleReset = () => {
@@ -429,6 +426,11 @@ export default function StorefrontManagementPage() {
               </>
             )}
           </button>
+          {saveError && (
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400 max-w-xs">
+              Not saved: {saveError}
+            </p>
+          )}
         </div>
       </header>
 

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+
 import { createServiceClient } from "@gts/database";
+import { requireAdmin } from "../../_lib/staff-access";
 
 export interface StorefrontSectionConfig {
   id: string;
@@ -76,49 +78,73 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: Request) {
-  try {
-    const body = await request.json();
-    const { sections, heroProductIds } = body;
-
-    if (!Array.isArray(sections)) {
-      return NextResponse.json(
-        { success: false, error: "Sections array is required" },
-        { status: 400 }
-      );
+function validateLayout(body: unknown): { ok: true; sections: StorefrontSectionConfig[]; heroProductIds?: string[] } | { ok: false; message: string } {
+  if (typeof body !== "object" || body === null) return { ok: false, message: "Send a JSON object." };
+  const { sections, heroProductIds } = body as Record<string, unknown>;
+  if (!Array.isArray(sections)) return { ok: false, message: "Sections array is required" };
+  if (sections.length > 50) return { ok: false, message: "Too many sections." };
+  const clean: StorefrontSectionConfig[] = [];
+  for (const raw of sections) {
+    const s = raw as Record<string, unknown> | null;
+    const okShape =
+      !!s &&
+      typeof s.id === "string" && s.id.length > 0 && s.id.length <= 64 &&
+      typeof s.name === "string" && s.name.length <= 100 &&
+      typeof s.category === "string" && s.category.length <= 50 &&
+      typeof s.enabled === "boolean" &&
+      typeof s.order === "number" && Number.isFinite(s.order);
+    if (!okShape) return { ok: false, message: "Each section needs an id, name, category, enabled flag and order." };
+    clean.push({ id: s.id as string, name: s.name as string, category: s.category as string, enabled: s.enabled as boolean, order: s.order as number });
+  }
+  let hero: string[] | undefined;
+  if (heroProductIds !== undefined) {
+    if (!Array.isArray(heroProductIds) || heroProductIds.length > 20 || heroProductIds.some((h) => typeof h !== "string" || h.length > 100)) {
+      return { ok: false, message: "heroProductIds must be a short list of product ids." };
     }
+    hero = heroProductIds as string[];
+  }
+  return { ok: true, sections: clean, heroProductIds: hero };
+}
+
+/** Only an admin can change the storefront layout. Checked before the body is even read. */
+export async function PUT(request: NextRequest) {
+  const admin = await requireAdmin(request);
+  if (!admin.ok) return admin.response;
+
+  try {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ success: false, error: "Invalid JSON body." }, { status: 400 });
+    }
+    const check = validateLayout(body);
+    if (!check.ok) return NextResponse.json({ success: false, error: check.message }, { status: 400 });
 
     const updatedConfig: StorefrontLayoutConfig = {
-      sections,
-      heroProductIds: Array.isArray(heroProductIds) ? heroProductIds : cachedConfig.heroProductIds,
+      sections: check.sections,
+      heroProductIds: check.heroProductIds ?? cachedConfig.heroProductIds,
       updatedAt: new Date().toISOString(),
     };
 
-    cachedConfig = updatedConfig;
-
-    try {
-      const supabase = createServiceClient();
-      // Store in content_slots as JSON payload in headline
-      await supabase
-        .from("content_slots")
-        .upsert({
-          slot_key: "hero_1",
-          headline: JSON.stringify(updatedConfig),
-          subheadline: "Storefront Sections Layout Configuration",
-          is_active: true,
-          updated_at: new Date().toISOString(),
-        });
-    } catch (dbErr) {
-      console.error("Failed to persist to Supabase content_slots:", dbErr);
+    const supabase = createServiceClient();
+    // Store in content_slots as JSON payload in headline
+    const { error } = await supabase.from("content_slots").upsert({
+      slot_key: "hero_1",
+      headline: JSON.stringify(updatedConfig),
+      subheadline: "Storefront Sections Layout Configuration",
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) {
+      return NextResponse.json({ success: false, error: "Could not save the layout. Try again." }, { status: 500 });
     }
 
-    return NextResponse.json({
-      success: true,
-      data: updatedConfig,
-    });
-  } catch (err: any) {
+    cachedConfig = updatedConfig;
+    return NextResponse.json({ success: true, data: updatedConfig });
+  } catch (err) {
     return NextResponse.json(
-      { success: false, error: err.message || "Failed to update storefront config" },
+      { success: false, error: err instanceof Error ? err.message : "Failed to update storefront config" },
       { status: 500 }
     );
   }
