@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   PERMISSION_GRANTS,
-  STAFF_ROLES,
   STAFF_ROLE_LABELS,
   defaultGrants,
   validateNewStaff,
@@ -27,6 +26,12 @@ interface Props {
   /** Called when the credentials panel is dismissed, so the list can refresh. */
   onDone: () => void;
 }
+
+/**
+ * Roles the form offers. Inventory staff are left out until their portal exists
+ * (today they'd sign in to a blank page); the server still accepts the role.
+ */
+export const OFFERED_ROLES: NewStaffRole[] = ["cashier", "admin"];
 
 const GRANT_LABELS: Record<PermissionGrant, string> = {
   can_process_pos: "Use the point of sale",
@@ -128,7 +133,7 @@ export default function AddStaffForm({ onCreate, onClose, onDone }: Props) {
             <div>
               <label htmlFor="new-role" className={LABEL}>Role</label>
               <select id="new-role" value={role} onChange={(e) => changeRole(e.target.value as NewStaffRole)} className={FIELD}>
-                {STAFF_ROLES.map((r) => (
+                {OFFERED_ROLES.map((r) => (
                   <option key={r} value={r}>{STAFF_ROLE_LABELS[r]}</option>
                 ))}
               </select>

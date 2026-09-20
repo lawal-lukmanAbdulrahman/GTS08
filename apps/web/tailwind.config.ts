@@ -19,11 +19,12 @@ const config: Config = {
         },
       },
       fontFamily: {
-        athelas: ["Athelas", "Georgia", "serif"],
+        // Athelas was loaded from a third-party host with no clear licence; Playfair Display (bundled) stands in.
+        athelas: ["var(--font-serif)", "Georgia", "serif"],
         moara: ["Moara", "Bricolage Grotesque", "Impact", "sans-serif"],
-        serif: ["Athelas", "Georgia", "serif"],
-        sans: ["Satoshi", "var(--font-body)", "system-ui", "sans-serif"],
-        display: ["Satoshi", "Bricolage Grotesque", "sans-serif"],
+        serif: ["var(--font-serif)", "Georgia", "serif"],
+        sans: ["var(--font-satoshi)", "var(--font-body)", "system-ui", "sans-serif"],
+        display: ["var(--font-satoshi)", "Bricolage Grotesque", "sans-serif"],
       },
     },
   },

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { ProductItem, REAL_PRODUCTS } from "../_data/products";
+import { ProductItem } from "../_data/products";
 
 export interface CartItem {
   product: ProductItem;
@@ -30,28 +30,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
-  // On first client render, load saved cart from localStorage (or fall back to demo items)
+  // On first client render, load the visitor's saved cart. A first-time visitor starts with an empty one.
   useEffect(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (saved) {
-        setCartItems(JSON.parse(saved));
-      } else {
-        // Default demo cart items shown to first-time visitors
-        setCartItems([
-          {
-            product: REAL_PRODUCTS[0]!,
-            size: "EU 42 (US 9)",
-            color: "University Blue",
-            quantity: 1,
-          },
-          {
-            product: REAL_PRODUCTS[2]!,
-            size: "Large (L)",
-            color: "Sky Blue",
-            quantity: 2,
-          },
-        ]);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setCartItems(parsed);
       }
     } catch (e) {
       console.error("Failed to load cart from localStorage", e);

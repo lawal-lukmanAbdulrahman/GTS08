@@ -358,21 +358,21 @@
       "backgroundColor": "#010101"
     },
     "createdAt": "2026-09-05T20:36:05.490Z",
-    "updatedAt": "2026-09-18T00:06:01.644Z",
+    "updatedAt": "2026-09-20T09:45:14.825Z",
     "analytics": {
-      "impressions": 5,
+      "impressions": 6,
       "uniqueVisitors": 2,
-      "avgAttentionSeconds": 8.2,
+      "avgAttentionSeconds": 11,
       "clicks": 2,
-      "ctrPct": 40,
-      "dismissals": 3,
-      "desktopPct": 80,
-      "mobilePct": 20,
+      "ctrPct": 33.3,
+      "dismissals": 4,
+      "desktopPct": 67,
+      "mobilePct": 33,
       "retentionBreakdown": {
-        "under2s": 20,
-        "twoTo5s": 20,
-        "fiveTo10s": 20,
-        "over10s": 40
+        "under2s": 17,
+        "twoTo5s": 17,
+        "fiveTo10s": 17,
+        "over10s": 50
       }
     },
     "rebroadcastedAt": "2026-09-05T21:47:50.896Z"

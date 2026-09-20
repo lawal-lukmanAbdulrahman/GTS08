@@ -319,7 +319,7 @@ export default function LoginPage() {
 
           {/* Footer Info */}
           <div className="mt-6 pt-4 border-t border-gray-100 text-center text-[11px] text-gray-400 font-medium">
-            Accts are added by the admin , check email for the password
+            Your admin creates your account and gives you your first password.
           </div>
         </div>
       </div>

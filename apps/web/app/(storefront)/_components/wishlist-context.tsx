@@ -26,10 +26,8 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (saved) {
-        setWishlistIds(JSON.parse(saved));
-      } else {
-        // Default wishlist items for first-time visitors
-        setWishlistIds(["air-jordan-1", "pixel-10"]);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setWishlistIds(parsed.filter((id): id is string => typeof id === "string"));
       }
     } catch (e) {
       console.error("Failed to load wishlist from localStorage", e);

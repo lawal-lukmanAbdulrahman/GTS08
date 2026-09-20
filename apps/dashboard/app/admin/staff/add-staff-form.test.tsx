@@ -23,11 +23,10 @@ describe("AddStaffForm", () => {
     expect(screen.getByRole("checkbox", { name: /void/i })).not.toBeChecked();
   });
 
-  it("swaps the default grants when the role changes", () => {
+  it("offers cashier and admin, but not inventory staff (that portal isn't built yet)", () => {
     setup();
-    fireEvent.change(screen.getByLabelText(/role/i), { target: { value: "inventory_staff" } });
-    expect(screen.getByRole("checkbox", { name: /manage inventory/i })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /use the point of sale/i })).not.toBeChecked();
+    const options = screen.getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["Cashier", "Admin"]);
   });
 
   it("explains that an admin has full access instead of showing switches", () => {
