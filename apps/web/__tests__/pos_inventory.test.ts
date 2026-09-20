@@ -155,3 +155,31 @@ describe("adjustAll (multi-line orders, all-or-nothing)", () => {
     expect(client.rows.v1!).toEqual({ quantity: 5, reserved_quantity: 0 });
   });
 });
+
+describe("adjustInventory with clampReserved (releasing a reservation that may never have been made)", () => {
+  it("sells the stock and leaves reserved at zero when nothing was reserved", async () => {
+    const client = makeFakeClient({ v1: { quantity: 10, reserved_quantity: 0 } });
+    const r = await adjustInventory(client, { variantId: "v1", deltaQuantity: -3, deltaReserved: -3, clampReserved: true });
+    expect(r.ok).toBe(true);
+    expect(client.rows.v1).toEqual({ quantity: 7, reserved_quantity: 0 });
+  });
+
+  it("releases only what was actually reserved", async () => {
+    const client = makeFakeClient({ v1: { quantity: 10, reserved_quantity: 2 } });
+    await adjustInventory(client, { variantId: "v1", deltaQuantity: -3, deltaReserved: -3, clampReserved: true });
+    expect(client.rows.v1).toEqual({ quantity: 7, reserved_quantity: 0 });
+  });
+
+  it("without the option a negative reservation is still refused (POS behaviour is unchanged)", async () => {
+    const client = makeFakeClient({ v1: { quantity: 10, reserved_quantity: 0 } });
+    const r = await adjustInventory(client, { variantId: "v1", deltaQuantity: -3, deltaReserved: -3 });
+    expect(r.ok).toBe(false);
+    expect(client.rows.v1).toEqual({ quantity: 10, reserved_quantity: 0 });
+  });
+
+  it("still refuses to take more stock than exists", async () => {
+    const client = makeFakeClient({ v1: { quantity: 2, reserved_quantity: 0 } });
+    const r = await adjustInventory(client, { variantId: "v1", deltaQuantity: -3, deltaReserved: -3, clampReserved: true });
+    expect(r.ok).toBe(false);
+  });
+});

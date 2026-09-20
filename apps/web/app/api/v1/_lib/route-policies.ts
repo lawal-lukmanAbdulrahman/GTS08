@@ -100,8 +100,8 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "email-campaigns/[id]": stub("GET", "PATCH"),
   "email-campaigns/[id]/send": stub("POST"),
   "notifications": stub("GET", "POST"),
-  "cron/cleanup-reservations": stub("POST"),
-  "cron/expire-orders": stub("POST"),
+  "cron/cleanup-reservations": { GET: "cron", POST: "cron" }, // Vercel Cron calls with GET
+  "cron/expire-orders": { GET: "cron", POST: "cron" },
 
   // ── staff and admin
   "flags": { GET: "admin" },

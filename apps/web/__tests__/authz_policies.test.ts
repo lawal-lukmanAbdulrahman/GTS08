@@ -47,7 +47,7 @@ function markersFor(policy: string): Array<RegExp> {
     if (p === "admin") return [/requireAdmin\(/];
     if (p === "super_admin") return [/requireSuperAdmin\(/];
     if (p === "webhook") return [/signatureMatches\(/];
-    if (p === "cron") return [/CRON_SECRET/];
+    if (p === "cron") return []; // checked against the whole file below (handlers share one `run` that calls requireCron)
     if (p.startsWith("permission:")) return [new RegExp(`requirePermission\\(request, "${p.slice(11)}"\\)`)];
     if (p.startsWith("pos-permission:")) return [new RegExp(`requirePosPermission\\(request, "${p.slice(15)}"\\)`)];
     throw new Error(`Unknown policy "${policy}"`);
@@ -76,6 +76,9 @@ describe("route policy manifest", () => {
     it.each(discovered.map((d) => [`${d.method} /${d.route}`, d] as const))("%s", (_name, d) => {
       const policy = ROUTE_POLICIES[d.route]?.[d.method];
       if (!policy) return; // reported by the test above
+      if (policy === "cron") {
+        expect(d.file, `${d.method} /${d.route} declares "cron" but the file never calls requireCron`).toMatch(/requireCron\(request\)/);
+      }
       for (const marker of markersFor(policy)) {
         expect(d.body, `${d.method} /${d.route} declares "${policy}" but its code doesn't contain ${marker}`).toMatch(marker);
       }

@@ -99,7 +99,7 @@ describe("POST /webhooks/paystack", () => {
       const res = await post(event());
       expect(res.status).toBe(200);
       expect(mockTransition).toHaveBeenCalledWith(expect.anything(), ORDER_ID, "pending_payment", expect.objectContaining({ status: "paid" }));
-      expect(mockAdjustAll).toHaveBeenCalledWith(expect.anything(), [{ variantId: V1, deltaQuantity: -2, deltaReserved: -2 }]);
+      expect(mockAdjustAll).toHaveBeenCalledWith(expect.anything(), [{ variantId: V1, deltaQuantity: -2, deltaReserved: -2, clampReserved: true }]);
       expect(updates("transactions")[0]).toMatchObject({ payment_status: "success", paystack_transaction_id: "99", paystack_channel: "card", paystack_fees: 75000 });
       expect(updates("webhook_events")[0]).toMatchObject({ processed: true });
     });
