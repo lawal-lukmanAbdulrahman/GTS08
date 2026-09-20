@@ -33,6 +33,10 @@ export function useLive<T>(path: string, { intervalMs = 10_000, enabled = true }
 
   useEffect(() => {
     if (!enabled) return;
+    // A different path is a different question: don't show the old answer while the new one loads.
+    setData(null);
+    setError(null);
+    setUpdatedAt(null);
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let failures = 0;

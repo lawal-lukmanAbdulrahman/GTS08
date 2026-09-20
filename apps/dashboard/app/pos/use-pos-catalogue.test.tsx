@@ -131,4 +131,62 @@ describe("usePosCatalogue", () => {
     release(page(["a9"], 1, 1));
     await waitFor(() => expect(result.current.products.map((p) => p.id)).toEqual(["a9"]));
   });
+
+  describe("live refresh (stock changes while the till is open)", () => {
+    const stocked = (id: string, available: number) => ({ id, name: `P${id}`, variants: [{ id: `v${id}`, available }] });
+    const withStock = (items: Array<[string, number]>) => ({ ok: true, status: 200, data: items.map(([id, a]) => stocked(id, a)), meta: { total: 9, page: 1, limit: 30, pages: 1 } });
+
+    it("refreshes stock quietly every 15 seconds, without the grid flashing to a loading state", async () => {
+      let stock = 9;
+      route({ search: () => withStock([["1", stock], ["2", 4]]) });
+      const { result } = renderHook(() => usePosCatalogue("", "all"));
+      await waitFor(() => expect(result.current.products).toHaveLength(2));
+      stock = 1;
+      await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+      await waitFor(() => expect((result.current.products[0] as any).variants[0].available).toBe(1));
+      expect(result.current.loading).toBe(false);
+      expect(result.current.products.map((p) => p.id)).toEqual(["1", "2"]);
+    });
+
+    it("keeps the order and any extra pages already loaded while updating stock", async () => {
+      route({ search: (path) => (path.includes("page=2") ? withStock([["3", 7]]) : { ...withStock([["1", 5], ["2", 5]]), meta: { total: 3, page: 1, limit: 30, pages: 2 } }) });
+      const { result } = renderHook(() => usePosCatalogue("", "all"));
+      await waitFor(() => expect(result.current.hasMore).toBe(true));
+      await act(async () => { await result.current.loadMore(); });
+      route({ search: () => ({ ...withStock([["2", 0], ["1", 5]]), meta: { total: 3, page: 1, limit: 30, pages: 2 } }) });
+      await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+      await waitFor(() => expect((result.current.products.find((p) => p.id === "2") as any).variants[0].available).toBe(0));
+      expect(result.current.products.map((p) => p.id)).toEqual(["1", "2", "3"]);
+    });
+
+    it("refresh() pulls fresh stock straight away, e.g. after a sale", async () => {
+      let stock = 9;
+      route({ search: () => withStock([["1", stock]]) });
+      const { result } = renderHook(() => usePosCatalogue("", "all"));
+      await waitFor(() => expect(result.current.products).toHaveLength(1));
+      stock = 4;
+      await act(async () => { await result.current.refresh(); });
+      expect((result.current.products[0] as any).variants[0].available).toBe(4);
+    });
+
+    it("leaves the grid as it was if a refresh fails", async () => {
+      route({ search: () => withStock([["1", 5]]) });
+      const { result } = renderHook(() => usePosCatalogue("", "all"));
+      await waitFor(() => expect(result.current.products).toHaveLength(1));
+      route({ search: () => ({ ok: false, status: 500, message: "down" }) });
+      await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+      expect(result.current.products).toHaveLength(1);
+      expect(result.current.error).toBeNull();
+    });
+
+    it("doesn't refresh while the tab is hidden", async () => {
+      route({ search: () => withStock([["1", 5]]) });
+      renderHook(() => usePosCatalogue("", "all"));
+      await waitFor(() => expect(searchPaths()).toHaveLength(1));
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+      await act(async () => { await vi.advanceTimersByTimeAsync(45_000); });
+      expect(searchPaths()).toHaveLength(1);
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
+    });
+  });
 });

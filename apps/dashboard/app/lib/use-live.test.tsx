@@ -95,4 +95,14 @@ describe("useLive (polls an endpoint so a screen follows the data)", () => {
     await act(async () => { resolveSlow({ ok: true, status: 200, data: { n: "old" } }); });
     expect(result.current.data).toEqual({ n: "new" });
   });
+
+  it("drops the old data when the path changes, so one filter's numbers are never shown under another's name", async () => {
+    apiCall.mockImplementation((path: string) => ok({ path }));
+    const { result, rerender } = renderHook(({ path }) => useLive<{ path: string }>(path, { intervalMs: 60_000 }), { initialProps: { path: "/a" } });
+    await flush();
+    expect(result.current.data).toEqual({ path: "/a" });
+    apiCall.mockImplementation(() => new Promise(() => undefined));
+    rerender({ path: "/b" });
+    expect(result.current.data).toBeNull();
+  });
 });

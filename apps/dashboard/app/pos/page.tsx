@@ -17,6 +17,7 @@ import HeldSalesBar from "./held-sales-bar";
 import { discardHeldSale, holdSale, loadHeldSales, type HeldSale } from "./held-sales";
 import { looksLikeSku, skuLookupToProduct } from "./sku-scan";
 import { usePosCatalogue } from "./use-pos-catalogue";
+import { useCartStockSync } from "./use-cart-stock-sync";
 import { resolveManualDiscount } from "./manual-discount-input";
 import { parseNairaInput, type FlagReason } from "@gts/utils";
 import { parseWhatsAppContact } from "./receipt-layout";
@@ -107,6 +108,7 @@ export default function PosPage() {
   const { setMobileOpen } = useSidebar(); // opens the admin menu on tablets (a no-op outside the admin shell)
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
+  useCartStockSync(cart, setCart, catalogue.products, setSaleError);
 
   // Flagging a product for an admin to review
   const [flagTarget, setFlagTarget] = useState<FlagTarget | null>(null);
@@ -300,6 +302,7 @@ export default function PosPage() {
   }
 
   function newTransaction() {
+    void catalogue.refresh(); // the sale just took stock; show what's left
     // Closing a reprint must not wipe the sale being built behind it.
     if (completedSale?.duplicate) {
       setCompletedSale(null);

@@ -14,6 +14,8 @@ const SEARCH_DEBOUNCE_MS = 300;
 const PAGE_SIZE = 30;
 /** How long an answer for a filter is reused on screen while a fresh one is fetched. */
 const CACHE_TTL_MS = 60_000;
+/** How often stock on the grid is refreshed in the background while the till is open. */
+const LIVE_REFRESH_MS = 15_000;
 
 interface CachedPage {
   at: number;
@@ -87,6 +89,23 @@ export function usePosCatalogue(query: string, category: string) {
     return () => clearTimeout(handle);
   }, [buildPath, query]);
 
+  // Stock moves while the till is open (another till, an online order): refresh quietly, keeping
+  // the order and any extra pages the cashier has already scrolled through.
+  const refresh = useCallback(async () => {
+    const id = requestId.current;
+    const result = await apiCall<PosProduct[]>(buildPath(1));
+    if (!result.ok || id !== requestId.current) return;
+    const fresh = new Map(result.data.map((p) => [p.id, p]));
+    setProducts((prev) => (prev.length === 0 ? prev : prev.map((p) => fresh.get(p.id) ?? p)));
+  }, [buildPath]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (!document.hidden) void refresh();
+    }, LIVE_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [refresh]);
+
   const loadMore = useCallback(async () => {
     const id = requestId.current;
     setLoadingMore(true);
@@ -102,5 +121,5 @@ export function usePosCatalogue(query: string, category: string) {
     setLoadingMore(false);
   }, [buildPath]);
 
-  return { products, categories, loading, loadingMore, hasMore, error, loadMore };
+  return { products, categories, loading, loadingMore, hasMore, error, loadMore, refresh };
 }

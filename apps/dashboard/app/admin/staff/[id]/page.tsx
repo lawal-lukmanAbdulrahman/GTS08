@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { formatWAT } from "@gts/utils";
@@ -8,6 +8,7 @@ import { AdminTopStrip } from "../../sidebar-context";
 import SalesPanel from "../../../components/staff/sales-panel";
 import ActivityList from "../../../components/staff/activity-list";
 import { apiCall } from "../../../lib/staff-api";
+import { useLive } from "../../../lib/use-live";
 import type { ActivityEntryView, PermissionsView, SalesRangeId, SalesRecordView } from "../../../lib/staff-types";
 import PermissionEditor from "./permission-editor";
 
@@ -30,30 +31,17 @@ interface StaffRecord {
 export default function StaffRecordPage() {
   const { id } = useParams<{ id: string }>();
   const [range, setRange] = useState<SalesRangeId>("today");
-  const [record, setRecord] = useState<StaffRecord | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(
-    async (which: SalesRangeId) => {
-      setLoading(true);
-      setError(null);
-      const result = await apiCall<StaffRecord>(`/users/${id}?range=${which}`);
-      if (result.ok) setRecord(result.data);
-      else setError(result.message);
-      setLoading(false);
-    },
-    [id]
-  );
-
-  useEffect(() => {
-    void load(range);
-  }, [range, load]);
+  // Kept live: a sale, a void or a sign-in shows up here within seconds, without a reload.
+  const live = useLive<StaffRecord>(`/users/${id}?range=${range}`, { intervalMs: 10_000 });
+  const record = live.data;
+  const error = live.error;
+  const loading = record === null && error === null;
+  const load = (_which?: SalesRangeId) => live.refresh();
 
   async function patch(body: Record<string, unknown>) {
     const result = await apiCall(`/users/${id}`, { method: "PATCH", json: body });
     if (!result.ok) return { ok: false as const, message: result.message };
-    await load(range);
+    live.refresh();
     return { ok: true as const };
   }
 
@@ -79,7 +67,7 @@ export default function StaffRecordPage() {
       {error && !record && (
         <div role="alert" className="space-y-2">
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          <button type="button" onClick={() => load(range)} className="px-3 py-1.5 text-xs font-semibold rounded-[6px] bg-gray-100 dark:bg-[#242424]">
+          <button type="button" onClick={() => load()} className="px-3 py-1.5 text-xs font-semibold rounded-[6px] bg-gray-100 dark:bg-[#242424]">
             Try again
           </button>
         </div>
