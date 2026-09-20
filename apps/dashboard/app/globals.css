@@ -1,3 +1,6 @@
+@import url("https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=Courier+Prime:wght@400;700&family=Montserrat:wght@400;600;700;900&family=Oswald:wght@500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,26 +8,79 @@
 @layer base {
   html {
     scroll-behavior: smooth;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    html {
-      scroll-behavior: auto;
-    }
-
-    * {
-      transition: none !important;
-      animation: none !important;
-    }
+    color-scheme: light dark;
   }
 
   body {
+    background-color: #F8F7F4;
+    color: #010101;
+    font-family: Satoshi, system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  html.dark body {
+    background-color: #1C1C1C;
+    color: #FFFFFF;
   }
 
   :focus-visible {
-    outline: 2px solid #2e9e5b;
+    outline: 2px solid #EDCF5D;
     outline-offset: 3px;
-    border-radius: 4px;
+    border-radius: 6px;
   }
+}
+
+/* Universal Standard CSS Scrollbar Properties */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
+}
+
+html.dark * {
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+/* Universal WebKit Scrollbar Rules */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  display: block;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+html.dark *::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18) !important;
+  border-radius: 9999px !important;
+}
+
+html.dark *::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22) !important;
+  border-radius: 9999px !important;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.32) !important;
+}
+
+html.dark *::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35) !important;
+}
+
+*::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent !important;
 }

@@ -1,0 +1,283 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { createServiceClient } from "@gts/database";
+import { requirePosAccess } from "../_lib/access";
+import { sanitizeEmail, sanitizeSqlInput } from "../../auth/utils";
+import { computeCartTotals, parseWhatsAppContact, type PosCartLine, validateOrderItems } from "@gts/utils";
+import { checkStockSufficiency } from "../_lib/stock-sufficiency";
+import { variantAvailable } from "../_lib/stock-status";
+import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
+import { clientIp, logActivity } from "../../_lib/activity";
+import { dbError } from "../../_lib/http";
+
+interface OrderItemInput {
+  variant_id: string;
+  quantity: number;
+}
+
+interface VariantRow {
+  id: string;
+  size: string | null;
+  color: string | null;
+  sku: string | null;
+  price_modifier: number;
+  inventory: { quantity: number; reserved_quantity: number } | null;
+  product: { id: string; name: string; base_price: number };
+}
+
+/**
+ * Orders waiting for payment, so a cashier picks one instead of typing its
+ * number. Any POS user can confirm any pending order (D001): the customer may
+ * arrive when a different cashier is on the till.
+ */
+export async function GET(request: NextRequest) {
+  const access = await requirePosAccess(request);
+  if (!access.ok) return access.response;
+
+  const { data, error } = await createServiceClient()
+    .from("orders")
+    .select("id, order_number, total, internal_notes, created_at, cashier_id, items:order_items(quantity)")
+    .eq("channel", "whatsapp")
+    .eq("status", "pending_payment")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return dbError(error, "DATABASE_ERROR", 500);
+  }
+
+  const rows = (data || []) as unknown as Array<{
+    id: string;
+    order_number: string;
+    total: number;
+    internal_notes: string | null;
+    created_at: string;
+    cashier_id: string | null;
+    items: Array<{ quantity: number }> | null;
+  }>;
+
+  return NextResponse.json({
+    data: rows.map((o) => {
+      const contact = parseWhatsAppContact(o.internal_notes);
+      return {
+        id: o.id,
+        order_number: o.order_number,
+        total: o.total,
+        customer_name: contact?.name ?? null,
+        customer_phone: contact?.phone ?? null,
+        item_count: (o.items || []).reduce((sum, i) => sum + i.quantity, 0),
+        recorded_by: o.cashier_id,
+        created_at: o.created_at,
+      };
+    }),
+  });
+}
+
+/**
+ * D001 (docs/00-open-questions.md): a staff member records an order while
+ * chatting with a customer on WhatsApp. It is created as pending_payment with
+ * stock RESERVED (not yet decremented) so a walk-in sale can't oversell it
+ * before a cashier confirms payment later via /pos/whatsapp-orders/:id/confirm.
+ */
+export async function POST(request: NextRequest) {
+  const access = await requirePosAccess(request);
+  if (!access.ok) return access.response;
+
+  let body: {
+    items?: OrderItemInput[];
+    customer_name?: string;
+    customer_phone?: string;
+    customer_email?: string;
+  };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body.", code: "INVALID_BODY" }, { status: 400 });
+  }
+
+  if (!Array.isArray(body.items) || body.items.length === 0) {
+    return NextResponse.json({ error: "No items given.", code: "EMPTY_CART" }, { status: 400 });
+  }
+  const validItems = validateOrderItems(body.items);
+  if (!validItems.ok) {
+    return dbError(validItems, "INVALID_ITEMS", 400);
+  }
+  const items = validItems.items;
+
+  const customerName = body.customer_name ? sanitizeSqlInput(body.customer_name) : "";
+  const customerPhone = body.customer_phone ? sanitizeSqlInput(body.customer_phone) : "";
+  if (!customerName || !customerPhone) {
+    return NextResponse.json(
+      {
+        error: "Customer name and phone are required to reach them on WhatsApp about this order.",
+        code: "CUSTOMER_CONTACT_REQUIRED",
+      },
+      { status: 400 }
+    );
+  }
+
+  const serviceClient = createServiceClient();
+
+  const variantIds = items.map((i) => i.variant_id);
+  const { data: variantRows, error: variantError } = await serviceClient
+    .from("product_variants")
+    .select(
+      `
+      id, size, color, sku, price_modifier,
+      inventory(quantity, reserved_quantity),
+      product:products(id, name, base_price)
+      `
+    )
+    .in("id", variantIds);
+
+  if (variantError) {
+    return dbError(variantError, "DATABASE_ERROR", 500);
+  }
+
+  const variants = (variantRows || []) as unknown as VariantRow[];
+  const variantById = new Map(variants.map((v) => [v.id, v]));
+
+  const missing = items.find((i) => !variantById.has(i.variant_id));
+  if (missing) {
+    return NextResponse.json(
+      { error: `Product variant not found: ${missing.variant_id}`, code: "VARIANT_NOT_FOUND" },
+      { status: 400 }
+    );
+  }
+
+  const available: Record<string, number> = {};
+  for (const v of variants) {
+    available[v.id] = v.inventory ? variantAvailable(v.inventory) : 0;
+  }
+
+  const stockCheck = checkStockSufficiency(
+    items.map((i) => ({ variantId: i.variant_id, quantity: i.quantity })),
+    available
+  );
+  if (!stockCheck.ok) {
+    return NextResponse.json(
+      {
+        error: "One or more items do not have enough stock to reserve.",
+        code: "INSUFFICIENT_STOCK",
+        details: stockCheck.insufficient,
+      },
+      { status: 409 }
+    );
+  }
+
+  const cartLines: PosCartLine[] = items.map((i) => {
+    const v = variantById.get(i.variant_id)!;
+    return { unitPrice: v.product.base_price + v.price_modifier, quantity: i.quantity };
+  });
+  const totals = computeCartTotals(cartLines, 0);
+
+  const reserveChanges: InventoryChange[] = items.map((i) => ({
+    variantId: i.variant_id,
+    deltaReserved: i.quantity,
+    requireAvailable: i.quantity,
+  }));
+  const reserveResult = await adjustAll(serviceClient, reserveChanges);
+  if (!reserveResult.ok) {
+    if (reserveResult.reason === "INSUFFICIENT_STOCK") {
+      const requested = items.find((i) => i.variant_id === reserveResult.failedVariantId)?.quantity ?? 0;
+      return NextResponse.json(
+        {
+          error: "One or more items do not have enough stock to reserve.",
+          code: "INSUFFICIENT_STOCK",
+          details: [{ variantId: reserveResult.failedVariantId, requested, available: reserveResult.available }],
+        },
+        { status: 409 }
+      );
+    }
+    if (reserveResult.reason === "CONTENTION") {
+      return NextResponse.json(
+        { error: "The till is busy updating that item's stock. Please try again.", code: "STOCK_BUSY" },
+        { status: 503 }
+      );
+    }
+    return dbError(reserveResult, "DATABASE_ERROR", 500);
+  }
+
+  let customerId: string | null = null;
+  const contactNote = `WhatsApp customer: ${customerName} (${customerPhone})`;
+  if (body.customer_email) {
+    const email = sanitizeEmail(body.customer_email);
+    const { data: existing } = await serviceClient
+      .from("customers")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (existing) {
+      customerId = (existing as { id: string }).id;
+    } else {
+      const { data: created } = await serviceClient
+        .from("customers")
+        .insert({ email, full_name: customerName, phone: customerPhone })
+        .select("id")
+        .single();
+      customerId = (created as { id: string } | null)?.id ?? null;
+    }
+  }
+
+  const { data: order, error: orderError } = await serviceClient
+    .from("orders")
+    .insert({
+      channel: "whatsapp",
+      status: "pending_payment",
+      customer_id: customerId,
+      subtotal: totals.subtotal,
+      discount_amount: 0,
+      delivery_fee: 0,
+      total: totals.total,
+      cashier_id: access.user.id,
+      internal_notes: contactNote,
+    })
+    .select("id, order_number, total, status")
+    .single();
+
+  if (orderError || !order) {
+    await rollback(serviceClient, reserveChanges);
+    return NextResponse.json(
+      { error: orderError?.message || "Failed to create order.", code: "ORDER_CREATION_FAILED" },
+      { status: 500 }
+    );
+  }
+  const createdOrder = order as { id: string; order_number: string; total: number; status: string };
+
+  const orderItemsPayload = items.map((i) => {
+    const v = variantById.get(i.variant_id)!;
+    const unitPrice = v.product.base_price + v.price_modifier;
+    return {
+      order_id: createdOrder.id,
+      variant_id: i.variant_id,
+      quantity: i.quantity,
+      unit_price: unitPrice,
+      line_total: unitPrice * i.quantity,
+      product_snapshot: { id: v.product.id, name: v.product.name, size: v.size, color: v.color, sku: v.sku },
+    };
+  });
+  await serviceClient.from("order_items").insert(orderItemsPayload);
+
+  await logActivity(serviceClient, {
+    actorId: access.user.id,
+    action: "pos.whatsapp_create",
+    targetType: "order",
+    targetId: createdOrder.id,
+    changes: {
+      order_number: createdOrder.order_number,
+      total: createdOrder.total,
+      item_count: items.reduce((n, i) => n + i.quantity, 0),
+    },
+    ip: clientIp(request),
+  });
+
+  return NextResponse.json({
+    data: {
+      order_id: createdOrder.id,
+      order_number: createdOrder.order_number,
+      status: createdOrder.status,
+      total: createdOrder.total,
+    },
+  });
+}

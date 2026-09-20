@@ -1,3 +1,13 @@
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=Courier+Prime:wght@400;700&family=Montserrat:wght@400;600;700;900&family=Oswald:wght@500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap");
+
+@font-face {
+  font-family: 'Moara';
+  src: local('Moara'), local('Moara Bold'), local('Moara-Bold'), local('Bricolage Grotesque'), local('Impact');
+  font-weight: 700 800 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -31,7 +41,7 @@
   }
 
   .dark {
-    --color-page: #111614;
+    --color-page: #DDDAD4;
     --color-card: #1A201B;
     --color-card-alt: #1E2520;
     --color-line: #2A312A;
@@ -57,8 +67,24 @@
     --color-badge-done-text: #A3B0A5;
   }
 
+  html,
+  body {
+    background-color: #ffffff;
+  }
+
   html {
+    font-size: 90%;
     scroll-behavior: smooth;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar,
+  *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -75,11 +101,188 @@
   body {
     -webkit-font-smoothing: antialiased;
     transition: background-color 0.3s ease, color 0.3s ease;
+    /* Neutral gutter color shown at extreme zoom-out / ultrawide viewports */
+    background-color: #DEDAD4;
+    /* Prevent horizontal scroll at the page level */
+    overflow-x: hidden;
   }
 
   :focus-visible {
     outline: 2px solid #2e9e5b;
     outline-offset: 3px;
     border-radius: 4px;
+  }
+}
+
+@keyframes continuousMarquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee-infinite {
+  display: flex;
+  width: max-content;
+  animation: continuousMarquee 22s linear infinite;
+}
+
+.animate-marquee-infinite:hover {
+  animation-play-state: paused;
+}
+
+@keyframes continuousMarqueeReverse {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+.animate-marquee-reverse {
+  display: flex;
+  width: max-content;
+  animation: continuousMarqueeReverse 22s linear infinite;
+}
+
+.animate-marquee-reverse:hover {
+  animation-play-state: paused;
+}
+
+/* Sleek Custom Scrollbar for Mega Menu Panels */
+.gts-scrollbar {
+  scrollbar-width: thin !important;
+  scrollbar-color: #D1D5DB transparent !important;
+}
+
+.gts-scrollbar::-webkit-scrollbar {
+  display: block !important;
+  width: 6px !important;
+  height: 6px !important;
+}
+
+.gts-scrollbar::-webkit-scrollbar-track {
+  background: transparent !important;
+  border-radius: 9999px !important;
+}
+
+.gts-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #D1D5DB !important;
+  border-radius: 9999px !important;
+}
+
+.gts-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #9CA3AF !important;
+}
+
+/* Product Detail Right Panel — visible thin scrollbar */
+.product-panel-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #c0bdb7 #F2F0EA;
+}
+
+.product-panel-scroll::-webkit-scrollbar {
+  display: block !important;
+  width: 5px !important;
+}
+
+.product-panel-scroll::-webkit-scrollbar-track {
+  background: #F2F0EA !important;
+  border-radius: 9999px !important;
+}
+
+.product-panel-scroll::-webkit-scrollbar-thumb {
+  background-color: #c0bdb7 !important;
+  border-radius: 9999px !important;
+}
+
+.product-panel-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #010101 !important;
+}
+
+/* Horizontal scrollbar for Search Modal last viewed items */
+.search-card-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f3f4f6;
+}
+
+.search-card-scroll::-webkit-scrollbar {
+  display: block !important;
+  height: 5px !important;
+}
+
+.search-card-scroll::-webkit-scrollbar-track {
+  background: #f3f4f6 !important;
+  border-radius: 9999px !important;
+}
+
+.search-card-scroll::-webkit-scrollbar-thumb {
+  background-color: #d1d5db !important;
+  border-radius: 9999px !important;
+}
+
+.search-card-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #010101 !important;
+}
+
+/* Left scrollbar for Filter Card */
+.filter-card-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #c0bdb7 #f2f0ea;
+}
+
+.filter-card-scroll::-webkit-scrollbar {
+  display: block !important;
+  width: 5px !important;
+}
+
+.filter-card-scroll::-webkit-scrollbar-track {
+  background: #f2f0ea !important;
+  border-radius: 9999px !important;
+}
+
+.filter-card-scroll::-webkit-scrollbar-thumb {
+  background-color: #c0bdb7 !important;
+  border-radius: 9999px !important;
+}
+
+.filter-card-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #010101 !important;
+}
+
+/* Hide scrollbars cleanly */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+}
+
+
+
+
+/* Touch targets: on phones and touch screens, controls are at least 44px tall (WCAG 2.5.5 / storefront spec Part 3). */
+@media (pointer: coarse), (max-width: 767px) {
+  button:not([data-compact]),
+  [role="button"]:not([data-compact]),
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]) {
+    min-height: 44px;
+  }
+  button:not([data-compact]),
+  [role="button"]:not([data-compact]) {
+    min-width: 44px;
+  }
+  /* Standalone links (not links inside a sentence) */
+  a[href]:not(p a):not(li a):not(h1 a):not(h2 a):not(h3 a):not(.sr-only):not([data-compact]),
+  [role="tab"],
+  footer li a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
   }
 }

@@ -1,0 +1,157 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { createServiceClient } from "@gts/database";
+import { validateNewStaff } from "@gts/utils";
+import { effectivePermissions, requireSuperAdmin } from "../../_lib/staff-access";
+import { clientIp, logActivity } from "../../_lib/activity";
+import { generateTempPassword } from "../../_lib/temp-password";
+import { requireAdmin } from "../../_lib/staff-access";
+import { serverError, dbError } from "../../_lib/http";
+import { notifyStaffWelcome } from "../../_lib/email/events";
+
+export async function GET(request: NextRequest) {
+  try {
+    const access = await requireAdmin(request);
+    if (!access.ok) return access.response;
+
+    const serviceClient = createServiceClient();
+
+    // Get all users who are not customer
+    const { data: staffList, error } = await serviceClient
+      .from("users")
+      .select("id, email, full_name, role, is_blocked, created_at")
+      .neq("role", "customer");
+
+    if (error) {
+      return dbError(error, "DATABASE_ERROR", 500);
+    }
+
+    // Attach permissions
+    const staffWithPerms = await Promise.all(
+      (staffList || []).map(async (s: any) => {
+        const { data: perms } = await serviceClient
+          .from("employee_permissions")
+          .select("*") // includes the void/discount grants once migration 00010 is applied
+          .eq("user_id", s.id)
+          .single();
+
+        return {
+          ...s,
+          permissions: effectivePermissions((perms as Record<string, unknown>) || null, s.role === "admin"),
+        };
+      })
+    );
+
+    return NextResponse.json({ data: staffWithPerms });
+  } catch (err: any) {
+    return serverError(err);
+  }
+}
+
+
+/**
+ * The super admin adds a person: a confirmed login with a random one-time
+ * password (shown once, never stored or logged), their profile, and their
+ * permission grants. Anything that fails part-way is undone so no half-made
+ * account is left able to sign in.
+ */
+export async function POST(request: NextRequest) {
+  const superAdmin = await requireSuperAdmin(request);
+  if (!superAdmin.ok) return superAdmin.response;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body.", code: "INVALID_BODY" }, { status: 400 });
+  }
+
+  const check = validateNewStaff(body);
+  if (!check.ok) {
+    return NextResponse.json(
+      { error: "Please fix the highlighted fields.", code: "VALIDATION_ERROR", details: check.errors },
+      { status: 400 }
+    );
+  }
+  const { email, full_name, role, permissions } = check.value;
+
+  const serviceClient = createServiceClient();
+  const password = generateTempPassword();
+
+  const { data: created, error: createError } = await serviceClient.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name },
+  });
+  if (createError || !created?.user) {
+    const taken = /already|registered|exists/i.test(createError?.message ?? "");
+    return NextResponse.json(
+      taken
+        ? { error: "Someone already has an account with that email.", code: "EMAIL_TAKEN", details: { email: "That email is already in use." } }
+        : { error: createError?.message || "Could not create the account.", code: "CREATE_FAILED" },
+      { status: taken ? 409 : 500 }
+    );
+  }
+  const userId = created.user.id;
+
+  const undo = async (alsoProfile: boolean) => {
+    if (alsoProfile) await serviceClient.from("users").delete().eq("id", userId);
+    await serviceClient.auth.admin.deleteUser(userId);
+  };
+
+  const profileRow = { id: userId, email, full_name, role, is_blocked: false, email_verified_at: new Date().toISOString() };
+  // They sign in with a one-time password, so they must replace it first.
+  let { error: profileError } = await serviceClient.from("users").upsert({ ...profileRow, must_change_password: true });
+  if (profileError && /must_change_password/.test(profileError.message ?? "")) {
+    // Migration 00012 isn't applied yet: create the account without the requirement rather than fail.
+    ({ error: profileError } = await serviceClient.from("users").upsert(profileRow));
+  }
+  if (profileError) {
+    await undo(false);
+    return NextResponse.json({ error: "Could not create the staff profile.", code: "CREATE_FAILED" }, { status: 500 });
+  }
+
+  // An admin's access is implicit, so they get no grants row.
+  if (role !== "admin") {
+    const { error: permError } = await serviceClient
+      .from("employee_permissions")
+      .upsert({ user_id: userId, ...permissions, granted_by: superAdmin.user.id }, { onConflict: "user_id" });
+    if (permError) {
+      await undo(true);
+      return NextResponse.json({ error: "Could not save their permissions.", code: "CREATE_FAILED" }, { status: 500 });
+    }
+  }
+
+  await logActivity(serviceClient, {
+    actorId: superAdmin.user.id,
+    action: "staff.create",
+    targetType: "user",
+    targetId: userId,
+    changes: { email, role },
+    ip: clientIp(request),
+  });
+
+  // Only a real `true` puts the password in the mail; the admin still sees it on screen either way.
+  const emailCredentials = (body as Record<string, unknown>).email_credentials === true;
+  const welcome = await notifyStaffWelcome(serviceClient, {
+    name: full_name,
+    role,
+    email,
+    oneTimePassword: emailCredentials ? password : undefined,
+  });
+
+  return NextResponse.json(
+    {
+      data: {
+        id: userId,
+        email,
+        full_name,
+        role,
+        temporary_password: password,
+        email_delivery: { sent: welcome.ok, skipped: !welcome.ok && welcome.skipped === true },
+      },
+    },
+    { status: 201, headers: { "Cache-Control": "no-store" } }
+  );
+}

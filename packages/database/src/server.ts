@@ -1,23 +1,29 @@
 import { createServerClient as _createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
 import type { Database } from "./types.gen";
 
 export async function createServerClient() {
-  const cookieStore = await cookies();
+  let cookieStore: any = null;
+  try {
+    // @ts-ignore
+    const { cookies } = await import("next/headers");
+    cookieStore = await cookies();
+  } catch {
+    // Environment where next/headers is not available
+  }
 
   return _createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "http://localhost:54321",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "dummy",
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          return cookieStore?.getAll() || [];
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: any[]) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+            cookiesToSet.forEach(({ name, value, options }: any) =>
+              cookieStore?.set(name, value, options)
             );
           } catch {
             // Called from Server Component — ignore
@@ -33,8 +39,8 @@ export async function createServerClient() {
  * NEVER import this in client components or expose the key.
  */
 export function createServiceClient() {
-  return createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  return createClient<any>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "http://localhost:54321",
+    process.env.SUPABASE_SERVICE_ROLE_KEY || "dummy"
   );
 }

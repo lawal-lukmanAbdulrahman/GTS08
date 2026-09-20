@@ -1,0 +1,37 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { createServiceClient } from "@gts/database";
+import { startOfWATDay } from "@gts/utils";
+import { requirePosAccess } from "../../_lib/access";
+import { dbError } from "../../../_lib/http";
+
+/**
+ * gts_03_cashier_spec.md Part 6: today's walk-in/whatsapp orders created by
+ * this cashier, so mistakes can be voided same-day.
+ */
+export async function GET(request: NextRequest) {
+  const access = await requirePosAccess(request);
+  if (!access.ok) return access.response;
+
+  const startOfDay = startOfWATDay(new Date());
+
+  const serviceClient = createServiceClient();
+  const { data, error } = await serviceClient
+    .from("orders")
+    .select(
+      `
+      id, order_number, status, total, created_at,
+      items:order_items(id, quantity, unit_price, line_total, product_snapshot)
+      `
+    )
+    .eq("cashier_id", access.user.id)
+    .in("channel", ["walk_in", "whatsapp"])
+    .gte("created_at", startOfDay.toISOString())
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return dbError(error, "DATABASE_ERROR", 500);
+  }
+
+  return NextResponse.json({ data: data || [] });
+}

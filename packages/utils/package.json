@@ -7,8 +7,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./money": "./src/money.ts",
+    "./pos": "./src/pos.ts",
     "./date": "./src/date.ts",
-    "./slug": "./src/slug.ts"
+    "./slug": "./src/slug.ts",
+    "./idempotent-fetch": "./src/idempotent-fetch.ts",
+    "./security": "./src/security.ts"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

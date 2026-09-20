@@ -4,8 +4,104 @@
 
 ## Resolved Decisions
 
-_(none yet)_
+### D001 — WhatsApp order channel (2026-09-18)
+
+`gts_03_cashier_spec.md` only covers walk-in orders. Client requested a second
+flow: a customer orders over WhatsApp chat; a staff member records the order
+(order number generated); later, a cashier looks the order up by number in the
+POS, confirms it, takes payment, and issues a receipt.
+
+Decisions:
+- Added `'whatsapp'` to `orders.channel` (migration `00008`), alongside
+  `'online'` / `'walk_in'`.
+- Order creation for this channel is staff-entered (no live WhatsApp Business
+  API integration exists in this codebase) — a staff member with
+  `can_process_pos = true` builds the cart from the chat conversation and
+  creates the order as `status = 'pending_payment'`. The generated
+  `order_number` is read back to the customer over WhatsApp manually.
+- A cashier confirms later via `GET /pos/whatsapp-orders/:orderNumber` →
+  `POST /pos/whatsapp-orders/:id/confirm`, which reuses the same payment /
+  inventory-decrement / receipt logic as walk-in order confirmation
+  (`gts_03_cashier_spec.md` Part 5.2).
+- No `customers.email` is required for this channel (column is `NOT NULL`);
+  when no email is given, contact info is stored in `orders.internal_notes`
+  instead of a `customers` row, matching the existing walk-in-without-email
+  path.
+- Receipt delivery: browser print dialog (`@media print`, same as walk-in)
+  plus a `wa.me` deep-link "Share via WhatsApp" button — no server-side
+  WhatsApp send integration (none exists; would need a verified WhatsApp
+  Business API account).
+
+### D002 — Receipt store details are admin-managed (2026-09-19)
+
+The receipt header (store name, address, phone) was first read from
+`NEXT_PUBLIC_STORE_*` env vars. It now comes from the existing `settings`
+singleton (`store_name`, `support_phone`) plus a new `store_address` column
+(migration `00009`), edited by admins at `/admin/settings` and served by
+`GET/PATCH /api/v1/settings` (PATCH is admin-only, re-verified server-side).
+The POS falls back to name "GTS" with no address/phone if the settings can't
+be loaded, so a receipt can always be printed. The env vars were removed.
+
+### D003 — POS staff access, sub-admin records, product flags (2026-09-19)
+
+The POS is the point of sale for sub-admins (cashiers); their actions are
+recorded against their own profile. Decisions (reviewer: project owner):
+
+- **Separate permission flags:** `can_void_orders` and `can_apply_discounts`
+  (migration `00010`) alongside `can_process_pos`. Admins are implicitly
+  allowed both.
+- **Voids:** a cashier can void only sales they took payment for; admins can
+  void any. Requires `can_void_orders`.
+- **Manual discounts:** need `can_apply_discounts`; above 20% of the subtotal
+  only an admin may apply. Promo codes are NOT built (`/promos/validate` is an
+  unimplemented stub) and are out of scope here.
+- **Ownership of a sale:** the staff member who confirmed payment
+  (`transactions.confirmed_by`). For WhatsApp orders that can differ from who
+  recorded the order (`orders.cashier_id`).
+- **Audit:** every staff write action is written to `activity_logs`
+  (spec: employee portal Part 9.4). Cashiers see only their own; admins see
+  everyone's.
+- **Product flags:** cashiers raise issues on a product (wrong price/stock,
+  damaged, missing image, barcode, other) into a new `product_flags` table,
+  reviewed by admins. `support_tickets` is customer-facing and not reused.
+- **Session:** sign-out revokes the session and clears cookies; idle lock at
+  30 minutes keeps the cart; blocked accounts are signed out on the next call.
+- **Products on load:** the POS lists active products (best sellers first)
+  before any search. The WhatsApp confirm tab lists pending orders to pick
+  from (the reading of "same for orders" is unconfirmed by the owner and easy
+  to revert).
+
+### D004: Super admin adds staff (migration 00011)
+
+- **Super admin:** `users.is_super_admin` (only an admin can hold it). The
+  earliest-created admin is marked by the migration; change with the UPDATE in
+  the migration's comment. Only a super admin sees "Add staff member" and can
+  call `POST /users/staff`.
+- **Limited access is by role + grants, not by a "limited admin".** The seven
+  permission flags are only enforced on POS routes; other admin routes gate on
+  `role = 'admin'`. So an admin is always full-access, and narrower access is
+  given by creating a cashier or inventory_staff with chosen grants.
+- **Onboarding:** the account is created confirmed with a random one-time
+  password shown once to the super admin (never stored or logged). No email is
+  sent. There is no forced password change on first sign-in yet.
+- **Not built:** editing or blocking other admins, transferring super admin.
+
+### D006: Privileged user columns locked (migration 00013) — SECURITY
+
+- **Found by QA (2026-09-20), confirmed against the live database:** the
+  `users_update_own` policy let any signed-in user update every column of their
+  own row through Supabase's public REST API, so a customer could set
+  `role = 'admin'`. The API trusts `users.role`, so this was a full privilege
+  escalation. (Insert rights on all other tables were probed and are denied.)
+- **Fix:** a `BEFORE UPDATE` trigger allows an owner to change only name, phone,
+  avatar and marketing opt-out. Everything else needs the service role or a
+  direct database session.
+- **After applying:** review every account with a role other than `customer`
+  and confirm each is a person you know.
 
 ## Spec Corrections
 
-_(none yet)_
+- `gts_03_cashier_spec.md` Part 9's documented paths (`/pos/orders`,
+  `/pos/orders/:id/void`) are implemented as such. The pre-existing stub
+  files at `apps/web/app/api/v1/pos/sale` and `.../pos/void` did not match
+  the spec's own path table and were replaced.
