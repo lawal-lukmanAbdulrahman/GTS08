@@ -88,7 +88,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   // ── inventory
   "inventory": { GET: "permission:can_manage_inventory" },
   "inventory/[id]": { PUT: "permission:can_manage_inventory" },
-  "inventory/adjustments": stub("POST"),
+  "inventory/adjustments": { POST: "permission:can_manage_inventory" },
   "inventory/movements": { GET: "permission:can_manage_inventory" },
 
   // ── support

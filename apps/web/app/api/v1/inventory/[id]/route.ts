@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { isUuid } from "@gts/utils";
 import { requirePermission } from "../../_lib/staff-access";
 import { adjustInventory } from "../../pos/_lib/inventory";
+import { movementReason } from "../../_lib/inventory-reasons";
 import { withIdempotency } from "@/lib/idempotency";
 
 const MAX_QUANTITY = 1_000_000;
@@ -99,17 +100,20 @@ export const PUT = withIdempotency(async function PUT(
     .select()
     .single();
   if (updateError) {
-    return NextResponse.json({ error: updateError.message, code: "DATABASE_ERROR" }, { status: 500 });
+    console.error("[inventory/[id]] update failed:", updateError.message);
+    return NextResponse.json({ error: "Couldn't save the change. Please try again.", code: "DATABASE_ERROR" }, { status: 500 });
   }
 
   if (delta !== 0) {
-    await serviceClient.from("stock_movements").insert({
+    const why = movementReason(reason as string, typeof notes === "string" ? notes : null);
+    const { error: movementError } = await serviceClient.from("stock_movements").insert({
       variant_id: row.variant_id,
       delta,
-      reason: (reason as string).trim(),
+      reason: why.reason,
       actor_id: access.user.id,
-      notes: typeof notes === "string" ? notes : null,
+      notes: why.notes,
     });
+    if (movementError) console.error("[inventory/[id]] movement insert failed:", movementError.message);
   }
 
   return NextResponse.json({ data: updated });
