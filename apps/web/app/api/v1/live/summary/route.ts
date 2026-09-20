@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     const client = createServiceClient();
     const since = new Date(Date.now() - ON_SHIFT_MINUTES * 60_000).toISOString();
 
-    const [orders, flags, stock, activity] = await Promise.all([
+    const [orders, flags, stock, activity, notes] = await Promise.all([
       rows<{ status: string; channel: string }>(
         client.from("orders").select("status, channel").in("status", ["paid", "confirmed", "pending_payment"]).limit(READ_LIMIT)
       ),
@@ -49,6 +49,9 @@ export async function GET(request: NextRequest) {
           .gte("created_at", since)
           .order("created_at", { ascending: false })
           .limit(500)
+      ),
+      rows<{ id: string; type: string; title: string; message: string; link: string | null; created_at: string }>(
+        client.from("admin_notifications").select("id, type, title, message, link, created_at").eq("is_read", false).order("created_at", { ascending: false }).limit(100)
       ),
     ]);
 
@@ -71,6 +74,7 @@ export async function GET(request: NextRequest) {
             low_stock: stock.filter((s) => s.quantity - s.reserved_quantity <= s.low_stock_threshold).length,
           },
           active_staff: activeStaff,
+          notifications: { unread: notes.length, latest: notes.slice(0, 5) },
           generated_at: new Date().toISOString(),
         },
       },

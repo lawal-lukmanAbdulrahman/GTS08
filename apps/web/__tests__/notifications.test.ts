@@ -1,109 +1,86 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  isAdminInquiryUnread,
-  markAdminInquiryViewed,
-  getAdminViewedInquiries,
-  getCustomerInboxSeenAt,
-  markCustomerInboxSeen,
-  getCustomerNotifications,
-  addCustomerNotification,
-  DEFAULT_BROADCAST,
-} from "../lib/notifications";
+// @vitest-environment node
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { makeDbStub } from "./_helpers/db-stub";
+import { NextResponse } from "next/server";
 
-describe("GTS Notification System", () => {
-  beforeEach(() => {
-    localStorage.clear();
-    vi.restoreAllMocks();
+const db = makeDbStub();
+vi.mock("@gts/database", () => ({ createServiceClient: () => db.client }));
+const mockAdmin = vi.fn();
+vi.mock("../app/api/v1/_lib/staff-access", async (orig) => ({
+  ...(await orig<typeof import("../app/api/v1/_lib/staff-access")>()),
+  requireAdmin: (...a: unknown[]) => mockAdmin(...a),
+}));
+
+import { NextRequest } from "next/server";
+import { GET as list } from "../app/api/v1/notifications/route";
+import { GET as unread } from "../app/api/v1/notifications/unread-count/route";
+import { PUT as markOne } from "../app/api/v1/notifications/[id]/read/route";
+import { PUT as markAll } from "../app/api/v1/notifications/read-all/route";
+import { createAdminNotification } from "../app/api/v1/_lib/notify-admin";
+
+const ID = "11111111-1111-4111-8111-111111111111";
+const req = (method: string, qs = "") => new NextRequest(`http://localhost:3000/api/v1/notifications${qs}`, { method });
+const ROW = { id: ID, type: "new_order", title: "New order", message: "GTS-1 was paid", link: "/admin/orders", is_read: false, created_at: "2026-09-20T10:00:00Z" };
+
+beforeEach(() => {
+  db.reset();
+  mockAdmin.mockReset().mockResolvedValue({ ok: true, user: { id: "admin-1" }, isAdmin: true });
+  db.results.admin_notifications = { data: [ROW], error: null, count: 3 };
+});
+
+describe("notification routes are for admins", () => {
+  it.each([["list", () => list(req("GET"))], ["unread-count", () => unread(req("GET"))], ["read one", () => markOne(req("PUT"), { params: Promise.resolve({ id: ID }) })], ["read all", () => markAll(req("PUT"))]])("%s", async (_n, run) => {
+    mockAdmin.mockResolvedValue({ ok: false, response: NextResponse.json({ error: "no" }, { status: 403 }) });
+    expect((await run()).status).toBe(403);
+    expect(db.touched).toHaveLength(0);
   });
+});
 
-  describe("Admin Inquiry Badging & Read State", () => {
-    it("marks customer message as unread when not yet viewed", () => {
-      const ticket = {
-        id: "tkt-001",
-        lastSenderType: "customer",
-        lastMessageAt: "2026-09-04T08:00:00.000Z",
-      };
-      expect(isAdminInquiryUnread(ticket)).toBe(true);
-    });
-
-    it("does not mark staff message as unread for admin", () => {
-      const ticket = {
-        id: "tkt-001",
-        lastSenderType: "staff",
-        lastMessageAt: "2026-09-04T08:00:00.000Z",
-      };
-      expect(isAdminInquiryUnread(ticket)).toBe(false);
-    });
-
-    it("clears unread badge once ticket is marked as viewed at latest message timestamp", () => {
-      const ticket = {
-        id: "tkt-002",
-        lastSenderType: "customer",
-        lastMessageAt: "2026-09-04T08:00:00.000Z",
-      };
-      expect(isAdminInquiryUnread(ticket)).toBe(true);
-
-      // Admin views the inquiry
-      markAdminInquiryViewed("tkt-002", "2026-09-04T08:00:00.000Z");
-
-      expect(isAdminInquiryUnread(ticket)).toBe(false);
-    });
-
-    it("re-flags ticket as unread if customer sends a newer reply after admin viewed", () => {
-      const ticket = {
-        id: "tkt-003",
-        lastSenderType: "customer",
-        lastMessageAt: "2026-09-04T08:00:00.000Z",
-      };
-      markAdminInquiryViewed("tkt-003", "2026-09-04T08:00:00.000Z");
-      expect(isAdminInquiryUnread(ticket)).toBe(false);
-
-      // Customer sends a new message 10 minutes later
-      const updatedTicket = {
-        ...ticket,
-        lastMessageAt: "2026-09-04T08:10:00.000Z",
-      };
-      expect(isAdminInquiryUnread(updatedTicket)).toBe(true);
-    });
+describe("GET /notifications", () => {
+  it("lists the newest, optionally only unread, with a limit", async () => {
+    const res = await list(req("GET", "?unread=true&limit=5"));
+    expect((await res.json()).data).toEqual([ROW]);
+    expect(db.called("admin_notifications", "eq")!.args).toEqual(["is_read", false]);
+    expect(db.called("admin_notifications", "limit")!.args[0]).toBe(5);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
   });
-
-  describe("Storefront Customer Inbox Seen Lifecycle", () => {
-    it("records seen timestamp and dispatches gts_inbox_read", () => {
-      const dispatchSpy = vi.spyOn(window, "dispatchEvent");
-      expect(getCustomerInboxSeenAt()).toBeNull();
-
-      markCustomerInboxSeen();
-
-      expect(getCustomerInboxSeenAt()).not.toBeNull();
-      expect(dispatchSpy).toHaveBeenCalled();
-    });
+  it("rejects a bad limit or flag", async () => {
+    for (const qs of ["?limit=0", "?limit=101", "?limit=x", "?unread=maybe"]) expect((await list(req("GET", qs))).status, qs).toBe(400);
   });
+});
 
-  describe("Customer Notifications (Order Advancement & Reviews)", () => {
-    it("adds an order advance notification and retrieves it", () => {
-      const notif = addCustomerNotification({
-        type: "order_advance",
-        title: "Order #GTS-202609-000100 SHIPPED",
-        message: "Your order has been dispatched with courier.",
-        link: "/track?order_number=GTS-202609-000100",
-        orderNumber: "GTS-202609-000100",
-        orderStatus: "shipped",
-      });
-
-      expect(notif.id).toMatch(/^notif-/);
-      expect(notif.orderNumber).toBe("GTS-202609-000100");
-
-      const all = getCustomerNotifications();
-      expect(all.length).toBe(1);
-      expect(all[0]?.title).toContain("SHIPPED");
-    });
+describe("GET /notifications/unread-count", () => {
+  it("returns just the number", async () => {
+    expect((await (await unread(req("GET"))).json()).data).toEqual({ count: 3 });
   });
+});
 
-  describe("Broadcast Notification Config", () => {
-    it("provides valid default broadcast parameters", () => {
-      expect(DEFAULT_BROADCAST.ctaLabel).toBe("Visit Collection");
-      expect(DEFAULT_BROADCAST.imageUrl).toBeTruthy();
-      expect(DEFAULT_BROADCAST.isActive).toBe(true);
-    });
+describe("marking read", () => {
+  it("marks one read, recording who", async () => {
+    expect((await markOne(req("PUT"), { params: Promise.resolve({ id: ID }) })).status).toBe(200);
+    expect(db.called("admin_notifications", "update")!.args[0]).toMatchObject({ is_read: true, read_by: "admin-1" });
+    expect((await markOne(req("PUT"), { params: Promise.resolve({ id: "nope" }) })).status).toBe(404);
+  });
+  it("marks everything unread as read", async () => {
+    expect((await markAll(req("PUT"))).status).toBe(200);
+    expect(db.called("admin_notifications", "eq")!.args).toEqual(["is_read", false]);
+  });
+});
+
+describe("createAdminNotification (what the app itself raises)", () => {
+  it("adds one, and doesn't repeat an unread one about the same thing", async () => {
+    db.results.admin_notifications = { data: [], error: null };
+    await createAdminNotification(db.client, { type: "low_stock", title: "Shirt is low", message: "2 left", link: "/admin/inventory?v=1" });
+    expect(db.called("admin_notifications", "insert")!.args[0]).toMatchObject({ type: "low_stock", link: "/admin/inventory?v=1" });
+    db.reset();
+    db.results.admin_notifications = { data: [{ id: "n1" }], error: null };
+    await createAdminNotification(db.client, { type: "low_stock", title: "Shirt is low", message: "2 left", link: "/admin/inventory?v=1" });
+    expect(db.called("admin_notifications", "insert")).toBeUndefined();
+  });
+  it("never throws, and trims long text", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    db.results.admin_notifications = { data: null, error: { message: "boom" } };
+    await expect(createAdminNotification(db.client, { type: "new_order", title: "x".repeat(300), message: "m", link: null })).resolves.toBeUndefined();
+    spy.mockRestore();
   });
 });

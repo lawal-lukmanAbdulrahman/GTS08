@@ -40,6 +40,7 @@ beforeEach(() => {
     ],
     error: null,
   };
+  db.results.admin_notifications = { data: [{ id: "n1", type: "new_order", title: "New order GTS-1", message: "Paid", link: "/admin/orders", created_at: "2026-09-20T10:00:00Z" }, { id: "n2", type: "new_ticket", title: "Ticket", message: "x", link: "/admin/questions", created_at: "2026-09-20T09:00:00Z" }], error: null };
   db.results.activity_logs = {
     data: [
       { actor_id: "u1", action: "pos.sale", created_at: minutesAgo(1), actor: { id: "u1", full_name: "Ada", role: "cashier" } },
@@ -66,6 +67,13 @@ describe("GET /api/v1/live/summary (the admin's live badge and to-do numbers)", 
       open_flags: 2,
       low_stock: 2, // available (quantity - reserved) at or under the threshold
     });
+  });
+
+  it("includes the unread notifications the app has raised, newest first", async () => {
+    const { data } = await (await call()).json();
+    expect(data.notifications.unread).toBe(2);
+    expect(data.notifications.latest.map((n: { id: string }) => n.id)).toEqual(["n1", "n2"]);
+    expect(db.called("admin_notifications", "eq")!.args).toEqual(["is_read", false]);
   });
 
   it("lists who is on shift: the most recent action per person, skipping anyone who signed out", async () => {

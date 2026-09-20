@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useLive } from "../lib/use-live";
+import { apiCall } from "../lib/staff-api";
 import { isAdminInquiryUnread } from "../../lib/notifications";
 
 export interface LiveCounts {
@@ -20,9 +21,19 @@ interface OnShift {
   last_seen: string;
 }
 
+interface StoredNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  link: string | null;
+  created_at: string;
+}
+
 interface LiveSummary {
   counts: LiveCounts;
   active_staff: OnShift[];
+  notifications?: { unread: number; latest: StoredNotification[] };
 }
 
 export interface NotificationItem {
@@ -69,7 +80,13 @@ export function NotificationBell() {
 
   const unread = (Array.isArray(inquiries.data) ? inquiries.data : []).filter((t) => isAdminInquiryUnread(t)).length;
   const items = summary.data ? buildNotifications(summary.data.counts, unread) : [];
-  const total = items.reduce((sum, i) => sum + i.count, 0);
+  const stored = summary.data?.notifications;
+  const total = items.reduce((sum, i) => sum + i.count, 0) + (stored?.unread ?? 0);
+
+  async function markAllRead() {
+    await apiCall("/notifications/read-all", { method: "PUT" });
+    summary.refresh();
+  }
 
   return (
     <div className="relative" ref={ref}>
@@ -100,9 +117,11 @@ export function NotificationBell() {
             <button type="button" onClick={() => setOpen(false)} aria-label="Close notifications" className="text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs cursor-pointer p-0.5">✕</button>
           </div>
           {summary.error && <p className="px-3.5 py-2 text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30">We couldn&apos;t refresh just now. These numbers may be out of date.</p>}
-          {items.length === 0 ? (
+          {items.length === 0 && !(stored?.latest.length) ? (
             <p className="px-3.5 py-6 text-center text-xs text-gray-500 dark:text-[#9CA3AF]">You&apos;re all caught up. Nothing needs attention right now.</p>
           ) : (
+            <>
+            {items.length > 0 && (
             <ul aria-label="Things to do" className="divide-y divide-gray-100 dark:divide-[#242424]">
               {items.map((item) => (
                 <li key={item.key}>
@@ -116,6 +135,26 @@ export function NotificationBell() {
                 </li>
               ))}
             </ul>
+            )}
+            {stored && stored.latest.length > 0 && (
+              <div className="border-t border-gray-100 dark:border-[#242424]">
+                <div className="flex items-center justify-between px-3.5 pt-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-[#9CA3AF]">New</p>
+                  <button type="button" onClick={markAllRead} className="text-[11px] font-semibold underline text-gray-600 dark:text-gray-300">Mark all read</button>
+                </div>
+                <ul aria-label="Recent notifications" className="divide-y divide-gray-100 dark:divide-[#242424]">
+                  {stored.latest.map((n) => (
+                    <li key={n.id}>
+                      <Link href={n.link ?? "/admin"} onClick={() => setOpen(false)} className="py-3 px-3.5 block hover:bg-gray-50 dark:hover:bg-[#1F1F1F] transition-colors">
+                        <span className="block text-xs font-bold text-[#010101] dark:text-white">{n.title}</span>
+                        <span className="block text-[10px] text-gray-500 dark:text-[#9CA3AF]">{n.message}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            </>
           )}
         </div>
       )}

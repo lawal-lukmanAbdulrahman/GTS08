@@ -6,6 +6,7 @@ import { requirePermission } from "../_lib/staff-access";
 import { validateNewTicket, TICKET_PRIORITIES, TICKET_STATUSES } from "../_lib/tickets";
 import { afterResponse } from "../_lib/email/after";
 import { notifyTicketReceived } from "../_lib/email/events";
+import { createAdminNotification } from "../_lib/notify-admin";
 import { readJson, serverError } from "../_lib/http";
 
 /** A customer contacts support. Public, and rate limited (3 per 10 minutes per address). They get back only a reference. */
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest) {
 
     const id = (ticket as { id: string }).id;
     afterResponse(() => notifyTicketReceived(client, id));
+    await createAdminNotification(client, { type: "new_ticket", title: `New support ticket: ${t.subject}`, message: `${t.customer_name ?? t.customer_email} wrote in.`, link: "/admin/questions" });
     return NextResponse.json({ data: { reference: (ticket as { reference: string }).reference } }, { status: 201 });
   } catch (err) {
     return serverError(err);

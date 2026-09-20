@@ -12,6 +12,8 @@ vi.mock("../app/api/v1/_lib/staff-access", async (orig) => ({
 }));
 const notify = { received: vi.fn(), reply: vi.fn() };
 vi.mock("../app/api/v1/_lib/email/events", () => ({ notifyTicketReceived: (...a: unknown[]) => notify.received(...a), notifyTicketReply: (...a: unknown[]) => notify.reply(...a) }));
+const mockBell = vi.fn();
+vi.mock("../app/api/v1/_lib/notify-admin", () => ({ createAdminNotification: (...a: unknown[]) => mockBell(...a) }));
 vi.mock("../app/api/v1/_lib/email/after", () => ({ afterResponse: (t: () => Promise<unknown>) => void t() }));
 
 import { NextRequest } from "next/server";
@@ -29,6 +31,7 @@ const GOOD = { customer_email: "Bola@Example.com", customer_name: "Bola", subjec
 beforeEach(() => {
   db.reset();
   Object.values(notify).forEach((f) => f.mockReset());
+  mockBell.mockReset();
   mockPerm.mockReset().mockResolvedValue({ ok: true, user: { id: STAFF }, isAdmin: false });
   db.results.support_tickets = { data: TICKET, error: null, count: 1 };
   db.results.ticket_messages = { data: null, error: null };
@@ -42,6 +45,7 @@ describe("POST /tickets (public)", () => {
     expect(db.called("support_tickets", "insert")!.args[0]).toMatchObject({ customer_email: "bola@example.com", subject: "Late order" });
     expect(db.called("ticket_messages", "insert")!.args[0]).toMatchObject({ sender_type: "customer", body: "Where is my order?", is_internal: false });
     expect(notify.received).toHaveBeenCalledTimes(1);
+    expect(mockBell).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ type: "new_ticket", link: "/admin/questions" }));
     expect(mockPerm).not.toHaveBeenCalled();
   });
   it("never sets fields a customer shouldn't (status, priority, assignee)", async () => {

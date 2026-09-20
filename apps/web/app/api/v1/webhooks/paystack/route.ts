@@ -7,6 +7,7 @@ import { transitionOrderStatus } from "../../pos/_lib/order-status";
 import { afterResponse } from "../../_lib/email/after";
 import { notifyOrderPaid } from "../../_lib/email/events";
 import { consumePromo } from "../../_lib/promo-use";
+import { createAdminNotification } from "../../_lib/notify-admin";
 
 /** True only when the signature is the HMAC-SHA512 of the raw body under our secret. Constant-time. */
 function signatureMatches(rawBody: string, signature: string | null, secret: string): boolean {
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
       if (orderId) {
         const { data: order } = await serviceClient
           .from("orders")
-          .select("id, status, total, promo_code")
+          .select("id, order_number, status, total, promo_code")
           .eq("id", orderId)
           .maybeSingle();
 
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
           const paidKobo = payload.data?.amount;
           const currency = payload.data?.currency ?? "NGN";
           if (paidKobo !== order.total || currency !== "NGN") {
+            await createAdminNotification(serviceClient, { type: "payment_failed", title: "A payment didn't match its order", message: `Order ${(order as { order_number?: string }).order_number ?? ""} received a payment for the wrong amount, so it was not marked paid. Check it in Paystack.`, link: "/admin/orders" });
             await finish("amount_mismatch");
             return NextResponse.json({ received: true, flagged: "amount_mismatch" }, { status: 200 });
           }
@@ -151,6 +153,7 @@ export async function POST(request: NextRequest) {
               );
             }
 
+            await createAdminNotification(serviceClient, { type: "new_order", title: `New order ${(order as { order_number?: string }).order_number ?? ""}`, message: "An online order was paid and is ready to confirm.", link: "/admin/orders" });
             await consumePromo(serviceClient, { code: (order as { promo_code?: string | null }).promo_code ?? null, orderId });
             afterResponse(() => notifyOrderPaid(serviceClient, orderId));
           }

@@ -17,6 +17,8 @@ vi.mock("../app/api/v1/_lib/email/events", () => ({
   notifyFlagUpdated: (...a: unknown[]) => n.flag(...a),
   notifyAccessChanged: (...a: unknown[]) => n.access(...a),
 }));
+const mockBell = vi.fn();
+vi.mock("../app/api/v1/_lib/notify-admin", () => ({ createAdminNotification: (...a: unknown[]) => mockBell(...a) }));
 vi.mock("../app/api/v1/_lib/email/after", () => ({ afterResponse: (task: () => Promise<unknown>) => void task() }));
 
 const mockSuper = vi.fn();
@@ -107,6 +109,7 @@ describe("Paystack payment confirmation email", () => {
   it("goes to the customer once, only when the payment is really applied", async () => {
     vi.resetModules();
     Object.values(n).forEach((f) => f.mockReset());
+    mockBell.mockReset();
     process.env.PAYSTACK_SECRET_KEY = "sk_test_email_hook";
     db.reset();
     db.results.webhook_events = { data: { id: "e1", processed: false }, error: null };
@@ -119,6 +122,7 @@ describe("Paystack payment confirmation email", () => {
     const res = await POST(new NextRequest("http://localhost:3000/api/v1/webhooks/paystack", { method: "POST", body: raw, headers: { "x-paystack-signature": sig } }));
     expect(res.status).toBe(200);
     expect(n.paid).toHaveBeenCalledWith(expect.anything(), "order-1");
+    expect(mockBell).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ type: "new_order", link: "/admin/orders" }));
   });
 
   it("is not sent for a payment of the wrong amount", async () => {
@@ -133,6 +137,7 @@ describe("Paystack payment confirmation email", () => {
     const { POST } = await import("../app/api/v1/webhooks/paystack/route");
     await POST(new NextRequest("http://localhost:3000/api/v1/webhooks/paystack", { method: "POST", body: raw, headers: { "x-paystack-signature": sig } }));
     expect(n.paid).not.toHaveBeenCalled();
+    expect(mockBell).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ type: "payment_failed" }));
   });
 });
 

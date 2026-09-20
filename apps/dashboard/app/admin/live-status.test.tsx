@@ -7,6 +7,8 @@ vi.mock("../lib/use-live", () => ({
   useLive: (path: string) => live[path] ?? { data: null, error: null, updatedAt: null, refresh: () => undefined },
 }));
 vi.mock("next/link", () => ({ default: ({ children, href, onClick }: { children: React.ReactNode; href: string; onClick?: () => void }) => <a href={href} onClick={onClick}>{children}</a> }));
+const apiCall = vi.fn();
+vi.mock("../lib/staff-api", () => ({ apiCall: (...a: unknown[]) => apiCall(...a) }));
 vi.mock("../../lib/notifications", () => ({ isAdminInquiryUnread: (t: { lastSenderType: string }) => t.lastSenderType === "customer" }));
 
 import { buildNotifications, NotificationBell, OnShiftAvatars } from "./live-status";
@@ -72,6 +74,34 @@ describe("NotificationBell", () => {
     render(<NotificationBell />);
     fireEvent.click(screen.getByRole("button", { name: /notifications/i }));
     expect(screen.getByText(/couldn't refresh/i)).toBeInTheDocument();
+  });
+});
+
+describe("stored notifications in the bell", () => {
+  const NOTES = [{ id: "n1", type: "new_order", title: "New order GTS-1", message: "Paid and ready to confirm.", link: "/admin/orders", created_at: "x" }];
+  const withNotes = (refresh = () => undefined) => {
+    live["/live/summary"] = { data: { counts: { orders_to_ship: 0, whatsapp_waiting: 0, open_flags: 0, low_stock: 0 }, active_staff: [], notifications: { unread: 1, latest: NOTES } }, error: null, updatedAt: 1, refresh };
+  };
+  beforeEach(() => { apiCall.mockReset().mockResolvedValue({ ok: true, status: 200, data: {} }); });
+
+  it("counts them in the badge and lists them with their message and link", () => {
+    withNotes();
+    render(<NotificationBell />);
+    expect(screen.getByTestId("notification-badge")).toHaveTextContent("1");
+    fireEvent.click(screen.getByRole("button", { name: /notifications/i }));
+    expect(screen.getByRole("link", { name: /New order GTS-1/ })).toHaveAttribute("href", "/admin/orders");
+    expect(screen.getByText(/paid and ready to confirm/i)).toBeInTheDocument();
+  });
+
+  it("marks them all read from the bell, then refreshes", async () => {
+    const refresh = vi.fn();
+    withNotes(refresh);
+    render(<NotificationBell />);
+    fireEvent.click(screen.getByRole("button", { name: /notifications/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark all read/i }));
+    await Promise.resolve();
+    expect(apiCall).toHaveBeenCalledWith("/notifications/read-all", { method: "PUT" });
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
   });
 });
 
