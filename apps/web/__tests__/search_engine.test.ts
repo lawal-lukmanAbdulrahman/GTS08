@@ -549,7 +549,9 @@ describe("Product Search Engine", () => {
 
   // ── Performance Tests at Scale ────────────────────────────────────────────
 
-  describe("Performance at 500K Products", () => {
+  // Absolute timings depend on how busy the machine is, so they run as their own job
+  // (`pnpm test:perf`, on a quiet runner) rather than as part of the unit gate.
+  describe.skipIf(!process.env.RUN_PERF_TESTS)("Performance at 500K Products", () => {
     let engine: ProductSearchEngine;
     let products: SearchableProduct[];
 
