@@ -1,7 +1,7 @@
-import { API_BASE } from "../../lib/api-base";
+import { API_BASE, getToken } from "../../lib/session";
 /**
  * Helper to optimize image resolution/size, inspect transparency,
- * and upload to Cloudinary using unsigned upload preset or backend route.
+ * and upload through our authenticated `/api/v1/upload` route (the browser never talks to Cloudinary).
  */
 
 export interface ImageOptimizationResult {
@@ -170,83 +170,39 @@ export async function uploadToCloudinary(
     }
   }
 
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "gts";
-  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "gtsProducts";
+  const form = new FormData();
+  form.append("file", fileToUpload);
+  if (folder) form.append("folder", folder);
+  const token = getToken();
 
-  // Try direct Cloudinary REST endpoint
-  const formData = new FormData();
-  formData.append("file", fileToUpload);
-  formData.append("upload_preset", uploadPreset);
-  if (folder) {
-    formData.append("folder", folder);
-  }
-
+  let res: Response;
   try {
-    const res = await fetch(
-      `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
-      {
-        method: "POST",
-        body: formData,
-      }
-    );
-
-    if (res.ok) {
-      const data = await res.json();
-      return {
-        url: data.secure_url || data.url,
-        public_id: data.public_id,
-        hasTransparentBg,
-        width: width || data.width || 0,
-        height: height || data.height || 0,
-        originalSize,
-        optimizedSize,
-      };
-    }
-
-    // If preset with folder failed or had error, parse response
-    const errData = await res.json().catch(() => ({}));
-    console.warn("Cloudinary upload response:", errData);
-    
-    // Fallback: try backend proxy /api/v1/upload
-    const proxyFormData = new FormData();
-    proxyFormData.append("file", fileToUpload);
-    const proxyToken = typeof window !== "undefined" ? localStorage.getItem("gts_token") : null;
-    const backendRes = await fetch(`${API_BASE}/upload`, {
+    res = await fetch(`${API_BASE}/upload`, {
       method: "POST",
-      headers: proxyToken ? { Authorization: `Bearer ${proxyToken}` } : {},
-      body: proxyFormData,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
     });
-    if (backendRes.ok) {
-      const backendData = await backendRes.json();
-      return {
-        url: backendData.secure_url || backendData.url,
-        public_id: backendData.public_id || backendData.cloudinary_public_id,
-        hasTransparentBg,
-        width: width || backendData.width || 0,
-        height: height || backendData.height || 0,
-        originalSize,
-        optimizedSize,
-      };
-    }
-
-    throw new Error(errData?.error?.message || "Failed to upload image to Cloudinary.");
-  } catch (error: any) {
-    console.error("Cloudinary upload failed:", error);
-    // If offline or upload fails during local dev test, generate a local preview URL
-    if (fileToUpload instanceof File || fileToUpload instanceof Blob) {
-      const objectUrl = URL.createObjectURL(fileToUpload);
-      return {
-        url: objectUrl,
-        public_id: `local_${Date.now()}`,
-        hasTransparentBg,
-        width,
-        height,
-        originalSize,
-        optimizedSize,
-      };
-    }
-    throw error;
+  } catch {
+    throw new Error("Couldn't reach the server. Check your connection and try again.");
   }
+
+  const body = (await res.json().catch(() => null)) as { url?: string; secure_url?: string; public_id?: string; cloudinary_public_id?: string; width?: number; height?: number; error?: string } | null;
+  if (!res.ok) throw new Error(body?.error || `Image upload failed (${res.status}).`);
+
+  // A failed upload must never turn into a saved local (blob:) URL that only this browser can see.
+  const url = body?.url || body?.secure_url;
+  const publicId = body?.public_id || body?.cloudinary_public_id;
+  if (!url || !publicId) throw new Error("The server returned no image URL. Please try again.");
+
+  return {
+    url,
+    public_id: publicId,
+    hasTransparentBg,
+    width: width || body?.width || 0,
+    height: height || body?.height || 0,
+    originalSize,
+    optimizedSize,
+  };
 }
 
 /**

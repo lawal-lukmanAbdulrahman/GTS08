@@ -2688,7 +2688,11 @@ function BroadcastEditorInner() {
           setPendingImageFile(null);
         }
       } catch (err) {
-        console.error("Cloudinary upload failed during publish:", err);
+        // Publishing with the local preview would save a link only this browser can open.
+        console.error("Image upload failed during save:", err);
+        setIsSaving(false);
+        window.alert(err instanceof Error ? err.message : "The image couldn't be uploaded. Nothing was saved.");
+        return;
       }
     }
 
