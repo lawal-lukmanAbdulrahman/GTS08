@@ -53,34 +53,5 @@ export async function getAuthenticatedUser(request: NextRequest) {
     // ignore
   }
 
-  // Development environment fallback for admin dashboard operations (strictly guarded by opt-in env flag)
-  if (
-    process.env.NODE_ENV === "development" &&
-    process.env.ENABLE_DEV_ADMIN_BYPASS === "true"
-  ) {
-    try {
-      const { data: adminUser } = await serviceClient
-        .from("users")
-        .select("id, email, role")
-        .eq("role", "admin")
-        .limit(1)
-        .maybeSingle();
-
-      if (adminUser) {
-        return {
-          id: adminUser.id,
-          email: adminUser.email,
-          role: "admin",
-          app_metadata: {},
-          user_metadata: {},
-          aud: "authenticated",
-          created_at: new Date().toISOString(),
-        } as any;
-      }
-    } catch {
-      // ignore
-    }
-  }
-
   return null;
 }
