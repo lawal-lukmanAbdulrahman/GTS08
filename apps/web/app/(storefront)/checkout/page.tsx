@@ -3,12 +3,13 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { useCart } from "../_components/cart-context";
 import { useAuth } from "../_components/auth-context";
 import { useAuthModal } from "../_components/auth-modal-context";
 import { Footer } from "../_components/landing/footer";
 import { idempotentFetch } from "@gts/utils";
+import { toCheckoutLines } from "../_lib/checkout-client";
+import { useCheckoutQuote } from "../_lib/use-checkout-quote";
 
 import { NIGERIAN_STATES, NIGERIAN_LOCATIONS } from "../_data/nigerian-locations";
 
@@ -703,9 +704,8 @@ function PickupStationModal({
 }
 
 export default function CheckoutPage() {
-  const router = useRouter();
-  const { cartItems, clearCart } = useCart();
-  const { user, customer, savedAddresses, claimAccount, addSavedAddress } = useAuth();
+  const { cartItems } = useCart();
+  const { user, customer, savedAddresses, addSavedAddress } = useAuth();
   const { openAuthModal } = useAuthModal();
 
   // ── Stepper state ──
@@ -742,9 +742,8 @@ export default function CheckoutPage() {
 
   // ── Submission & Order Success State ──
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [orderConfirmed, setOrderConfirmed] = useState<any | null>(null);
-  const [guestPassword, setGuestPassword] = useState("");
-  const [claimStatus, setClaimStatus] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const { quote, error: quoteError } = useCheckoutQuote(cartItems);
 
   // Sync user details on load
   useEffect(() => {
@@ -783,11 +782,15 @@ export default function CheckoutPage() {
     GTS_CHECKOUT_PICKUP_STATIONS.find((s) => s.id === selectedPickupStationId) ||
     GTS_CHECKOUT_PICKUP_STATIONS[0]!;
 
-  const rawSubtotal = cartItems.reduce((sum, i) => sum + i.product.priceNum * i.quantity, 0);
+  // The server prices the cart. Until its answer arrives the page shows its own estimate, and
+  // the order can't be placed until the server has confirmed every item is available.
+  const estimatedSubtotal = cartItems.reduce((sum, i) => sum + i.product.priceNum * i.quantity, 0);
+  const rawSubtotal = quote ? quote.subtotal / 100 : estimatedSubtotal;
   const discountAmount = appliedPromo ? Math.round((rawSubtotal * appliedPromo.discountPercent) / 100) : 0;
-  const deliveryFeeNum =
-    selectedDelivery === "express" ? 4500 : selectedDelivery === "pickup" ? selectedStation.fee : 1500;
+  const localDeliveryFee = selectedDelivery === "express" ? 4500 : selectedDelivery === "pickup" ? selectedStation.fee : 1500;
+  const deliveryFeeNum = quote ? quote.delivery_fees[selectedDelivery as "door" | "pickup" | "express"] / 100 : localDeliveryFee;
   const grandTotal = Math.max(0, rawSubtotal - discountAmount + deliveryFeeNum);
+  const canPlaceOrder = cartItems.length > 0 && quote?.all_available === true;
 
   const cities = region ? (NIGERIAN_LOCATIONS[region] ?? []) : [];
   const userEmail = customer?.email || user?.email || email;
@@ -904,11 +907,12 @@ export default function CheckoutPage() {
       },
       address: chosenAddress,
       // Only what to buy and how many: the server looks up prices and decides discounts.
-      items: cartItems.map((c) => ({ variant_id: c.product.id, quantity: c.quantity })),
+      items: toCheckoutLines(cartItems),
       deliveryOption: selectedDelivery,
       paymentMethod: selectedPayment,
     };
 
+    setSubmitError(null);
     try {
       const res = await idempotentFetch("/api/v1/checkout", {
         method: "POST",
@@ -917,39 +921,22 @@ export default function CheckoutPage() {
       });
 
       const data = await res.json();
-      if (res.ok && data.success) {
-        clearCart();
-        setOrderConfirmed(data.data);
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("gts_order_placed", { detail: data.data }));
+      const payUrl = data?.data?.payment?.authorization_url;
+      if (res.ok && data.success && typeof payUrl === "string") {
+        // The cart stays until Paystack confirms payment. Being sent back proves nothing.
+        try {
+          sessionStorage.setItem("gts_last_checkout", JSON.stringify({ email: userEmail, fullName: chosenFullName, phone: chosenPhone }));
+        } catch {
+          // storage blocked: the confirmation page just skips the account prompt
         }
-      } else {
-        alert(data.error || "Failed to process checkout. Please try again.");
+        window.location.assign(payUrl);
+        return; // leave the button busy while the browser goes to Paystack
       }
+      setSubmitError(data?.error || "We couldn't place your order. Please try again.");
     } catch {
-      alert("Checkout connection failed. Please check your internet connection.");
-    } finally {
-      setIsSubmitting(false);
+      setSubmitError("We couldn't reach the server. Please check your connection and try again.");
     }
-  };
-
-  const handleClaimAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!guestPassword || guestPassword.length < 8) {
-      setClaimStatus("Password must be at least 8 characters.");
-      return;
-    }
-
-    const res = await claimAccount(guestPassword, {
-      fullName: `${firstName} ${lastName}`.trim(),
-      phone,
-    });
-
-    if (res.error) {
-      setClaimStatus(res.error);
-    } else {
-      setClaimStatus("Account claimed successfully! You can now track your orders in real time.");
-    }
+    setIsSubmitting(false);
   };
 
   const steps = [
@@ -1425,12 +1412,12 @@ export default function CheckoutPage() {
 
                         <div className="pt-2">
                           <p className="text-xs text-gray-400 leading-relaxed mb-4">
-                            By placing this order, your inventory is reserved and live fulfillment starts immediately in our warehouse.
+                            Your items are held while you pay. You will be taken to Paystack to complete payment securely.
                           </p>
 
                           <button
                             type="button"
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !canPlaceOrder}
                             onClick={handleConfirmOrder}
                             className="w-full bg-[#EDCF5D] hover:bg-[#010101] text-[#010101] hover:text-white font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-95 disabled:opacity-50 cursor-pointer"
                           >
@@ -1552,13 +1539,21 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
+              {(submitError || quoteError || (quote && !quote.all_available)) && (
+                <p role="alert" className="mt-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-xs font-semibold text-red-700">
+                  {submitError ||
+                    quoteError ||
+                    "Some items in your cart are no longer in stock in the quantity you chose. Please update your cart."}
+                </p>
+              )}
+
               {/* Confirm order button */}
               <button
                 type="button"
-                disabled={isSubmitting || cartItems.length === 0}
+                disabled={isSubmitting || !canPlaceOrder}
                 onClick={handleConfirmOrder}
                 className={`w-full font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 transition-all duration-300 mt-4 ${
-                  cartItems.length === 0
+                  !canPlaceOrder
                     ? "bg-gray-200 text-gray-400 cursor-not-allowed opacity-70"
                     : "bg-[#EDCF5D] hover:bg-[#010101] text-[#010101] hover:text-white shadow-md active:scale-95 cursor-pointer"
                 }`}
@@ -1586,111 +1581,6 @@ export default function CheckoutPage() {
           </div>
         </div>
       </div>
-
-      {/* ── MODAL: ORDER CONFIRMED & PROGRESSIVE PROFILING RECEIPT ── */}
-      {orderConfirmed && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-5 border border-gray-100 my-auto text-center font-sans">
-            
-            {/* Animated Green Check Badge */}
-            <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-inner border border-emerald-100">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-              </svg>
-            </div>
-
-            <div>
-              <h2 className="font-athelas text-2xl sm:text-3xl font-extrabold text-[#010101]">
-                Order Confirmed!
-              </h2>
-              <p className="text-xs text-gray-500 mt-1">
-                Your order has been recorded in the GTS system.
-              </p>
-            </div>
-
-            <div className="bg-[#F9F8F5] p-4 rounded-2xl border border-gray-200/80 text-left text-xs space-y-2">
-              <div className="flex justify-between items-center pb-2 border-b border-gray-200">
-                <span className="text-gray-500 font-semibold">Order Number:</span>
-                <span className="font-mono font-extrabold text-sm text-[#010101]">{orderConfirmed.order_number}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Status:</span>
-                <span className="font-bold text-emerald-600 uppercase">Paid / Confirmed</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Amount:</span>
-                <span className="font-extrabold text-[#010101]">₦{(orderConfirmed.total / 100).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Delivery Est.:</span>
-                <span className="font-bold text-gray-700">1–3 Business Days</span>
-              </div>
-            </div>
-
-            {/* Progressive Profiling: 1-Click Account Creation if Guest */}
-            {!user && (
-              <div className="rounded-2xl bg-amber-50/70 border border-amber-200 p-4 text-left space-y-3">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-[#010101]">Save your details & track live delivery</p>
-                    <p className="text-[11px] text-gray-600 mt-0.5">
-                      Create a password to turn your email ({email}) into a permanent GTS account with 1-click order tracking.
-                    </p>
-                  </div>
-                </div>
-
-                {claimStatus ? (
-                  <p className="text-xs font-bold text-emerald-700">{claimStatus}</p>
-                ) : (
-                  <form onSubmit={handleClaimAccount} className="flex gap-2">
-                    <input
-                      type="password"
-                      placeholder="Set password (min 8 chars)"
-                      value={guestPassword}
-                      onChange={(e) => setGuestPassword(e.target.value)}
-                      className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium outline-none"
-                    />
-                    <button
-                      type="submit"
-                      className="px-4 py-2 rounded-xl bg-[#010101] text-white font-bold text-xs hover:bg-[#EDCF5D] hover:text-[#010101] transition-all cursor-pointer shrink-0"
-                    >
-                      Save Account
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setOrderConfirmed(null);
-                  router.push("/account?tab=orders");
-                }}
-                className="flex-1 py-3 rounded-full bg-[#010101] text-white font-bold text-xs sm:text-sm hover:bg-[#EDCF5D] hover:text-[#010101] transition-all cursor-pointer shadow-sm"
-              >
-                Track in My Orders
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setOrderConfirmed(null);
-                  router.push("/");
-                }}
-                className="py-3 px-6 rounded-full border border-gray-300 font-bold text-xs sm:text-sm hover:bg-gray-100 transition-all cursor-pointer"
-              >
-                Continue Shopping
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Pickup Station Selector Modal ── */}
       <PickupStationModal

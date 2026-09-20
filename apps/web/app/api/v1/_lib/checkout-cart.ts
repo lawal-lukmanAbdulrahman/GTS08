@@ -84,8 +84,15 @@ export async function resolveCartLines(client: CartClient, raw: unknown): Promis
       if (candidates.length > 1) {
         if (norm(line.size)) candidates = candidates.filter((v) => norm(v.size) === norm(line.size));
         if (candidates.length > 1 && norm(line.color)) {
-          const byColour = candidates.filter((v) => norm(v.color) === norm(line.color));
-          if (byColour.length > 0) candidates = byColour;
+          const wanted = norm(line.color);
+          const exact = candidates.filter((v) => norm(v.color) === wanted);
+          // The cart may carry a short name ("blue") for a full one ("University Blue"): accept it only if exactly one fits.
+          const partial = candidates.filter((v) => {
+            const have = norm(v.color);
+            return have && wanted.length >= 3 && (have.includes(wanted) || wanted.includes(have));
+          });
+          if (exact.length > 0) candidates = exact;
+          else if (partial.length === 1) candidates = partial;
         }
         if (candidates.length !== 1) return unavailable("An item in your cart");
       }

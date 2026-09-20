@@ -44,6 +44,12 @@ describe("resolveCartLines (turns what the cart says into real variant ids)", ()
     expect(out).toMatchObject({ ok: true, items: [{ variant_id: U(6) }] });
   });
 
+  it("matches a short colour name to the full one when only one fits (blue -> University Blue)", async () => {
+    const shoes = client({ jordan: [V(U(1), "42", "University Blue"), V(U(2), "42", "Brown"), V(U(3), "42", "Forest Green")] });
+    expect(await resolveCartLines(shoes, [{ product_slug: "jordan", size: "42", color: "blue", quantity: 1 }])).toMatchObject({ ok: true, items: [{ variant_id: U(1) }] });
+    expect(await resolveCartLines(shoes, [{ product_slug: "jordan", size: "42", color: "e", quantity: 1 }])).toMatchObject({ ok: false });
+  });
+
   it("refuses to guess when the choice is ambiguous or matches nothing", async () => {
     expect(await resolveCartLines(shop, [{ product_slug: "shirt", size: "XXL", quantity: 1 }])).toMatchObject({ ok: false, code: "ITEM_UNAVAILABLE" });
     expect(await resolveCartLines(shop, [{ product_slug: "shirt", quantity: 1 }])).toMatchObject({ ok: false, code: "ITEM_UNAVAILABLE" });
