@@ -50,8 +50,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Stable singleton client instance across renders
-  const supabase = useMemo(() => createClient() as any, []);
+  // Stable singleton client instance across renders. Constructed only in the browser:
+  // during a server snapshot (static prerender) createBrowserClient throws when the
+  // NEXT_PUBLIC_SUPABASE_* env vars aren't present in the build environment.
+  const supabase = useMemo(
+    () => (typeof window === "undefined" ? null : (createClient() as any)),
+    []
+  );
 
   const fetchCustomerData = useCallback(
     async (userId: string, email: string, userMetadata?: any) => {
