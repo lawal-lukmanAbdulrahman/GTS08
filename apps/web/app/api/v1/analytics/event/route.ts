@@ -47,7 +47,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Missing body." }, { status: 400 });
     }
 
-    let { product_id, session_id, event_type, duration_seconds, scroll_depth } = body;
+    const { session_id, event_type, duration_seconds, scroll_depth } = body;
+    let { product_id } = body;
 
     if (!product_id || typeof product_id !== "string") {
       return NextResponse.json({ success: false, error: "product_id is required." }, { status: 400 });

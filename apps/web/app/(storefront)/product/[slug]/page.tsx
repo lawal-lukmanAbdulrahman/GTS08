@@ -3452,8 +3452,8 @@ interface SimilarFindsProps {
 function SimilarFinds({ currentProduct }: SimilarFindsProps) {
   const { products: catalogue } = useCatalogue();
   const [apiProducts, setApiProducts] = useState<ProductItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [recommendationSource, setRecommendationSource] = useState<string>("co_purchase_and_affinity");
+  const [_loading, setLoading] = useState(false);
+  const [_recommendationSource, setRecommendationSource] = useState<string>("co_purchase_and_affinity");
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);

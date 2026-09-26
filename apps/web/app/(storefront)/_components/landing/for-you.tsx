@@ -12,7 +12,7 @@ export function ForYou() {
   const { products: catalogue } = useCatalogue();
   const [apiProducts, setApiProducts] = useState<ProductItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [source, setSource] = useState<string>("personalized");
+  const [_source, setSource] = useState<string>("personalized");
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);

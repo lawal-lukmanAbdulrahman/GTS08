@@ -16,7 +16,7 @@ export default function CartPage() {
   const [promoCode, setPromoCode] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number } | null>(null); // discount in kobo, from the server
   const [promoError, setPromoError] = useState("");
-  const { quote, error: quoteError } = useCheckoutQuote(cartItems);
+  const { quote, error: _quoteError } = useCheckoutQuote(cartItems);
 
   // Sync server stock limits to cart items
   useEffect(() => {
@@ -70,8 +70,6 @@ export default function CartPage() {
   const FREE_SHIPPING_THRESHOLD = 500000;
   const isFreeShipping = rawSubtotal >= FREE_SHIPPING_THRESHOLD || cartItems.length === 0;
   const shippingFee = isFreeShipping ? 0 : 15000;
-  const progressPercent = Math.min(100, Math.round((rawSubtotal / FREE_SHIPPING_THRESHOLD) * 100));
-  const remainingForFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD - rawSubtotal);
 
   const grandTotal = Math.max(0, rawSubtotal - discountAmount + shippingFee);
 

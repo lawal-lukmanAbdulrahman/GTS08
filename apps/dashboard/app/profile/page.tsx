@@ -11,7 +11,6 @@ import { reauthenticate, getSessionUser, signOut } from "../lib/session";
 import { useStaffSession } from "../lib/use-staff-session";
 import type { ActivityEntryView, SalesRangeId, SalesRecordView } from "../lib/staff-types";
 import MyFlags, { type MyFlag } from "./my-flags";
-import Link from "next/link";
 import MustChangeNotice from "./must-change-notice";
 import ProfileOverview from "./profile-overview";
 import ProfileSidebar, { PROFILE_SECTIONS, type ProfileSection } from "./profile-sidebar";

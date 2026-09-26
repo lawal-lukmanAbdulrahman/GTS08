@@ -12,7 +12,7 @@ import type { ProductItem } from "../../_data/products";
 export function Bestsellers() {
   const { products: catalogue } = useCatalogue();
   const [apiProducts, setApiProducts] = useState<ProductItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;

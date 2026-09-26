@@ -166,7 +166,7 @@ export async function GET(request: NextRequest) {
           }
 
           const { data: candidates } = await candidateQuery;
-          let availableCandidates = (candidates ?? []).filter((p) => !excludeProductIds.has(p.id));
+          const availableCandidates = (candidates ?? []).filter((p) => !excludeProductIds.has(p.id));
 
           if (availableCandidates.length < 50) {
             const { data: extras } = await supabase

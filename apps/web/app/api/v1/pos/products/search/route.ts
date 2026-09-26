@@ -120,11 +120,13 @@ export async function GET(request: NextRequest) {
 
     // Try FTS search first
     try {
-      const ftsResult = await serviceClient
+      let ftsQuery = serviceClient
         .from("products")
         .select(selectFields, { count: "exact" })
         .eq("status", "active")
-        .textSearch("fts", prefixQuery, { type: "websearch" })
+        .textSearch("fts", prefixQuery, { type: "websearch" });
+      if (categoryIds) ftsQuery = ftsQuery.in("category_id", categoryIds);
+      const ftsResult = await ftsQuery
         .order("total_sold", { ascending: false })
         .range(offset, offset + limit - 1);
 

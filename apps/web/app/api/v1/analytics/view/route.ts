@@ -28,13 +28,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Invalid JSON." }, { status: 400 });
     }
 
-    let { product_id, session_id, duration_seconds, scroll_depth, event_type } = body as {
-      product_id?: string;
+    const { session_id, duration_seconds, scroll_depth, event_type } = body as {
       session_id?: string;
       duration_seconds?: number;
       scroll_depth?: number;
       event_type?: string;
     };
+    let { product_id } = body as { product_id?: string };
 
     if (!product_id || typeof product_id !== "string") {
       return NextResponse.json({ success: false, error: "product_id is required." }, { status: 400 });

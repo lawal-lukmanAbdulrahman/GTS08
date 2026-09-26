@@ -441,13 +441,6 @@ export default function AdminQuestionDetailPage() {
     }
   };
 
-  const quickReplies = [
-    "Hello! Yes, this item fits true to size.",
-    "Standard delivery takes 2 to 4 business days nationwide.",
-    "All GTS items are 100% authentic and verified by our Quality Control.",
-    "We have checked our inventory and this size/color is currently in stock.",
-  ];
-
   if (loading) {
     return (
       <div className="px-4 pt-3.5 pb-6 sm:px-6 lg:px-8 lg:pt-3.5 space-y-4 max-w-[1600px] mx-auto font-sans">

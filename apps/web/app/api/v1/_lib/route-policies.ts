@@ -64,6 +64,8 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "products/[slug]": { GET: "optionalStaff" },
   "products/drafts": { GET: "permission:can_manage_products", POST: "permission:can_manage_products", DELETE: "permission:can_manage_products" },
   "products/search": { GET: "public" },
+  "search": { GET: "public" },
+  "search/suggestions": { GET: "public" },
   "reviews": { GET: "public", POST: "session" },
   "size-guides/[categorySlug]": { GET: "public", PUT: "permission:can_manage_products" },
 
@@ -80,6 +82,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "storefront/bestselling": { GET: "public" },
   "storefront/trending": { GET: "public" },
   "storefront/for-you": { GET: "public" },
+  "storefront/similar-finds": { GET: "public" },
 
   // ── cart, checkout, promos, wishlist
   "cart/[sessionId]": { GET: "public", PUT: "public", DELETE: "public" }, // the session id is a random UUID and the only key to the cart

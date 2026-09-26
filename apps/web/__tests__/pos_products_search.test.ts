@@ -7,6 +7,8 @@ vi.mock("../app/api/v1/pos/_lib/access", () => ({
 
 type Result = { data: unknown; count?: number; error: unknown };
 let results: Record<string, Result> = {};
+// What the full-text (FTS) attempt finds. Empty by default, so a search falls through to the name/SKU ilike match these tests cover.
+let ftsResult: Result = { data: [], count: 0, error: null };
 const calls: Record<string, Array<{ method: string; args: unknown[] }>> = {};
 
 function makeStub(table: string) {
@@ -17,7 +19,7 @@ function makeStub(table: string) {
     {
       get(_t, prop: string) {
         if (prop === "then") {
-          const r = results[table] ?? { data: [], count: 0, error: null };
+          const r = table === "products" && log.some((c) => c.method === "textSearch") ? ftsResult : results[table] ?? { data: [], count: 0, error: null };
           return (resolve: (v: Result) => void) => resolve(r);
         }
         return (...args: unknown[]) => {
@@ -65,6 +67,7 @@ describe("GET /api/v1/pos/products/search", () => {
     mockRequirePosAccess.mockReset();
     mockRequirePosAccess.mockResolvedValue({ ok: true, user: { id: "u1", email: null }, role: "cashier" });
     results = { products: { data: [PRODUCT_ROW], count: 1, error: null } };
+    ftsResult = { data: [], count: 0, error: null };
     Object.keys(calls).forEach((k) => delete calls[k]);
   });
 
@@ -106,6 +109,21 @@ describe("GET /api/v1/pos/products/search", () => {
   });
 
   describe("with search text", () => {
+    it("uses the full-text match when it finds something, without the ilike fallback", async () => {
+      ftsResult = { data: [PRODUCT_ROW], count: 1, error: null };
+      const res = await GET(req("?q=oxford"));
+      expect((await res.json()).data).toHaveLength(1);
+      expect(call("products", "textSearch")).toBeDefined();
+      expect(call("products", "or")).toBeUndefined();
+    });
+
+    it("keeps a category tab's filter on a full-text search too", async () => {
+      results.categories = { data: [{ id: "c1", parent_id: null, slug: "shirts" }], error: null };
+      ftsResult = { data: [PRODUCT_ROW], count: 1, error: null };
+      await GET(req("?q=oxford&category=shirts"));
+      expect(call("products", "in")?.args).toEqual(["category_id", ["c1"]]);
+    });
+
     it("matches on name or SKU", async () => {
       await GET(req("?q=oxford"));
       expect(call("products", "or")?.args[0]).toBe("name.ilike.%oxford%,sku.ilike.%oxford%");

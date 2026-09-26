@@ -34,7 +34,6 @@ export async function GET(request: NextRequest) {
 
     let products: any[] | null = null;
     let count: number | null = null;
-    let error: any = null;
 
     if (prefixQuery) {
       try {

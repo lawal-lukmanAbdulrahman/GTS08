@@ -252,7 +252,7 @@ export async function GET(request: NextRequest) {
         }
 
         const { data: primaryCandidates } = await candidateQuery;
-        let candidates = (primaryCandidates || []).filter(
+        const candidates = (primaryCandidates || []).filter(
           (p) => !excludeProductIds.has(p.id) && !excludeProductIds.has(p.slug)
         );
 

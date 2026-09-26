@@ -24,7 +24,6 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "30", 10) || 30), 60);
     const offset = (page - 1) * limit;
     const category = searchParams.get("category") || null;
-    const mode = searchParams.get("mode") || "storefront";
 
     if (!q) {
       return NextResponse.json({

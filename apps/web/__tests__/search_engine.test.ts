@@ -417,13 +417,14 @@ describe("Product Search Engine", () => {
     it("returns brand suggestions", () => {
       const suggestions = engine.autocomplete("Nik");
       expect(suggestions.length).toBeGreaterThan(0);
-      expect(suggestions).toContain("Nike");
+      // The trie stores normalised (lower-case) phrases: suggestions are query text, not display names.
+      expect(suggestions).toContain("nike");
     });
 
     it("returns category suggestions", () => {
       const suggestions = engine.autocomplete("Electr");
       expect(suggestions.length).toBeGreaterThan(0);
-      expect(suggestions).toContain("Electronics");
+      expect(suggestions).toContain("electronics");
     });
 
     it("returns tag suggestions", () => {
