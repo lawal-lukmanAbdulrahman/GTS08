@@ -6,6 +6,7 @@ import { requireStaff } from "../../../_lib/staff-access";
 import { clientIp, logActivity } from "../../../_lib/activity";
 import { afterResponse } from "../../../_lib/email/after";
 import { notifyPasswordChanged } from "../../../_lib/email/events";
+import { verifyPassword } from "../../../_lib/verify-password";
 
 /** Change your own password: current + new + confirm (employee spec Part 8). */
 export async function POST(request: NextRequest) {
@@ -36,11 +37,7 @@ export async function POST(request: NextRequest) {
 
   // Prove they know the current password before changing it, so a borrowed
   // signed-in till can't be used to lock the owner out.
-  const { data: signedIn, error: signInError } = await serviceClient.auth.signInWithPassword({
-    email: staff.user.email ?? "",
-    password: current,
-  });
-  if (signInError || !signedIn?.user) {
+  if (!(await verifyPassword(staff.user.email ?? "", current))) {
     // 400, not 401: a wrong password must not look like an expired session.
     return NextResponse.json(
       { error: "Your current password is incorrect.", code: "CURRENT_PASSWORD_INCORRECT", details: { current_password: "Your current password is incorrect." } },

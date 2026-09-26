@@ -33,7 +33,12 @@ export type ActivityAction =
   | "campaign.create"
   | "campaign.update"
   | "campaign.delete"
-  | "campaign.send";
+  | "campaign.send"
+  | "settings.data_mode"
+  | "auth.login_failed"
+  | "auth.login_blocked"
+  | "auth.pin_login"
+  | "auth.password_reset";
 
 export interface ActivityEntry {
   actorId: string;

@@ -55,6 +55,12 @@ describe("describeActivity", () => {
   it("describes account actions without exposing anything sensitive", () => {
     expect(describeActivity(entry("auth.login")).title).toBe("Signed in");
     expect(describeActivity(entry("auth.logout")).title).toBe("Signed out");
+    expect(describeActivity(entry("auth.login_failed", { reason: "wrong_password" }))).toEqual({ title: "Failed sign-in attempt", detail: "Wrong password" });
+    expect(describeActivity(entry("auth.login_failed", { reason: "pin_not_allowed_for_staff" })).detail).toBe("A PIN can't be used to sign in to a staff account");
+    expect(describeActivity(entry("auth.login_blocked")).title).toBe("Sign-in refused: account suspended");
+    expect(describeActivity(entry("auth.password_reset")).title).toBe("Reset their password from an email link");
+    expect(describeActivity(entry("settings.data_mode", { from: "live", to: "test" }))).toEqual({ title: "Switched the shop to test data", detail: "Was showing live data" });
+    expect(describeActivity(entry("settings.data_mode", { from: "test", to: "live" })).title).toBe("Switched the shop to live data");
     expect(describeActivity(entry("profile.change_password")).title).toBe("Changed their password");
     expect(describeActivity(entry("profile.update_phone", { cleared: false })).title).toBe("Updated their phone number");
     expect(describeActivity(entry("profile.update_phone", { cleared: true })).title).toBe("Removed their phone number");

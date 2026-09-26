@@ -8,6 +8,24 @@ import { clientIp, logActivity } from "../../_lib/activity";
 import { serverError } from "../../_lib/http";
 import { countLoginAttempt } from "../../_lib/login-limit";
 
+/**
+ * A wrong password against a real staff account is worth an audit entry (someone
+ * guessing at the till). Unknown addresses and customers aren't logged: this
+ * trail is staff actions, and an entry per typo would bury it. Best effort, and
+ * it never changes the answer the caller gets.
+ */
+async function auditFailedStaffLogin(email: string, ip: string | null): Promise<void> {
+  try {
+    const client = createServiceClient();
+    const { data } = await client.from("users").select("id, role").eq("email", email).maybeSingle();
+    const account = data as { id: string; role: string } | null;
+    if (!account || account.role === "customer") return;
+    await logActivity(client, { actorId: account.id, action: "auth.login_failed", targetType: "user", targetId: account.id, changes: { reason: "wrong_password" }, ip });
+  } catch {
+    // The caller still gets the normal refusal.
+  }
+}
+
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -59,6 +77,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     });
 
     if (authError || !authData.user) {
+      await auditFailedStaffLogin(email, clientIp(request));
       return NextResponse.json(
         {
           error: "Invalid email address or password. Please verify your credentials.",
@@ -85,6 +104,11 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     }
 
     if (userProfile.is_blocked) {
+      // The password was right, so a session now exists. End it: a suspended account must hold no valid session at all.
+      await supabase.auth.signOut().catch(() => undefined);
+      if (userProfile.role !== "customer") {
+        await logActivity(serviceClient, { actorId: userProfile.id, action: "auth.login_blocked", targetType: "user", targetId: userProfile.id, ip: clientIp(request) });
+      }
       return NextResponse.json(
         { error: "This staff account is suspended. Please contact administrator.", code: "FORBIDDEN", field: "email" },
         { status: 403 }

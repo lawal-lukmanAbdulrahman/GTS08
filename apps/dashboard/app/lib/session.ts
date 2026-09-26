@@ -11,6 +11,7 @@ export interface SessionUser {
   email: string;
   full_name: string | null;
   role: string;
+  is_super_admin?: boolean;
 }
 
 export function getToken(): string | null {

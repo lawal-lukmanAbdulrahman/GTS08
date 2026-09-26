@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { makeDbStub } from "./_helpers/db-stub";
 
 const db = makeDbStub();
-const mockSend = vi.fn();
-vi.mock("../app/api/v1/_lib/email/send", () => ({ sendEmail: (...a: unknown[]) => mockSend(...a) }));
+const mockBatch = vi.fn();
+vi.mock("../app/api/v1/_lib/email/send", () => ({ sendEmailBatch: (...a: unknown[]) => mockBatch(...a) }));
 
 import { validateCampaign, bodyToHtml, resolveAudience, sendCampaign, MAX_RECIPIENTS } from "../app/api/v1/_lib/campaigns";
 import { campaignEmail } from "../app/api/v1/_lib/email/templates";
@@ -59,6 +59,12 @@ describe("resolveAudience", () => {
     db.results.customers = { data: Array.from({ length: MAX_RECIPIENTS + 50 }, (_, i) => ({ email: `u${i}@x.co` })), error: null };
     expect(await resolveAudience(db.client, "all", null)).toHaveLength(MAX_RECIPIENTS);
   });
+  it("leaves out anyone who has opted out of marketing email, whichever audience", async () => {
+    db.results.customers = { data: [{ id: "c1", email: "a@b.co" }, { id: "c2", email: "Out@d.co" }], error: null };
+    db.results.users = { data: [{ email: "out@d.co" }], error: null };
+    expect(await resolveAudience(db.client, "all", null)).toEqual(["a@b.co"]);
+    expect(await resolveAudience(db.client, "custom", { emails: ["a@b.co", "out@d.co"] })).toEqual(["a@b.co"]);
+  });
   it("throws (safely) on a database error", async () => {
     db.results.customers = { data: null, error: { message: "boom" } };
     await expect(resolveAudience(db.client, "all", null)).rejects.toThrow();
@@ -69,7 +75,7 @@ describe("sendCampaign", () => {
   const CAMPAIGN = { id: "cm1", subject: "Sale", preview_text: null, body_html: "<p>Hi</p>", cta_label: null, cta_link: null, audience_type: "custom", audience_params: { emails: ["a@b.co", "c@d.co", "e@f.co"] }, status: "draft" };
   beforeEach(() => {
     db.reset();
-    mockSend.mockReset().mockResolvedValue({ ok: true, id: "e1" });
+    mockBatch.mockReset().mockImplementation(async (messages: unknown[]) => ({ sent: messages.length, failed: 0 }));
     db.results.email_campaigns = { data: [{ id: "cm1" }], error: null };
     db.results.settings = { data: { store_name: "GTS" }, error: null };
   });
@@ -77,7 +83,8 @@ describe("sendCampaign", () => {
   it("claims the campaign so it can only be sent once, sends to each recipient, and records the outcome", async () => {
     const r = await sendCampaign(db.client, CAMPAIGN as never);
     expect(r).toEqual({ sent: 3, failed: 0 });
-    expect(mockSend).toHaveBeenCalledTimes(3);
+    expect(mockBatch).toHaveBeenCalledTimes(1);
+    expect((mockBatch.mock.calls[0]![0] as Array<{ to: string }>).map((m) => m.to)).toEqual(["a@b.co", "c@d.co", "e@f.co"]);
     const updates = db.calls.email_campaigns!.filter((c) => c.method === "update").map((c) => c.args[0] as Record<string, unknown>);
     expect(updates[0]).toMatchObject({ status: "sending" });
     expect(updates.at(-1)).toMatchObject({ status: "sent", recipient_count: 3 });
@@ -85,24 +92,26 @@ describe("sendCampaign", () => {
   it("puts an unsubscribe route in every message", async () => {
     process.env.EMAIL_REPLY_TO = "help@gts.ng";
     await sendCampaign(db.client, CAMPAIGN as never);
-    expect(mockSend.mock.calls[0]![0].headers["List-Unsubscribe"]).toMatch(/^<mailto:/);
-    expect(mockSend.mock.calls[0]![0].html).toMatch(/unsubscribe/i);
+    for (const m of mockBatch.mock.calls[0]![0] as Array<{ headers: Record<string, string>; html: string }>) {
+      expect(m.headers["List-Unsubscribe"]).toMatch(/^<mailto:/);
+      expect(m.html).toMatch(/unsubscribe/i);
+    }
     delete process.env.EMAIL_REPLY_TO;
   });
   it("counts failures without stopping, and is 'failed' only if nothing went out", async () => {
-    mockSend.mockResolvedValueOnce({ ok: false, reason: "x" }).mockResolvedValue({ ok: true, id: "e" });
+    mockBatch.mockResolvedValueOnce({ sent: 2, failed: 1 });
     expect(await sendCampaign(db.client, CAMPAIGN as never)).toEqual({ sent: 2, failed: 1 });
     db.reset();
     db.results.email_campaigns = { data: [{ id: "cm1" }], error: null };
     db.results.settings = { data: { store_name: "GTS" }, error: null };
-    mockSend.mockReset().mockResolvedValue({ ok: false, reason: "x" });
+    mockBatch.mockReset().mockResolvedValue({ sent: 0, failed: 3 });
     await sendCampaign(db.client, CAMPAIGN as never);
     expect(db.calls.email_campaigns!.filter((c) => c.method === "update").at(-1)!.args[0]).toMatchObject({ status: "failed" });
   });
   it("does nothing if someone else already claimed it", async () => {
     db.results.email_campaigns = { data: [], error: null };
     expect(await sendCampaign(db.client, CAMPAIGN as never)).toBeNull();
-    expect(mockSend).not.toHaveBeenCalled();
+    expect(mockBatch).not.toHaveBeenCalled();
   });
   it("marks it failed, rather than leaving it stuck sending, if the audience can't be built", async () => {
     db.results.customers = { data: null, error: { message: "boom" } };

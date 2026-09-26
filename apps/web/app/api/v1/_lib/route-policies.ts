@@ -33,6 +33,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
 
   // ── auth
   "auth/delete-account": { POST: "session" },
+  "auth/forgot-password": { POST: "public" }, // emails a reset link; rate limited, never reveals whether the address has an account
   "auth/login": { POST: "public" }, // credentials endpoint; rate limited
   "auth/logout": { POST: "session" },
   "auth/me": { GET: "session" },
@@ -49,6 +50,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "auth/pin/update": { POST: "session" },
   "auth/pin/verify": { POST: "session" },
   "auth/register": { POST: "public" }, // customer sign-up
+  "auth/reset-password": { POST: "public" }, // proves itself with the single-use emailed token
 
   // ── catalogue
   "brands": { GET: "public", POST: "permission:can_manage_products" },
@@ -68,6 +70,8 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "content-slots": { GET: "public" }, // live slots for the homepage
   "content-slots/[key]": { GET: "public", PUT: "admin" },
   "settings": { GET: "public", PATCH: "admin" },
+  "settings/data-mode": { GET: "admin", PUT: "super_admin" },
+  "settings/email": { GET: "admin", POST: "admin" }, // status of the email setup; POST sends a test to the caller only
   "storefront/sections": { GET: "public", PUT: "admin" },
 
   // ── cart, checkout, promos, wishlist

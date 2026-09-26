@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, accountAccessEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail } from "../app/api/v1/_lib/email/templates";
+import { ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, accountAccessEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, customerWelcomeEmail, passwordResetEmail } from "../app/api/v1/_lib/email/templates";
 
 const STORE = { name: "GTS Stores", address: "12 Marina, Lagos", phone: "0803 000 0000" };
 const EVIL = `<img src=x onerror=alert(1)>"&'`;
@@ -185,5 +185,40 @@ describe("accountAccessEmail", () => {
   });
   it("tells someone their access is back", () => {
     expect(accountAccessEmail({ store: STORE, name: "Ada", blocked: false, signInUrl: "https://dash.gts.ng/login" }).subject).toMatch(/restored/i);
+  });
+});
+
+describe("customerWelcomeEmail", () => {
+  const store = { name: "GTS Wears", phone: "08148308129", website: "www.GTS08.com" };
+
+  it("welcomes the new customer by name and sends them to the shop", () => {
+    const m = customerWelcomeEmail({ store, name: "Ada", shopUrl: "https://gts.ng" });
+    expect(m.subject).toBe("Welcome to GTS Wears");
+    expect(m.html).toContain("Ada");
+    expect(m.html).toContain('href="https://gts.ng"');
+    expect(m.text).toContain("https://gts.ng");
+  });
+
+  it("escapes the name", () => {
+    const m = customerWelcomeEmail({ store, name: "<img src=x onerror=alert(1)>", shopUrl: "https://gts.ng" });
+    expect(m.html).not.toContain("<img");
+  });
+});
+
+describe("passwordResetEmail", () => {
+  const store = { name: "GTS Wears", phone: "08148308129" };
+  const o = { store, name: "Ada", resetUrl: "https://gts.ng/reset-password?token=abc&type=recovery", validFor: "1 hour" };
+
+  it("gives one link, how long it lasts, and says to ignore it if it wasn't them", () => {
+    const m = passwordResetEmail(o);
+    expect(m.subject).toBe("Reset your GTS Wears password");
+    expect(m.html).toContain('href="https://gts.ng/reset-password?token=abc&amp;type=recovery"');
+    expect(m.html).toContain("1 hour");
+    expect(m.html).toMatch(/didn.t ask|wasn.t you/i);
+    expect(m.text).toContain("https://gts.ng/reset-password?token=abc&type=recovery");
+  });
+
+  it("never contains a password", () => {
+    expect(JSON.stringify(passwordResetEmail(o))).not.toMatch(/password:/i);
   });
 });

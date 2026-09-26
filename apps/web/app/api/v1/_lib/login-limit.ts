@@ -12,3 +12,15 @@ export const LOGIN_ATTEMPTS_PER_MINUTE = 8;
 export function countLoginAttempt(email: string): Promise<ConsumeResult> {
   return consume(store, [{ key: `rl:login-account:${email.trim().toLowerCase()}`, limit: LOGIN_ATTEMPTS_PER_MINUTE, windowMs: 60_000, tier: "auth" }]);
 }
+
+/** Reset emails allowed per address per 15 minutes, so the form can't be used to flood an inbox. */
+export const RESET_REQUESTS_PER_WINDOW = 3;
+
+export function countResetRequest(email: string): Promise<ConsumeResult> {
+  return consume(store, [{ key: `rl:reset-request:${email.trim().toLowerCase()}`, limit: RESET_REQUESTS_PER_WINDOW, windowMs: 15 * 60_000, tier: "auth" }]);
+}
+
+/** Reset submissions per caller address per 15 minutes. The tokens themselves are single-use and unguessable. */
+export function countResetSubmission(ip: string): Promise<ConsumeResult> {
+  return consume(store, [{ key: `rl:reset-submit:${ip}`, limit: 10, windowMs: 15 * 60_000, tier: "auth" }]);
+}

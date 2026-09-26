@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
   try {
     const eventType = payload.event ?? "unknown";
     const eventId = payload.data?.reference || payload.data?.id?.toString() || crypto.randomUUID();
-    const serviceClient = createServiceClient();
+    const serviceClient = createServiceClient({ allModes: true });
 
     // Idempotency: an event we already finished is acknowledged and ignored.
     const { data: existing } = await serviceClient

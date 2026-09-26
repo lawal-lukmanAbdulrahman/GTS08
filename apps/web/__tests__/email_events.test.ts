@@ -5,7 +5,7 @@ import { makeDbStub } from "./_helpers/db-stub";
 const mockSend = vi.fn();
 vi.mock("../app/api/v1/_lib/email/send", () => ({ sendEmail: (...a: unknown[]) => mockSend(...a) }));
 
-import { notifyAccessChanged, notifyFlagUpdated, notifyOrderPaid, notifyPasswordChanged, notifyPosReceipt, notifyStaffWelcome } from "../app/api/v1/_lib/email/events";
+import { notifyCustomerWelcome, notifyPasswordReset, notifyAccessChanged, notifyFlagUpdated, notifyOrderPaid, notifyPasswordChanged, notifyPosReceipt, notifyStaffWelcome } from "../app/api/v1/_lib/email/events";
 
 const db = makeDbStub();
 const sent = () => mockSend.mock.calls.map((c) => c[0]) as Array<{ to: string; subject: string; html: string; text: string }>;
@@ -138,5 +138,45 @@ describe("every notifier is safe", () => {
     await expect(notifyFlagUpdated(db.client, "f", "resolved", null)).resolves.toBeUndefined();
     await expect(notifyAccessChanged(db.client, "u", true)).resolves.toBeUndefined();
     await expect(notifyPasswordChanged(db.client, { name: "A", email: "a@b.co" })).resolves.toBeUndefined();
+  });
+});
+
+describe("notifyCustomerWelcome", () => {
+  it("welcomes a new shopper with a link to the storefront", async () => {
+    await notifyCustomerWelcome(db.client, { name: "Ada", email: "ada@example.com" });
+    expect(sent()[0]!.to).toBe("ada@example.com");
+    expect(sent()[0]!.html).toContain("https://gts.ng");
+  });
+
+  it("sends the welcome only once per address, even if registration is retried", async () => {
+    await notifyCustomerWelcome(db.client, { name: "Ada", email: "Ada@Example.com" });
+    expect((mockSend.mock.calls[0]![0] as { idempotencyKey?: string }).idempotencyKey).toBe("welcome/ada@example.com");
+  });
+
+  it("never throws if sending fails", async () => {
+    mockSend.mockRejectedValue(new Error("boom"));
+    await expect(notifyCustomerWelcome(db.client, { name: "A", email: "a@b.co" })).resolves.toBeUndefined();
+  });
+});
+
+describe("notifyPasswordReset", () => {
+  it("sends the link to the person who asked, and returns whether it went", async () => {
+    const r = await notifyPasswordReset(db.client, { name: "Ada", email: "ada@example.com", resetUrl: "https://gts.ng/reset-password?token=t" });
+    expect(r).toMatchObject({ ok: true });
+    expect(sent()[0]!.to).toBe("ada@example.com");
+    expect(sent()[0]!.html).toContain("reset-password?token=t");
+  });
+
+  it("does not use an idempotency key: a second request must send a fresh link", async () => {
+    await notifyPasswordReset(db.client, { name: "A", email: "a@b.co", resetUrl: "https://gts.ng/reset-password?token=t" });
+    expect((mockSend.mock.calls[0]![0] as { idempotencyKey?: string }).idempotencyKey).toBeUndefined();
+  });
+});
+
+describe("delivery keys", () => {
+  it("marks the payment confirmation with its order, so a webhook retry can't send it twice", async () => {
+    db.results.orders = { data: { order_number: "GTS-1", total: 1000, customer: { email: "c@example.com", full_name: "C" }, items: [] }, error: null };
+    await notifyOrderPaid(db.client, "order-uuid-1");
+    expect((mockSend.mock.calls[0]![0] as { idempotencyKey?: string }).idempotencyKey).toBe("order-paid/order-uuid-1");
   });
 });

@@ -191,6 +191,31 @@ export function AuthModal() {
     setTimeout(() => setShakingField(null), 500);
   };
 
+  // Emails a single-use reset link. The answer is the same whether or not the address has an account.
+  const handleForgotPassword = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(cleanEmail)) {
+      setEmailError("Enter your email address above first, then choose Forgot password.");
+      return;
+    }
+    setEmailError(null);
+    setStatusMessage(null);
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/v1/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      if (res.ok) setStatusMessage({ text: "If that address has an account, a reset link is on its way. It expires in 1 hour.", type: "success" });
+      else setStatusMessage({ text: ((await res.json().catch(() => null)) as { error?: string } | null)?.error || "Something went wrong. Please try again.", type: "error" });
+    } catch {
+      setStatusMessage({ text: "We couldn't reach the server. Please check your connection and try again.", type: "error" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setEmailError(null);
@@ -592,6 +617,13 @@ export function AuthModal() {
                             className="hover:text-[#010101] hover:underline transition-colors"
                           >
                             Sign in with Link?
+                          </button>
+                        </div>
+                      )}
+                      {mode === "login" && (
+                        <div className="text-right text-[11px] font-semibold text-gray-500 mt-1 px-1">
+                          <button type="button" onClick={handleForgotPassword} disabled={isSubmitting} className="hover:text-[#010101] hover:underline transition-colors disabled:opacity-50">
+                            Forgot password?
                           </button>
                         </div>
                       )}

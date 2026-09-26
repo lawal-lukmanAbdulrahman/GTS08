@@ -1,6 +1,6 @@
 import { formatWAT } from "@gts/utils";
 import { sendEmail, type SendResult } from "./send";
-import { accountAccessEmail, ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, type StoreInfo } from "./templates";
+import { customerWelcomeEmail, passwordResetEmail, accountAccessEmail, ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, type StoreInfo } from "./templates";
 
 type Client = { from(table: string): any };
 
@@ -43,11 +43,27 @@ export function notifyStaffWelcome(client: Client, o: { name: string; role: stri
   }, FAILED);
 }
 
-export function notifyPasswordChanged(client: Client, o: { name: string; email: string | null }): Promise<void> {
+/** The greeting after a customer registers. Sent once per address. */
+export function notifyCustomerWelcome(client: Client, o: { name: string; email: string }): Promise<void> {
+  return safely(async () => {
+    const store = await storeInfo(client);
+    await sendEmail({ to: o.email, ...customerWelcomeEmail({ store, name: o.name || "there", shopUrl: storefrontUrl() }), idempotencyKey: `welcome/${o.email.trim().toLowerCase()}` });
+  }, undefined);
+}
+
+/** The reset link. No idempotency key: someone asking twice needs a fresh link, not the first one suppressed. */
+export function notifyPasswordReset(client: Client, o: { name: string; email: string; resetUrl: string }): Promise<SendResult> {
+  return safely(async () => {
+    const store = await storeInfo(client);
+    return sendEmail({ to: o.email, ...passwordResetEmail({ store, name: o.name || "there", resetUrl: o.resetUrl, validFor: "1 hour" }) });
+  }, FAILED);
+}
+
+export function notifyPasswordChanged(client: Client, o: { name: string; email: string | null; account?: "staff" | "customer" }): Promise<void> {
   return safely(async () => {
     if (!o.email) return;
     const store = await storeInfo(client);
-    await sendEmail({ to: o.email, ...passwordChangedEmail({ name: o.name || "there", whenText: formatWAT(new Date().toISOString()), signInUrl: `${dashboardUrl()}/login`, store }) });
+    await sendEmail({ to: o.email, ...passwordChangedEmail({ name: o.name || "there", whenText: formatWAT(new Date().toISOString()), signInUrl: o.account === "customer" ? storefrontUrl() : `${dashboardUrl()}/login`, store, account: o.account }) });
   }, undefined);
 }
 
@@ -83,6 +99,7 @@ export function notifyOrderPaid(client: Client, orderId: string): Promise<void> 
         total: order.total,
         trackUrl: `${storefrontUrl()}/track`,
       }),
+      idempotencyKey: `order-paid/${orderId}`,
     });
   }, undefined);
 }
@@ -99,7 +116,7 @@ export function notifyOrderStatus(client: Client, orderId: string, status: strin
     if (!o?.customer?.email) return;
     const store = await storeInfo(client);
     const mail = orderStatusEmail({ store, name: o.customer.full_name || "there", orderNumber: o.order_number, status, trackUrl: `${storefrontUrl()}/track`, carrierName: o.carrier_name, trackingNumber: o.tracking_number, trackingUrl: o.carrier_tracking_url, paid: !!o.paid_at });
-    if (mail) await sendEmail({ to: o.customer.email, ...mail });
+    if (mail) await sendEmail({ to: o.customer.email, ...mail, idempotencyKey: `order-status/${orderId}/${status}` });
   }, undefined);
 }
 
@@ -115,7 +132,7 @@ export function notifyTicketReceived(client: Client, ticketId: string): Promise<
   return safely(async () => {
     const t = await loadTicket(client, ticketId);
     if (!t) return;
-    await sendEmail({ to: t.customer_email, ...ticketReceivedEmail({ store: await storeInfo(client), name: t.customer_name ?? "", reference: t.reference, subject: t.subject }) });
+    await sendEmail({ to: t.customer_email, ...ticketReceivedEmail({ store: await storeInfo(client), name: t.customer_name ?? "", reference: t.reference, subject: t.subject }), idempotencyKey: `ticket-received/${ticketId}` });
   }, undefined);
 }
 

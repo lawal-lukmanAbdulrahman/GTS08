@@ -37,3 +37,13 @@ export function validatePasswordChange(input: { current: string; next: string; c
 
   return Object.keys(errors).length ? { ok: false, errors } : { ok: true };
 }
+
+/** The rules for choosing a password with no current one to compare (a reset link). Same limits as a change. */
+export function validateNewPassword(next: string, confirm: string): PasswordChangeResult {
+  const errors: Record<string, string> = {};
+  if (next.length < 8) errors.new_password = "Use at least 8 characters.";
+  else if (next.length > 72) errors.new_password = "Use 72 characters or fewer.";
+  else if (!/[A-Za-z]/.test(next) || !/\d/.test(next)) errors.new_password = "Include at least one letter and one number.";
+  if (confirm !== next) errors.confirm_password = "The passwords don't match.";
+  return Object.keys(errors).length ? { ok: false, errors } : { ok: true };
+}

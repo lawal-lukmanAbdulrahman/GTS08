@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { API_BASE } from "../lib/api-base";
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -62,7 +63,9 @@ function LoginForm() {
 
     // Client-side SQL Injection Sanitization
     const cleanEmail = sanitizeEmail(email);
-    const cleanPassword = sanitizeSqlInput(password);
+    // The password is never sanitised: stripping quotes, semicolons or dashes would silently change it and lock out anyone whose password has them.
+    // The API passes it to the auth provider as a parameter, so there is nothing to inject into.
+    const cleanPassword = password;
 
     // Client-side field validations
     if (!cleanEmail) {
@@ -102,7 +105,7 @@ function LoginForm() {
           setPasswordError("Invalid email address or password. Please verify your credentials.");
           triggerShake("password");
         } else if (res.status === 403) {
-          setEmailError("Access denied. Customer accounts cannot access the Staff Portal.");
+          setEmailError(errorMsg);
           triggerShake("email");
         } else if (json.field === "email") {
           setEmailError(errorMsg);
@@ -308,6 +311,12 @@ function LoginForm() {
                     <span>{passwordError}</span>
                   </p>
                 )}
+              </div>
+
+              <div className="text-right -mt-1">
+                <Link href="/forgot-password" className="text-[11px] font-semibold text-gray-500 hover:text-[#010101] underline">
+                  Forgot password?
+                </Link>
               </div>
 
               {/* Primary Action Button */}

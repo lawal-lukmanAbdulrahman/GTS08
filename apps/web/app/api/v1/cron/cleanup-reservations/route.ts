@@ -17,7 +17,7 @@ async function run(request: NextRequest) {
   if (!auth.ok) return auth.response;
 
   try {
-    const client = createServiceClient();
+    const client = createServiceClient({ allModes: true });
     const { data, error } = await client
       .from("checkout_reservations")
       .select("id, variant_id, quantity")

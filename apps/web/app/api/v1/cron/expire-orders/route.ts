@@ -25,7 +25,7 @@ async function run(request: NextRequest) {
   if (!auth.ok) return auth.response;
 
   try {
-    const client = createServiceClient();
+    const client = createServiceClient({ allModes: true });
     const now = Date.now();
     const windows = [
       { channel: "whatsapp", cutoff: new Date(now - positiveNumber("WHATSAPP_ORDER_EXPIRY_HOURS", 24) * 3_600_000), label: "unpaid WhatsApp order" },

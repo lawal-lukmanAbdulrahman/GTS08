@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, DM_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+import DataModeBanner from "./components/data-mode-banner";
 
 const display = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -80,6 +81,7 @@ export default function RootLayout({
       </head>
       <body className="font-body text-txt bg-page" suppressHydrationWarning>
         {children}
+        <DataModeBanner />
       </body>
     </html>
   );

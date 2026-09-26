@@ -17,6 +17,8 @@ vi.mock("../app/api/v1/_lib/email/events", () => ({
   notifyFlagUpdated: (...a: unknown[]) => n.flag(...a),
   notifyAccessChanged: (...a: unknown[]) => n.access(...a),
 }));
+const mockVerify = vi.fn();
+vi.mock("../app/api/v1/_lib/verify-password", () => ({ verifyPassword: (...a: unknown[]) => mockVerify(...a) }));
 const mockBell = vi.fn();
 vi.mock("../app/api/v1/_lib/notify-admin", () => ({ createAdminNotification: (...a: unknown[]) => mockBell(...a) }));
 vi.mock("../app/api/v1/_lib/email/after", () => ({ afterResponse: (task: () => Promise<unknown>) => void task() }));
@@ -87,7 +89,8 @@ describe("password-changed notice", () => {
     vi.resetModules();
     Object.values(n).forEach((f) => f.mockReset());
     mockStaff.mockReset().mockResolvedValue({ ok: true, user: { id: "u1", email: "ada@gts.ng" }, fullName: "Ada", mustChangePassword: false });
-    (db.client as any).auth = { signInWithPassword: async () => ({ data: { user: { id: "u1" } }, error: null }), admin: { updateUserById: async () => ({ error: null }) } };
+    (db.client as any).auth = { admin: { updateUserById: async () => ({ error: null }) } };
+    mockVerify.mockResolvedValue(true);
     db.reset();
     const { POST } = await import("../app/api/v1/staff/me/password/route");
     const res = await POST(post("/api/v1/staff/me/password", { current_password: "OldPass123!", new_password: "NewPass456!", confirm_password: "NewPass456!" }));
@@ -98,7 +101,8 @@ describe("password-changed notice", () => {
   it("is not sent when the change failed", async () => {
     vi.resetModules();
     Object.values(n).forEach((f) => f.mockReset());
-    (db.client as any).auth = { signInWithPassword: async () => ({ data: { user: null }, error: { message: "bad" } }), admin: { updateUserById: async () => ({ error: null }) } };
+    (db.client as any).auth = { admin: { updateUserById: async () => ({ error: null }) } };
+    mockVerify.mockResolvedValue(false);
     const { POST } = await import("../app/api/v1/staff/me/password/route");
     await POST(post("/api/v1/staff/me/password", { current_password: "wrong", new_password: "NewPass456!", confirm_password: "NewPass456!" }));
     expect(n.pw).not.toHaveBeenCalled();

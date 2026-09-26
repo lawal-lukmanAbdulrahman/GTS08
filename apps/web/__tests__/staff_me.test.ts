@@ -32,14 +32,18 @@ function makeStub(table: string) {
   );
   return stub;
 }
+// The service client has no signInWithPassword on purpose: signing in on it would make its later writes run as the user.
 vi.mock("@gts/database", () => ({
   createServiceClient: () => ({
     from: (table: string) => makeStub(table),
-    auth: {
-      signInWithPassword: (...a: unknown[]) => mockSignIn(...a),
-      admin: { updateUserById: (...a: unknown[]) => mockUpdateUser(...a) },
-    },
+    auth: { admin: { updateUserById: (...a: unknown[]) => mockUpdateUser(...a) } },
   }),
+}));
+vi.mock("../app/api/v1/_lib/verify-password", () => ({
+  verifyPassword: async (email: string, password: string) => {
+    const r = (await mockSignIn({ email, password })) as { data?: { user?: unknown }; error?: unknown } | undefined;
+    return !r?.error && !!r?.data?.user;
+  },
 }));
 
 import { NextRequest } from "next/server";

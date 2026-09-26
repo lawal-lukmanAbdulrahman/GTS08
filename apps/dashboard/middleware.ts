@@ -58,6 +58,13 @@ export function middleware(request: NextRequest) {
     return res;
   }
 
+  // Password recovery must work without a session (and while signed in elsewhere).
+  if (pathname.startsWith("/forgot-password") || pathname.startsWith("/reset-password")) {
+    const res = NextResponse.next();
+    applyDashboardSecurityHeaders(res.headers);
+    return res;
+  }
+
   // If user visits "/login" while already authenticated
   if (pathname.startsWith("/login")) {
     if (token) {

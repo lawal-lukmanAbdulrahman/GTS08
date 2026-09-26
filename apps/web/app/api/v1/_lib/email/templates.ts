@@ -53,18 +53,43 @@ export function staffWelcomeEmail(o: { name: string; role: string; email: string
   };
 }
 
-export function passwordChangedEmail(o: { name: string; whenText: string; signInUrl: string; store: StoreInfo }): Rendered {
-  const help = o.store.phone ? `call ${o.store.phone}` : "contact your admin";
+export function passwordChangedEmail(o: { name: string; whenText: string; signInUrl: string; store: StoreInfo; account?: "staff" | "customer" }): Rendered {
+  const kind = o.account === "customer" ? "account" : "staff account";
+  const help = o.store.phone ? `call ${o.store.phone}` : o.account === "customer" ? "reply to this email" : "contact your admin";
   return {
     subject: "Your password was changed",
     html: shell(
       o.store,
       "Your password was changed",
-      p(`Hello ${esc(o.name)}, the password on your ${esc(o.store.name)} staff account was changed on <strong>${esc(o.whenText)}</strong>.`) +
+      p(`Hello ${esc(o.name)}, the password on your ${esc(o.store.name)} ${kind} was changed on <strong>${esc(o.whenText)}</strong>.`) +
         p(`If this wasn't you, ${esc(help)} straight away so your account can be secured.`) +
         button(o.signInUrl, "Sign in")
     ),
-    text: `Hello ${o.name}, the password on your ${o.store.name} staff account was changed on ${o.whenText}.\n\nIf this wasn't you, ${help} straight away.\n\nSign in: ${o.signInUrl}`,
+    text: `Hello ${o.name}, the password on your ${o.store.name} ${kind} was changed on ${o.whenText}.\n\nIf this wasn't you, ${help} straight away.\n\nSign in: ${o.signInUrl}`,
+  };
+}
+
+/** The greeting after a customer creates an account. */
+export function customerWelcomeEmail(o: { store: StoreInfo; name: string; shopUrl: string }): Rendered {
+  return {
+    subject: `Welcome to ${o.store.name}`,
+    html: shell(o.store, `Welcome, ${o.name}`, p(`Your ${esc(o.store.name)} account is ready. You can save your details for faster checkout, keep a wishlist and follow every order from your account.`) + button(o.shopUrl, "Start shopping")),
+    text: [`Welcome to ${o.store.name}, ${o.name}.`, "Your account is ready. You can save your details for faster checkout, keep a wishlist and follow every order from your account.", `Start shopping: ${o.shopUrl}`].join("\n\n"),
+  };
+}
+
+/** The link that lets someone choose a new password. One link, time-limited, and harmless if they never asked for it. */
+export function passwordResetEmail(o: { store: StoreInfo; name: string; resetUrl: string; validFor: string }): Rendered {
+  return {
+    subject: `Reset your ${o.store.name} password`,
+    html: shell(
+      o.store,
+      "Reset your password",
+      p(`Hello ${esc(o.name)}. Use the button below to choose a new password for your ${esc(o.store.name)} account. The link works once and expires in ${esc(o.validFor)}.`) +
+        button(o.resetUrl, "Choose a new password") +
+        p("If you didn't ask for this, you can ignore this email. Your password won't change.")
+    ),
+    text: [`Hello ${o.name}. Choose a new password for your ${o.store.name} account (the link works once and expires in ${o.validFor}):`, o.resetUrl, "If you didn't ask for this, ignore this email. Your password won't change."].join("\n\n"),
   };
 }
 

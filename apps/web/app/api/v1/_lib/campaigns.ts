@@ -1,6 +1,6 @@
 import { esc } from "./email/html";
 import { campaignEmail, type StoreInfo } from "./email/templates";
-import { sendEmail } from "./email/send";
+import { sendEmailBatch } from "./email/send";
 import { isPlainObject, oneLine, textField } from "./validate";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -85,19 +85,25 @@ export function validateCampaign(input: unknown, mode: "create" | "update"): { o
   return { ok: true, value };
 }
 
-/** The addresses an audience means, lower-cased, de-duplicated and capped. Throws on a database error. */
+/** The addresses an audience means, lower-cased, de-duplicated and capped, without anyone who opted out of marketing. Throws on a database error. */
 export async function resolveAudience(client: Client, type: Audience, params: { emails?: string[] } | null): Promise<string[]> {
+  if (type === "opted_in_only") return [];
+
+  const optedOut = new Set<string>();
+  const { data: outRows, error: outError } = await client.from("users").select("email").eq("email_marketing_opt_out", true).limit(50_000);
+  if (outError) throw new Error(outError.message);
+  for (const r of (outRows ?? []) as Array<{ email?: string | null }>) if (r.email) optedOut.add(r.email.trim().toLowerCase());
+
   const clean = (rows: Array<{ email?: string | null }>) => {
     const seen = new Set<string>();
     for (const r of rows) {
       const e = (r.email ?? "").trim().toLowerCase();
-      if (EMAIL.test(e)) seen.add(e);
+      if (EMAIL.test(e) && !optedOut.has(e)) seen.add(e);
       if (seen.size >= MAX_RECIPIENTS) break;
     }
     return [...seen];
   };
   if (type === "custom") return clean((params?.emails ?? []).map((email) => ({ email })));
-  if (type === "opted_in_only") return [];
 
   const { data: customers, error } = await client.from("customers").select("id, email").limit(20_000);
   if (error) throw new Error(error.message);
@@ -124,8 +130,6 @@ interface CampaignRow {
   status: string;
 }
 
-const CONCURRENCY = 10;
-
 /**
  * Sends a draft or due campaign. It is claimed first (draft/scheduled -> sending)
  * so two triggers can't both send it; each recipient's result is counted, one
@@ -145,15 +149,8 @@ export async function sendCampaign(client: Client, campaign: CampaignRow): Promi
     const unsubscribe = process.env.EMAIL_REPLY_TO?.trim() || process.env.EMAIL_FROM?.match(/<([^>]+)>/)?.[1] || process.env.EMAIL_FROM?.trim() || "support@gts.ng";
     const mail = campaignEmail({ store, subject: campaign.subject, preview: campaign.preview_text, bodyHtml: campaign.body_html ?? "", ctaLabel: campaign.cta_label, ctaUrl: campaign.cta_link, unsubscribeEmail: unsubscribe });
 
-    for (let i = 0; i < recipients.length; i += CONCURRENCY) {
-      const results = await Promise.all(
-        recipients.slice(i, i + CONCURRENCY).map((to) => sendEmail({ to, ...mail, headers: { "List-Unsubscribe": `<mailto:${unsubscribe}?subject=Unsubscribe>` } }))
-      );
-      for (const r of results) {
-        if (r.ok) sent++;
-        else failed++;
-      }
-    }
+    const headers = { "List-Unsubscribe": `<mailto:${unsubscribe}?subject=Unsubscribe>` };
+    ({ sent, failed } = await sendEmailBatch(recipients.map((to) => ({ to, ...mail, headers }))));
   } catch (err) {
     console.error("[campaigns] could not build the audience:", err);
   }

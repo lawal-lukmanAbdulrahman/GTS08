@@ -5,6 +5,8 @@ import { sanitizeEmail } from "../utils";
 import { validateSqlSafe, sanitizeSafeText, sanitizeDigitsOnly } from "@gts/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { serverError } from "../../_lib/http";
+import { afterResponse } from "../../_lib/email/after";
+import { notifyCustomerWelcome } from "../../_lib/email/events";
 
 export const POST = withIdempotency(async function POST(request: NextRequest) {
   try {
@@ -79,19 +81,16 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
 
     const userId = created.user.id;
 
-    // Upsert into customers table
+    // The customer record for this account (customers has no unique column to upsert on, so look first).
     try {
-      await serviceClient.from("customers").upsert(
-        {
-          user_id: userId,
-          email,
-          full_name: fullName || email.split("@")[0] || "Customer",
-          phone: phone || null,
-        },
-        { onConflict: "email" }
-      );
-    } catch {
-      // non-blocking
+      const displayName = fullName || email.split("@")[0] || "Customer";
+      const { data: existing } = await serviceClient.from("customers").select("id").eq("user_id", userId).maybeSingle();
+      if (!existing) {
+        const { error: customerError } = await serviceClient.from("customers").insert({ user_id: userId, email, full_name: displayName, phone: phone || null });
+        if (customerError) console.error("[auth/register] could not create the customer record:", customerError.message);
+      }
+    } catch (err) {
+      console.error("[auth/register] could not create the customer record:", err instanceof Error ? err.message : err);
     }
 
     // Upsert into users table
@@ -109,6 +108,9 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     } catch {
       // non-blocking
     }
+
+    const welcomeName = fullName || email.split("@")[0] || "there";
+    afterResponse(() => notifyCustomerWelcome(serviceClient, { name: welcomeName, email }));
 
     return NextResponse.json(
       {

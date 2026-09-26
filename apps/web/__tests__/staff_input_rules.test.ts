@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validatePhoneNumber, validatePasswordChange } from "@gts/utils";
+import { validatePhoneNumber, validatePasswordChange, validateNewPassword } from "@gts/utils";
 
 describe("validatePhoneNumber", () => {
   it("accepts common Nigerian formats and trims them", () => {
@@ -73,5 +73,22 @@ describe("validatePasswordChange (employee spec Part 8: current + new + confirm)
     const r = validatePasswordChange({ current: "", next: "abc", confirm: "xyz" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(Object.keys(r.errors).sort()).toEqual(["confirm_password", "current_password", "new_password"]);
+  });
+});
+
+describe("validateNewPassword (reset link)", () => {
+  it("accepts 8+ characters with a letter and a number that match", () => {
+    expect(validateNewPassword("BrandNew123", "BrandNew123")).toEqual({ ok: true });
+  });
+  it.each([
+    ["short1", "short1", "new_password"],
+    ["nodigitshere", "nodigitshere", "new_password"],
+    ["12345678", "12345678", "new_password"],
+    ["x".repeat(73) + "1", "x".repeat(73) + "1", "new_password"],
+    ["BrandNew123", "Different123", "confirm_password"],
+  ])("rejects %j / %j on %s", (next, confirm, field) => {
+    const r = validateNewPassword(next, confirm);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(Object.keys(r.errors)).toContain(field);
   });
 });

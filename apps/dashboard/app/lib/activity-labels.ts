@@ -64,6 +64,14 @@ export function describeActivity(entry: ActivityLike): { title: string; detail?:
       return { title: "Signed in" };
     case "auth.logout":
       return { title: "Signed out" };
+    case "auth.login_failed":
+      return withDetail("Failed sign-in attempt", c.reason === "pin_not_allowed_for_staff" ? "A PIN can't be used to sign in to a staff account" : c.reason === "wrong_password" ? "Wrong password" : undefined);
+    case "auth.login_blocked":
+      return { title: "Sign-in refused: account suspended" };
+    case "auth.password_reset":
+      return { title: "Reset their password from an email link" };
+    case "settings.data_mode":
+      return withDetail(c.to === "test" ? "Switched the shop to test data" : "Switched the shop to live data", str(c.from) ? `Was showing ${c.from} data` : undefined);
     case "profile.change_password":
       return { title: "Changed their password" };
     case "profile.update_phone":
