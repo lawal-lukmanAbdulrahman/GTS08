@@ -728,72 +728,6 @@ export default function AdminInventoryPage() {
             </div>
           )}
 
-          {/* 3D Isometric Stacked Crates Watermark */}
-          <div className="absolute -right-3 -bottom-5 w-32 h-25 pointer-events-none opacity-85 group-hover:scale-105 transition-all duration-300">
-            <svg viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <defs>
-                <style>{`
-                  .wm-crate-top-s1 { stop-color: #E5E7EB; }
-                  .wm-crate-top-s2 { stop-color: #D1D5DB; }
-                  .wm-crate-left-s1 { stop-color: #9CA3AF; }
-                  .wm-crate-left-s2 { stop-color: #6B7280; }
-                  .wm-crate-right-s1 { stop-color: #6B7280; }
-                  .wm-crate-right-s2 { stop-color: #4B5563; }
-                  .wm-crate-stroke { stroke: rgba(0, 0, 0, 0.16); }
-                  .wm-crate-line { stroke: rgba(51, 65, 85, 0.5); }
-                  .dark .wm-crate-top-s1 { stop-color: #3A3A3A; }
-                  .dark .wm-crate-top-s2 { stop-color: #2D2D2D; }
-                  .dark .wm-crate-left-s1 { stop-color: #242424; }
-                  .dark .wm-crate-left-s2 { stop-color: #1A1A1A; }
-                  .dark .wm-crate-right-s1 { stop-color: #1A1A1A; }
-                  .dark .wm-crate-right-s2 { stop-color: #121212; }
-                  .dark .wm-crate-stroke { stroke: rgba(255, 255, 255, 0.18); }
-                  .dark .wm-crate-line { stroke: rgba(255, 255, 255, 0.4); }
-                `}</style>
-                <linearGradient id="crateFadeMaskInv" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="white" stopOpacity="0.2" />
-                  <stop offset="50%" stopColor="white" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="white" stopOpacity="1" />
-                </linearGradient>
-
-                <mask id="fadeTopLeftCrateInv">
-                  <rect x="0" y="0" width="130" height="100" fill="url(#crateFadeMaskInv)" />
-                </mask>
-
-                <linearGradient id="crateTopGradInv" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" className="wm-crate-top-s1" />
-                  <stop offset="100%" className="wm-crate-top-s2" />
-                </linearGradient>
-                <linearGradient id="crateLeftGradInv" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" className="wm-crate-left-s1" />
-                  <stop offset="100%" className="wm-crate-left-s2" />
-                </linearGradient>
-                <linearGradient id="crateRightGradInv" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" className="wm-crate-right-s1" />
-                  <stop offset="100%" className="wm-crate-right-s2" />
-                </linearGradient>
-              </defs>
-
-              <g mask="url(#fadeTopLeftCrateInv)">
-                <g transform="translate(25, -12)">
-                  <polygon points="45,28 75,15 105,28 75,41" fill="url(#crateTopGradInv)" className="wm-crate-stroke" strokeWidth="1.2" />
-                  <polygon points="45,28 75,41 75,72 45,59" fill="url(#crateLeftGradInv)" className="wm-crate-stroke" strokeWidth="1.2" />
-                  <polygon points="75,41 105,28 105,59 75,72" fill="url(#crateRightGradInv)" className="wm-crate-stroke" strokeWidth="1.2" />
-                </g>
-                <g transform="translate(0, 4)">
-                  <polygon points="20,38 56,22 92,38 56,54" fill="url(#crateTopGradInv)" className="wm-crate-stroke" strokeWidth="1.6" />
-                  <line x1="38" y1="30" x2="74" y2="46" className="wm-crate-line" strokeWidth="2.5" strokeLinecap="round" />
-                  <polygon points="20,38 56,54 56,92 20,76" fill="url(#crateLeftGradInv)" className="wm-crate-stroke" strokeWidth="1.6" />
-                  <line x1="20" y1="57" x2="56" y2="73" className="wm-crate-line" strokeWidth="1.5" />
-                  <line x1="38" y1="46" x2="38" y2="84" className="wm-crate-line" strokeWidth="1.5" />
-                  <polygon points="56,54 92,38 92,76 56,92" fill="url(#crateRightGradInv)" className="wm-crate-stroke" strokeWidth="1.6" />
-                  <line x1="56" y1="73" x2="92" y2="57" className="wm-crate-line" strokeWidth="1.5" />
-                  <line x1="74" y1="46" x2="74" y2="84" className="wm-crate-line" strokeWidth="1.5" />
-                  <polygon points="64,54 82,46 82,58 64,66" fill="url(#crateTopGradInv)" opacity="0.8" className="wm-crate-stroke" strokeWidth="1" />
-                </g>
-              </g>
-            </svg>
-          </div>
         </div>
 
         {/* Card 2: Warehouse Stock Valuation */}
@@ -829,68 +763,6 @@ export default function AdminInventoryPage() {
             </div>
           )}
 
-          {/* 3D Isometric Industrial Warehouse Pallet Racking Watermark */}
-          <div className="absolute -right-3 -bottom-5 w-32 h-25 pointer-events-none opacity-85 group-hover:scale-105 transition-all duration-300">
-            <svg viewBox="0 0 140 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <defs>
-                <style>{`
-                  .wm-rack-frame-inv { stroke: rgba(0, 0, 0, 0.16); }
-                  .wm-rack-beam-inv { stroke: #6B7280; }
-                  .dark .wm-rack-frame-inv { stroke: rgba(255, 255, 255, 0.2); }
-                  .dark .wm-rack-beam-inv { stroke: #2D2D2D; }
-                `}</style>
-                <linearGradient id="rackFadeMaskInv" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="white" stopOpacity="0.2" />
-                  <stop offset="50%" stopColor="white" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="white" stopOpacity="1" />
-                </linearGradient>
-                <mask id="fadeRackMaskInv">
-                  <rect x="0" y="0" width="140" height="100" fill="url(#rackFadeMaskInv)" />
-                </mask>
-              </defs>
-
-              <g mask="url(#fadeRackMaskInv)" transform="translate(10, 4)">
-                {/* Industrial Warehouse Upright Columns */}
-                <line x1="20" y1="15" x2="20" y2="92" className="wm-rack-frame-inv" strokeWidth="2" strokeLinecap="round" />
-                <line x1="60" y1="36" x2="60" y2="98" className="wm-rack-frame-inv" strokeWidth="2" strokeLinecap="round" />
-                <line x1="100" y1="15" x2="100" y2="92" className="wm-rack-frame-inv" strokeWidth="2" strokeLinecap="round" />
-                
-                {/* Top Shelf Load Beams */}
-                <line x1="20" y1="30" x2="60" y2="52" className="wm-rack-beam-inv" strokeWidth="2.5" strokeLinecap="round" />
-                <line x1="60" y1="52" x2="100" y2="30" className="wm-rack-beam-inv" strokeWidth="2.5" strokeLinecap="round" />
-
-                {/* Bottom Shelf Load Beams */}
-                <line x1="20" y1="65" x2="60" y2="86" className="wm-rack-beam-inv" strokeWidth="2.5" strokeLinecap="round" />
-                <line x1="60" y1="86" x2="100" y2="65" className="wm-rack-beam-inv" strokeWidth="2.5" strokeLinecap="round" />
-
-                {/* Truss Cross Braces */}
-                <line x1="20" y1="30" x2="60" y2="86" className="wm-rack-frame-inv" strokeWidth="1" opacity="0.4" strokeDasharray="3 3" />
-                <line x1="60" y1="52" x2="100" y2="65" className="wm-rack-frame-inv" strokeWidth="1" opacity="0.4" strokeDasharray="3 3" />
-
-                {/* Top Shelf Pallet Box 1 (Left Bay) */}
-                <g transform="translate(28, 20)">
-                  <polygon points="12,8 24,2 36,8 24,14" fill="url(#crateTopGradInv)" className="wm-crate-stroke" strokeWidth="1" />
-                  <polygon points="12,8 24,14 24,26 12,20" fill="url(#crateLeftGradInv)" className="wm-crate-stroke" strokeWidth="1" />
-                  <polygon points="24,14 36,8 36,20 24,26" fill="url(#crateRightGradInv)" className="wm-crate-stroke" strokeWidth="1" />
-                </g>
-
-                {/* Top Shelf Pallet Box 2 (Right Bay) */}
-                <g transform="translate(62, 10)">
-                  <polygon points="12,8 24,2 36,8 24,14" fill="url(#crateTopGradInv)" className="wm-crate-stroke" strokeWidth="1" />
-                  <polygon points="12,8 24,14 24,24 12,18" fill="url(#crateLeftGradInv)" className="wm-crate-stroke" strokeWidth="1" />
-                  <polygon points="24,14 36,8 36,18 24,24" fill="url(#crateRightGradInv)" className="wm-crate-stroke" strokeWidth="1" />
-                </g>
-
-                {/* Bottom Shelf Heavy Pallet Stack (Center-Left) */}
-                <g transform="translate(32, 54)">
-                  <polygon points="14,10 30,2 46,10 30,18" fill="url(#crateTopGradInv)" className="wm-crate-stroke" strokeWidth="1.2" />
-                  <polygon points="14,10 30,18 30,34 14,26" fill="url(#crateLeftGradInv)" className="wm-crate-stroke" strokeWidth="1.2" />
-                  <polygon points="30,18 46,10 46,26 30,34" fill="url(#crateRightGradInv)" className="wm-crate-stroke" strokeWidth="1.2" />
-                  <line x1="22" y1="6" x2="38" y2="14" className="wm-crate-line" strokeWidth="1.8" strokeLinecap="round" />
-                </g>
-              </g>
-            </svg>
-          </div>
         </div>
 
         {/* Card 3: Low Stock Warnings */}
@@ -934,47 +806,6 @@ export default function AdminInventoryPage() {
             </div>
           )}
 
-          {/* 3D Isometric Depleted Pallet with Amber Low-Stock Gauge Watermark */}
-          <div className="absolute -right-3 -bottom-5 w-32 h-25 pointer-events-none opacity-85 group-hover:scale-105 transition-all duration-300">
-            <svg viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <defs>
-                <linearGradient id="lowStockFadeMaskInv" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="white" stopOpacity="0.2" />
-                  <stop offset="50%" stopColor="white" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="white" stopOpacity="1" />
-                </linearGradient>
-                <mask id="fadeLowStockMaskInv">
-                  <rect x="0" y="0" width="130" height="100" fill="url(#lowStockFadeMaskInv)" />
-                </mask>
-              </defs>
-
-              <g mask="url(#fadeLowStockMaskInv)" transform="translate(10, 8)">
-                {/* Wooden Pallet Base */}
-                <polygon points="20,58 56,42 92,58 56,74" fill="url(#crateTopGradInv)" className="wm-crate-stroke" strokeWidth="1.2" />
-                <polygon points="20,58 56,74 56,80 20,64" fill="url(#crateLeftGradInv)" className="wm-crate-stroke" strokeWidth="1.2" />
-                <polygon points="56,74 92,58 92,64 56,80" fill="url(#crateRightGradInv)" className="wm-crate-stroke" strokeWidth="1.2" />
-                <line x1="32" y1="52" x2="68" y2="68" className="wm-crate-line" strokeWidth="1.2" />
-                <line x1="44" y1="47" x2="80" y2="63" className="wm-crate-line" strokeWidth="1.2" />
-
-                {/* Single Remaining Low-Stock Crate Sitting on Pallet */}
-                <g transform="translate(0, -14)">
-                  <polygon points="32,46 56,36 80,46 56,56" fill="url(#crateTopGradInv)" className="wm-crate-stroke" strokeWidth="1.4" />
-                  <polygon points="32,46 56,56 56,72 32,62" fill="url(#crateLeftGradInv)" className="wm-crate-stroke" strokeWidth="1.4" />
-                  <polygon points="56,56 80,46 80,62 56,72" fill="url(#crateRightGradInv)" className="wm-crate-stroke" strokeWidth="1.4" />
-                  <line x1="44" y1="41" x2="68" y2="51" className="wm-crate-line" strokeWidth="1.5" strokeLinecap="round" />
-                </g>
-
-                {/* Ghost Outline of Missing Depleted Crates (Dashed Low Stock Indicator) */}
-                <g transform="translate(0, -38)">
-                  <polygon points="32,46 56,36 80,46 56,56" fill="none" stroke="rgba(245, 158, 11, 0.45)" strokeWidth="1.2" strokeDasharray="3 3" />
-                  <polygon points="32,46 56,56 56,70 32,60" fill="none" stroke="rgba(245, 158, 11, 0.35)" strokeWidth="1.2" strokeDasharray="3 3" />
-                  <polygon points="56,56 80,46 80,60 56,70" fill="none" stroke="rgba(245, 158, 11, 0.35)" strokeWidth="1.2" strokeDasharray="3 3" />
-                  {/* Amber Alert Threshold Mark */}
-                  <line x1="26" y1="62" x2="86" y2="62" stroke="#F59E0B" strokeWidth="2" strokeDasharray="4 2" strokeLinecap="round" opacity="0.85" />
-                </g>
-              </g>
-            </svg>
-          </div>
         </div>
 
         {/* Card 4: Out of Stock / Critical */}
@@ -1018,44 +849,6 @@ export default function AdminInventoryPage() {
             </div>
           )}
 
-          {/* 3D Isometric Empty Pallet with Zero Units Perimeter Watermark */}
-          <div className="absolute -right-3 -bottom-5 w-32 h-25 pointer-events-none opacity-85 group-hover:scale-105 transition-all duration-300">
-            <svg viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <defs>
-                <linearGradient id="outOfStockFadeMaskInv" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="white" stopOpacity="0.2" />
-                  <stop offset="50%" stopColor="white" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="white" stopOpacity="1" />
-                </linearGradient>
-                <mask id="fadeOutOfStockMaskInv">
-                  <rect x="0" y="0" width="130" height="100" fill="url(#outOfStockFadeMaskInv)" />
-                </mask>
-              </defs>
-
-              <g mask="url(#fadeOutOfStockMaskInv)" transform="translate(10, 8)">
-                {/* Empty Wooden Warehouse Pallet */}
-                <polygon points="20,54 56,38 92,54 56,70" fill="url(#crateTopGradInv)" className="wm-crate-stroke" strokeWidth="1.4" />
-                <polygon points="20,54 56,70 56,78 20,62" fill="url(#crateLeftGradInv)" className="wm-crate-stroke" strokeWidth="1.4" />
-                <polygon points="56,70 92,54 92,62 56,78" fill="url(#crateRightGradInv)" className="wm-crate-stroke" strokeWidth="1.4" />
-                
-                {/* Pallet Top Deck Slats (Empty Deck) */}
-                <line x1="28" y1="50" x2="64" y2="66" className="wm-crate-line" strokeWidth="1.4" />
-                <line x1="38" y1="46" x2="74" y2="62" className="wm-crate-line" strokeWidth="1.4" />
-                <line x1="48" y1="41" x2="84" y2="57" className="wm-crate-line" strokeWidth="1.4" />
-
-                {/* Completely Empty Ghost Crate Perimeter (0 Stock) */}
-                <g transform="translate(0, -22)">
-                  <polygon points="28,44 56,32 84,44 56,56" fill="none" stroke="rgba(244, 63, 94, 0.45)" strokeWidth="1.4" strokeDasharray="4 3" />
-                  <polygon points="28,44 56,56 56,74 28,62" fill="none" stroke="rgba(244, 63, 94, 0.35)" strokeWidth="1.4" strokeDasharray="4 3" />
-                  <polygon points="56,56 84,44 84,62 56,74" fill="none" stroke="rgba(244, 63, 94, 0.35)" strokeWidth="1.4" strokeDasharray="4 3" />
-                  
-                  {/* Empty Perimeter Diagonal Cross */}
-                  <line x1="28" y1="44" x2="84" y2="44" stroke="rgba(244, 63, 94, 0.6)" strokeWidth="1.2" strokeDasharray="2 2" />
-                  <line x1="56" y1="32" x2="56" y2="56" stroke="rgba(244, 63, 94, 0.6)" strokeWidth="1.2" strokeDasharray="2 2" />
-                </g>
-              </g>
-            </svg>
-          </div>
         </div>
       </div>
 

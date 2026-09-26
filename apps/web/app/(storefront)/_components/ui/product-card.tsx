@@ -7,6 +7,7 @@ import { useCart } from "../cart-context";
 import { useWishlist } from "../wishlist-context";
 import { useCatalogue } from "../catalogue-context";
 import { saveRecentlyViewed } from "../landing/search-history";
+import { trackProductClick, trackProductWishlist, trackProductCart } from "../../_lib/analytics";
 
 export interface ProductCardProps {
   id: string;
@@ -75,6 +76,7 @@ export function ProductCard({
   const handleWishlistClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    trackProductWishlist(id, !isWishlisted ? "add" : "remove");
     if (onToggleWishlist) {
       onToggleWishlist(id);
     } else {
@@ -85,6 +87,7 @@ export function ProductCard({
   const handleCartClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    trackProductCart(id);
     if (onAddToCart) {
       onAddToCart(id);
     } else {
@@ -127,6 +130,7 @@ export function ProductCard({
       <Link
         href={`/product/${productSlug}`}
         onClick={() => {
+          trackProductClick(id, "product_card");
           saveRecentlyViewed({
             id,
             slug: productSlug,

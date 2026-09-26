@@ -63,7 +63,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "size-guides/[categorySlug]": { GET: "public", PUT: "permission:can_manage_products" },
 
   // ── storefront content
-  "broadcast": { GET: "public", DELETE: "admin", POST: "admin" }, // GET: the banner the storefront shows
+  "broadcast": { GET: "public", DELETE: "permission:can_manage_broadcasts", POST: "permission:can_manage_broadcasts" }, // GET: the banner the storefront shows
   "broadcast/analytics": { POST: "public" }, // visitor impression events; rate limited
   "content-slots": { GET: "public" }, // live slots for the homepage
   "content-slots/[key]": { GET: "public", PUT: "admin" },

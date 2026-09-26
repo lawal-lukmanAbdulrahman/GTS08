@@ -6,7 +6,7 @@ import { createServiceClient } from "@gts/database";
 import { withIdempotency } from "@/lib/idempotency";
 import { sanitizeSafeText, sanitizeUrl } from "@gts/utils";
 import type { BroadcastItem } from "../../../../lib/notifications";
-import { requireAdmin } from "../_lib/staff-access";
+import { requirePermission } from "../_lib/staff-access";
 import { serverError } from "../_lib/http";
 
 // ─── File-backed & In-memory broadcast campaigns store ───────────────────────
@@ -222,8 +222,7 @@ export const DELETE = withIdempotency(async function DELETE(request: NextRequest
   await ensureCampaignsLoaded();
 
   try {
-    // Only admins manage broadcasts (no development-mode bypass).
-    const access = await requireAdmin(request);
+    const access = await requirePermission(request, "can_manage_broadcasts");
     if (!access.ok) return access.response;
     const _user = access.user;
 
@@ -261,7 +260,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
   await ensureCampaignsLoaded();
 
   try {
-    const access = await requireAdmin(request);
+    const access = await requirePermission(request, "can_manage_broadcasts");
     if (!access.ok) return access.response;
     const _user = access.user;
     const serviceClient = createServiceClient();

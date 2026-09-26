@@ -94,33 +94,7 @@ export default function CartPage() {
           )}
         </div>
 
-        {/* ── Free Shipping Progress Bar ── */}
-        {cartItems.length > 0 && (
-          <div className="bg-[#F9F8F5] rounded-2xl p-4 mb-8 border border-gray-200/80 shadow-2xs">
-            <div className="flex items-center justify-between text-xs sm:text-sm font-semibold mb-2">
-              <span className="flex items-center gap-2 text-[#010101]">
-                <svg className="w-4 h-4 text-[#EDCF5D]" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M19 7h-3V6a3 3 0 00-3-3H5a3 3 0 00-3 3v9a3 3 0 003 3h.78a3 3 0 005.44 0h3.56a3 3 0 005.44 0H21a1 1 0 001-1v-5a3 3 0 00-3-3zM7.5 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm11 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
-                </svg>
-                {isFreeShipping ? (
-                  <span className="text-emerald-700 font-bold">You qualify for FREE Express Shipping!</span>
-                ) : (
-                  <span>
-                    Add <strong className="text-[#010101]">₦{remainingForFreeShipping.toLocaleString()}</strong> more to get <strong>Free Express Shipping</strong>
-                  </span>
-                )}
-              </span>
-              <span className="text-xs font-bold text-[#010101]">{progressPercent}%</span>
-            </div>
-            <div className="w-full bg-[#F2F0EA] h-2 rounded-full overflow-hidden">
-              <div
-                className="bg-[#010101] h-full transition-all duration-500 rounded-full"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-          </div>
-        )}
-
+    
         {cartItems.length > 0 ? (
           /* ── Main Two-Column Layout ── */
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -343,35 +317,6 @@ export default function CartPage() {
                   <span>Proceed to Checkout</span>
                   <span className="group-hover:translate-x-1 transition-transform inline-block">→</span>
                 </Link>
-
-                {/* Secure Checkout Trust Badges */}
-                <div className="pt-4 border-t border-gray-100 flex flex-col gap-3">
-                  <div className="flex items-center justify-center gap-4 text-gray-400 text-xs font-semibold">
-                    <span className="flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      256-bit SSL
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      30-Day Money Back
-                    </span>
-                  </div>
-
-                  {/* Payment Icons Pill */}
-                  <div className="flex items-center justify-center gap-2 pt-1 opacity-70">
-                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">VISA</span>
-                    <span className="text-gray-300">•</span>
-                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Mastercard</span>
-                    <span className="text-gray-300">•</span>
-                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Verve</span>
-                    <span className="text-gray-300">•</span>
-                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Apple Pay</span>
-                  </div>
-                </div>
               </div>
             </div>
           </div>

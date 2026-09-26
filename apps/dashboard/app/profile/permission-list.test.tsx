@@ -12,6 +12,7 @@ const NONE: PermissionsView = {
   can_handle_tickets: false,
   can_void_orders: false,
   can_apply_discounts: false,
+  can_manage_broadcasts: false,
 };
 
 describe("PermissionList (what this person can access)", () => {

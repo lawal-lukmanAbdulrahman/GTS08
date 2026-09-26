@@ -3,36 +3,54 @@
 import Link from "next/link";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { ProductCard } from "../ui/product-card";
-import type { ProductItem } from "../data/products";
 import { useCatalogue } from "../catalogue-context";
+import { dbProductToItem, type ApiProduct } from "../../_lib/catalogue";
+import type { ProductItem } from "../../_data/products";
 
-// Curated appliance and kitchen items
-const APPLIANCE_IDS = [
-  "airfryer",
-  "blender",
-  "microwave",
-  "juicer",
-  "pot",
-  "toaster",
-  "samsung-fridge",
-  "four-fridge",
-  "nexus-washing-machine",
-  "standing-fan",
-];
-
-export function UpgradeAppliances() {
+export function Trending() {
   const { products: catalogue } = useCatalogue();
+  const [apiProducts, setApiProducts] = useState<ProductItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Collect the curated appliance products in order
-  const applianceProducts = useMemo(() => {
-    return APPLIANCE_IDS.map((id) => catalogue.find((p) => p.id === id)).filter(
-      (p): p is ProductItem => Boolean(p)
-    );
-  }, [catalogue]);
+  useEffect(() => {
+    let mounted = true;
+    async function fetchTrending() {
+      try {
+        const res = await fetch("/api/v1/storefront/trending?limit=12");
+        if (res.ok) {
+          const json = await res.json();
+          if (mounted && Array.isArray(json.data) && json.data.length > 0) {
+            const mapped = json.data.map((p: ApiProduct) => dbProductToItem(p));
+            setApiProducts(mapped);
+          }
+        }
+      } catch {
+        // silent fallback to catalogue
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    void fetchTrending();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Instant-on: use cached/computed catalogue items immediately so the shopper NEVER sees empty skeletons
+  const PRODUCTS = useMemo(() => {
+    if (apiProducts.length > 0) return apiProducts;
+    return [...catalogue]
+      .sort((a, b) => {
+        const scoreB = (Number(b.rating) || 0) * 10 + (Number(b.reviews) || 0);
+        const scoreA = (Number(a.rating) || 0) * 10 + (Number(a.reviews) || 0);
+        return scoreB - scoreA;
+      })
+      .slice(0, 12);
+  }, [apiProducts, catalogue]);
 
   const updateScrollState = () => {
     if (scrollContainerRef.current) {
@@ -53,7 +71,7 @@ export function UpgradeAppliances() {
         window.removeEventListener("resize", updateScrollState);
       };
     }
-  }, [applianceProducts]);
+  }, [PRODUCTS]);
 
   const toggleWishlist = (id: string) => {
     setWishlisted((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -71,24 +89,26 @@ export function UpgradeAppliances() {
     }
   };
 
+  if (!loading && PRODUCTS.length === 0) return null;
+
   return (
-    <section className="w-full px-3 md:px-4 pt-4 sm:pt-6 md:pt-8 pb-3 sm:pb-4 md:pb-5">
+    <section className="w-full px-3 md:px-4 pt-3 sm:pt-4 md:pt-5 pb-3 sm:pb-4 md:pb-5">
       <div className="max-w-[1240px] mx-auto">
         {/* ── Section Header ── */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4 sm:mb-5">
+        <div className="flex justify-between items-end mb-5 sm:mb-6">
           <div>
             <h2 className="text-lg sm:text-xl md:text-3xl font-normal text-[#010101] tracking-tight flex items-center gap-2">
-              Upgrade Your <span className="text-[#EDCF5D] font-bold">✦</span>
-              <span className="font-serif italic font-bold text-[#010101]">Appliances</span>
+              Trending <span className="text-[#EDCF5D] font-bold">✦</span>
+              <span className="font-serif italic font-bold text-[#010101]">This Week</span>
             </h2>
           </div>
 
           <Link
-            href="/search?category=Appliances"
+            href="/search?filter=trending"
             className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
           >
             <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">
-              View all appliances
+              View all
             </span>
             <span className="group-hover:translate-x-0.5 transition-transform inline-block">→</span>
           </Link>
@@ -105,7 +125,7 @@ export function UpgradeAppliances() {
 
           {/* Left Arrow Button */}
           <button
-            aria-label="Previous appliances"
+            aria-label="Previous trending products"
             onClick={handleScrollLeft}
             className={`absolute left-3 sm:left-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md ${
               canScrollLeft ? "opacity-100 flex" : "opacity-0 pointer-events-none hidden"
@@ -122,26 +142,33 @@ export function UpgradeAppliances() {
             className="flex gap-4 sm:gap-5 overflow-x-auto scroll-smooth no-scrollbar py-1"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
-            {applianceProducts.map((product) => {
-              const isWishlisted = wishlisted[product.id];
-              return (
-                <ProductCard
-                  key={product.id}
-                  id={product.id}
-                  title={product.title}
-                  price={product.price}
-                  originalPrice={product.originalPrice}
-                  badge={product.badge}
-                  rating={product.rating}
-                  reviews={product.reviews}
-                  image={product.image}
-                  hasTransparentBg={product.hasTransparentBg}
-                  isWishlisted={isWishlisted}
-                  onToggleWishlist={toggleWishlist}
-                  className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0"
-                />
-              );
-            })}
+            {PRODUCTS.length === 0 && loading
+              ? Array.from({ length: 6 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0 h-64 rounded-xl bg-gray-100 animate-pulse"
+                  />
+                ))
+              : PRODUCTS.map((product) => {
+                  const isWishlisted = wishlisted[product.id];
+                  return (
+                    <ProductCard
+                      key={product.id}
+                      id={product.id}
+                      title={product.title}
+                      price={product.price}
+                      originalPrice={product.originalPrice}
+                      badge={product.badge || "HOT"}
+                      rating={product.rating}
+                      reviews={product.reviews}
+                      image={product.image}
+                      hasTransparentBg={product.hasTransparentBg}
+                      isWishlisted={isWishlisted}
+                      onToggleWishlist={toggleWishlist}
+                      className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0"
+                    />
+                  );
+                })}
           </div>
 
           {/* Right Fade Overlay */}
@@ -153,7 +180,7 @@ export function UpgradeAppliances() {
 
           {/* Right Arrow Button */}
           <button
-            aria-label="Next appliances"
+            aria-label="Next trending products"
             onClick={handleScrollRight}
             className={`absolute right-3 sm:right-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md ${
               canScrollRight ? "opacity-100 flex" : "opacity-0 pointer-events-none hidden"

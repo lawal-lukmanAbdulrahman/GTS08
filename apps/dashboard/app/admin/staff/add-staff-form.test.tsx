@@ -21,6 +21,7 @@ describe("AddStaffForm", () => {
     expect(screen.getByLabelText(/role/i)).toHaveValue("cashier");
     expect(screen.getByRole("checkbox", { name: /use the point of sale/i })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: /void/i })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /manage broadcasts/i })).not.toBeChecked();
   });
 
   it("offers cashier and admin, but not inventory staff (that portal isn't built yet)", () => {

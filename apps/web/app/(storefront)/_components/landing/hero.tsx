@@ -272,10 +272,9 @@ const HERO_PRODUCTS: HeroProduct[] = [
   },
 ];
 
-const N = HERO_PRODUCTS.length; // 4
-
 // ─── Helper: true modulo (always non-negative, unlike JS's `%`) ──────────────
 function mod(n: number, m: number) {
+  if (m <= 0) return 0;
   return ((n % m) + m) % m;
 }
 
@@ -361,13 +360,123 @@ export function Hero() {
    * A slide can only ever reverse direction if the *user* reverses
    * direction, which is correct, expected behavior.
    */
-  const [centerStep, setCenterStep] = useState(2); // HERO_PRODUCTS[2] = Google Pixel 10 Pro
-
-
+  const [productsList, setProductsList] = useState<HeroProduct[]>(HERO_PRODUCTS);
+  const [centerStep, setCenterStep] = useState(2);
   const [isPaused, setIsPaused] = useState(false);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>(
     Object.fromEntries(HERO_PRODUCTS.map((p) => [p.id, 0]))
   );
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadHeroFromDb() {
+      try {
+        const res = await fetch("/api/v1/storefront/hero");
+        if (!res.ok) return;
+        const json = await res.json();
+        if (mounted && Array.isArray(json.data) && json.data.length > 0) {
+          const PALETTES = [
+            {
+              radialGradient: "radial-gradient(ellipse 90% 80% at 50% 52%, #2A52C4 0%, #1A3678 20%, #0E2050 42%, #070F2C 62%, #030818 80%, #010510 100%)",
+              glowColor: "rgba(30, 58, 138, 0.65)",
+              edgeColor: "#010510",
+            },
+            {
+              radialGradient: "radial-gradient(ellipse 90% 80% at 50% 52%, #B45309 0%, #78350F 20%, #452006 42%, #221003 62%, #0E0802 80%, #060402 100%)",
+              glowColor: "rgba(120, 53, 15, 0.65)",
+              edgeColor: "#060402",
+            },
+            {
+              radialGradient: "radial-gradient(ellipse 90% 80% at 50% 52%, #166534 0%, #0F4024 20%, #082816 42%, #041408 62%, #020A04 80%, #010502 100%)",
+              glowColor: "rgba(20, 83, 45, 0.65)",
+              edgeColor: "#010502",
+            },
+            {
+              radialGradient: "radial-gradient(ellipse 90% 80% at 50% 52%, #4C1D95 0%, #3B0764 20%, #2E0854 42%, #1A0530 62%, #0E021A 80%, #07010D 100%)",
+              glowColor: "rgba(126, 34, 206, 0.65)",
+              edgeColor: "#07010D",
+            },
+          ];
+
+          const mapped: HeroProduct[] = json.data.map((item: any, idx: number) => {
+            const p = item.product;
+            const pal = PALETTES[idx % PALETTES.length]!;
+            const imgRaw = p?.images?.[0]?.cloudinary_public_id || "/products/hero/air_jordan_retro_1_blue.png";
+            const imageUrl =
+              imgRaw.startsWith("/") || imgRaw.startsWith("http")
+                ? imgRaw
+                : `https://res.cloudinary.com/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "dqj3zbf5e"}/image/upload/${imgRaw}`;
+
+            const variants: ColorVariant[] =
+              p?.variants && p.variants.length > 0
+                ? p.variants.map((v: any, vi: number) => {
+                    const vPal = PALETTES[(idx + vi) % PALETTES.length]!;
+                    return {
+                      id: v.id || `${p.id}-${vi}`,
+                      colorName: v.color || "Default",
+                      colorHex: v.color_hex || "#333333",
+                      image: imageUrl,
+                      radialGradient: vPal.radialGradient,
+                      glowColor: vPal.glowColor,
+                      edgeColor: vPal.edgeColor,
+                      hasTransparentBg: p.has_transparent_bg,
+                    };
+                  })
+                : [
+                    {
+                      id: `${p.id}-default`,
+                      colorName: "Original",
+                      colorHex: "#333333",
+                      image: imageUrl,
+                      radialGradient: pal.radialGradient,
+                      glowColor: pal.glowColor,
+                      edgeColor: pal.edgeColor,
+                      hasTransparentBg: p.has_transparent_bg,
+                    },
+                  ];
+
+            const words = (p.name || "").split(" ");
+            const headline =
+              words.length > 2
+                ? `${words.slice(0, 2).join(" ")}\n${words.slice(2).join(" ")}`
+                : p.name || "Special Item";
+
+            const discount =
+              p.compare_at_price && p.compare_at_price > p.base_price
+                ? `${Math.round(((p.compare_at_price - p.base_price) / p.compare_at_price) * 100)}% OFF`
+                : undefined;
+
+            return {
+              id: p.id,
+              slug: p.slug,
+              headline,
+              tagline: p.short_description || p.brand || "Flagship Selection",
+              price: `₦${(p.base_price / 100).toLocaleString("en-NG")}`,
+              originalPrice: p.compare_at_price
+                ? `₦${(p.compare_at_price / 100).toLocaleString("en-NG")}`
+                : "",
+              badge: discount,
+              rating: Number(p.average_rating || 4.9),
+              reviews: `${p.review_count || 120}`,
+              variants,
+            };
+          });
+
+          if (mapped.length > 0) {
+            setProductsList(mapped);
+          }
+        }
+      } catch {
+        // silent fallback
+      }
+    }
+    void loadHeroFromDb();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const N = productsList.length || 1;
 
   // Derived: which product index is currently centered (for text/gradients)
   const currentIndex = mod(centerStep, N);
@@ -385,13 +494,18 @@ export function Hero() {
       return;
     }
     intervalRef.current = setInterval(handleNext, 4000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [isPaused, handleNext]);
 
-  const activeProduct      = HERO_PRODUCTS[currentIndex] ?? HERO_PRODUCTS[0]!;
-  const activeVariants     = getHeroEligibleVariants(activeProduct);
-  const activeVariantIndex = Math.min(selectedVariants[activeProduct.id] ?? 0, Math.max(0, activeVariants.length - 1));
-  const activeVariant      = activeVariants[activeVariantIndex] ?? activeProduct.variants[0]!;
+  const activeProduct = productsList[currentIndex] ?? productsList[0]!;
+  const activeVariants = getHeroEligibleVariants(activeProduct);
+  const activeVariantIndex = Math.min(
+    selectedVariants[activeProduct.id] ?? 0,
+    Math.max(0, activeVariants.length - 1)
+  );
+  const activeVariant = activeVariants[activeVariantIndex] ?? activeProduct.variants[0]!;
 
   return (
     <div
@@ -400,27 +514,34 @@ export function Hero() {
       onMouseLeave={() => setIsPaused(false)}
     >
       <section className="relative w-full h-[75vh] sm:h-[calc(100vh-140px)] min-h-[380px] sm:min-h-[520px] max-h-[780px] overflow-hidden rounded-[18px] border border-white/10 shadow-xl">
-
         {/* ── Background Gradient Layers ── */}
-        {HERO_PRODUCTS.map((product, pi) => {
+        {productsList.map((product, pi) => {
           const eligible = getHeroEligibleVariants(product);
           return eligible.map((variant, vi) => {
-            const isActive = pi === currentIndex && vi === Math.min(selectedVariants[product.id] ?? 0, Math.max(0, eligible.length - 1));
+            const isActive =
+              pi === currentIndex &&
+              vi === Math.min(selectedVariants[product.id] ?? 0, Math.max(0, eligible.length - 1));
             return (
               <div
                 key={variant.id}
                 className="absolute inset-0 z-0 transition-opacity duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)]"
-                style={{ background: variant.radialGradient, opacity: isActive ? 1 : 0, pointerEvents: "none" }}
+                style={{
+                  background: variant.radialGradient,
+                  opacity: isActive ? 1 : 0,
+                  pointerEvents: "none",
+                }}
               />
             );
           });
         })}
 
         {/* ── Ambient Glow ── */}
-        {HERO_PRODUCTS.map((product, pi) => {
+        {productsList.map((product, pi) => {
           const eligible = getHeroEligibleVariants(product);
           return eligible.map((variant, vi) => {
-            const isActive = pi === currentIndex && vi === Math.min(selectedVariants[product.id] ?? 0, Math.max(0, eligible.length - 1));
+            const isActive =
+              pi === currentIndex &&
+              vi === Math.min(selectedVariants[product.id] ?? 0, Math.max(0, eligible.length - 1));
             return (
               <div
                 key={`glow-${variant.id}`}
@@ -463,7 +584,7 @@ export function Hero() {
           {RENDER_OFFSETS.map((offset) => {
             const virtualStep = centerStep + offset;
             const pi          = mod(virtualStep, N);
-            const product     = HERO_PRODUCTS[pi]!;
+            const product     = productsList[pi] ?? productsList[0]!;
             const role        = OFFSET_ROLE[offset];
             const pos         = POSITION[role!];
             const isCenter    = role === "center";
@@ -623,7 +744,7 @@ export function Hero() {
 
         {/* ── Dot Indicators — always centered, all breakpoints ── */}
         <div className="absolute bottom-2 sm:bottom-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 pt-4">
-          {HERO_PRODUCTS.map((_, pi) => (
+          {productsList.map((_, pi) => (
             <button
               key={pi}
               onClick={() => {

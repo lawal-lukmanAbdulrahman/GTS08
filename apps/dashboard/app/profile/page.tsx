@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import ActivityList from "../components/staff/activity-list";
 import SalesPanel from "../components/staff/sales-panel";
-import StaffMenu from "../components/staff/staff-menu";
+import { SidebarToggle } from "../admin/sidebar-context";
 import IdleLockScreen from "../components/idle/idle-lock-screen";
 import { useIdleLock } from "../components/idle/use-idle-lock";
 import { apiCall } from "../lib/staff-api";
@@ -201,25 +201,9 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-[#F8F7F4] dark:bg-[#1C1C1C] font-sans">
       <header className="sticky top-0 z-30 flex items-center justify-between gap-4 px-6 lg:px-10 py-4 border-b border-gray-200 dark:border-[#262626] bg-white/95 dark:bg-[#1C1C1C]/95 backdrop-blur">
-        <div className="flex items-center gap-4 min-w-0">
-          <span className="text-lg font-black tracking-tight text-gray-900 dark:text-white">GTS</span>
-          <span className="hidden sm:block h-5 w-px bg-gray-200 dark:bg-[#383838]" aria-hidden="true" />
+        <div className="flex items-center gap-3 min-w-0">
+          <SidebarToggle className="hidden lg:inline-flex -ml-2 mr-1" />
           <h1 className="text-base font-bold text-gray-900 dark:text-white truncate">My profile</h1>
-        </div>
-        <div className="flex items-center gap-4">
-          {session.canUsePos && (
-            <Link href="/pos" className="px-4 py-2 text-sm font-semibold rounded-[8px] bg-[#EDCF5D] text-[#010101]">
-              ← Back to POS
-            </Link>
-          )}
-          <StaffMenu
-            name={profile.full_name ?? ""}
-            role={profile.role}
-            isAdmin={session.isAdmin}
-            canUsePos={session.canUsePos}
-            current="profile"
-            onSignOut={session.signOut}
-          />
         </div>
       </header>
 

@@ -7,6 +7,8 @@ import type { ProductItem } from "../_data/products";
 import { ALL_BRAND_KEYS } from "../_data/brands";
 import { useCatalogue } from "../_components/catalogue-context";
 import { ProductSearchEngine, type SearchableProduct } from "../../../lib/search-engine";
+import { dbProductToItem, type ApiProduct } from "../_lib/catalogue";
+import { getCartSessionId } from "../_lib/server-sync";
 
 const MEGA_CATEGORY_NAMES = [
   "Appliances",
@@ -348,10 +350,138 @@ function SearchPageInner() {
   const query = (searchParams.get("q") ?? searchParams.get("search") ?? "").trim();
   const initialCat = searchParams.get("category") ?? "All";
   const initialBrand = searchParams.get("brand") ?? "";
+  const initialFilter = (searchParams.get("filter") ?? searchParams.get("section") ?? "").trim();
 
   // Products come from the database through the shared catalogue.
   const { products: allCatalogProducts, loading: loadingDb } = useCatalogue();
-  const CATEGORIES = useMemo(() => ["All", ...Array.from(new Set([...MEGA_CATEGORY_NAMES, ...allCatalogProducts.map((p) => p.category)]))], [allCatalogProducts]);
+
+  // Storefront section filter state (trending, bestselling, new-arrivals, for-you, deals)
+  const [activeFilter, setActiveFilter] = useState(initialFilter);
+  const [sectionProducts, setSectionProducts] = useState<ProductItem[]>([]);
+  const [loadingSection, setLoadingSection] = useState(false);
+
+  useEffect(() => {
+    setActiveFilter(initialFilter);
+  }, [initialFilter]);
+
+  // Fetch section data when activeFilter is an API-driven algorithmic section
+  useEffect(() => {
+    if (!activeFilter) {
+      setSectionProducts([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadSectionItems() {
+      const norm = activeFilter.toLowerCase();
+      if (norm === "trending") {
+        setLoadingSection(true);
+        try {
+          const res = await fetch("/api/v1/storefront/trending?limit=100");
+          if (res.ok) {
+            const json = await res.json();
+            if (isMounted && Array.isArray(json.data)) {
+              setSectionProducts(json.data.map((p: ApiProduct) => dbProductToItem(p)));
+            }
+          }
+        } catch {
+          // fallback to catalog
+        } finally {
+          if (isMounted) setLoadingSection(false);
+        }
+      } else if (norm === "bestselling") {
+        setLoadingSection(true);
+        try {
+          const res = await fetch("/api/v1/storefront/bestselling?limit=100");
+          if (res.ok) {
+            const json = await res.json();
+            if (isMounted && Array.isArray(json.data)) {
+              setSectionProducts(json.data.map((p: ApiProduct) => dbProductToItem(p)));
+            }
+          }
+        } catch {
+          // fallback to catalog
+        } finally {
+          if (isMounted) setLoadingSection(false);
+        }
+      } else if (norm === "for-you") {
+        setLoadingSection(true);
+        try {
+          const sessionId = getCartSessionId();
+          const res = await fetch(`/api/v1/storefront/for-you?limit=100&session_id=${encodeURIComponent(sessionId)}`);
+          if (res.ok) {
+            const json = await res.json();
+            if (isMounted && Array.isArray(json.data)) {
+              setSectionProducts(json.data.map((p: ApiProduct) => dbProductToItem(p)));
+            }
+          }
+        } catch {
+          // fallback to catalog
+        } finally {
+          if (isMounted) setLoadingSection(false);
+        }
+      } else {
+        setSectionProducts([]);
+      }
+    }
+
+    void loadSectionItems();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeFilter]);
+
+  // Base products computed from active section filter
+  const baseProducts = useMemo(() => {
+    const norm = activeFilter.toLowerCase();
+
+    if (norm === "new-arrivals") {
+      return [...allCatalogProducts].sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+    }
+
+    if (norm === "deals" || norm === "crazy-deals") {
+      return [...allCatalogProducts]
+        .filter(
+          (p) =>
+            (p.rawCompareAtPrice && p.rawCompareAtPrice > (p.rawBasePrice ?? 0)) ||
+            Boolean(p.originalPrice) ||
+            p.badge === "SALE"
+        )
+        .sort((a, b) => (b.discountPercent ?? 0) - (a.discountPercent ?? 0));
+    }
+
+    if (sectionProducts.length > 0 && (norm === "trending" || norm === "bestselling" || norm === "for-you")) {
+      return sectionProducts;
+    }
+
+    if (norm === "bestselling") {
+      return [...allCatalogProducts].sort((a, b) => (b.totalSold ?? 0) - (a.totalSold ?? 0));
+    }
+
+    if (norm === "trending") {
+      return [...allCatalogProducts].sort((a, b) => {
+        const scoreB = (Number(b.rating) || 0) * 10 + (Number(b.reviews) || 0);
+        const scoreA = (Number(a.rating) || 0) * 10 + (Number(a.reviews) || 0);
+        return scoreB - scoreA;
+      });
+    }
+
+    if (norm === "for-you") {
+      return [...allCatalogProducts].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    }
+
+    return allCatalogProducts;
+  }, [allCatalogProducts, activeFilter, sectionProducts]);
+
+  const CATEGORIES = useMemo(
+    () => ["All", ...Array.from(new Set([...MEGA_CATEGORY_NAMES, ...baseProducts.map((p) => p.category)]))],
+    [baseProducts]
+  );
   const [activeCategory, setActiveCategory] = useState(initialCat);
   const [priceRange, setPriceRange] = useState<[number, number]>([MIN_PRICE, MAX_PRICE]);
   const [minDiscount, setMinDiscount] = useState<number | null>(null);
@@ -380,15 +510,15 @@ function SearchPageInner() {
   // ── Search Engine: build synchronously so results are ready on FIRST render ─
   const { engine, productMap } = useMemo(() => {
     const e = new ProductSearchEngine();
-    e.buildIndex(allCatalogProducts.map(toSearchable));
+    e.buildIndex(baseProducts.map(toSearchable));
     const map = new Map<string, ProductItem>();
-    for (const p of allCatalogProducts) map.set(p.id, p);
+    for (const p of baseProducts) map.set(p.id, p);
     return { engine: e, productMap: map };
-  }, [allCatalogProducts]);
+  }, [baseProducts]);
 
   // ── Step 1: Text Query Matching via Search Engine ─────────────────────────
   const queryMatchedProducts = useMemo(() => {
-    if (!query) return allCatalogProducts;
+    if (!query) return baseProducts;
 
     const results = engine.search(query, { limit: 200 });
     const matched: ProductItem[] = [];
@@ -396,8 +526,25 @@ function SearchPageInner() {
       const p = productMap.get(r.id);
       if (p) matched.push(p);
     }
-    return matched.length > 0 ? matched : allCatalogProducts;
-  }, [query, allCatalogProducts, engine, productMap]);
+    return matched.length > 0 ? matched : baseProducts;
+  }, [query, baseProducts, engine, productMap]);
+
+  // Log search query in analytics for Trending and For-You personalization
+  useEffect(() => {
+    if (!query) return;
+    const timer = setTimeout(() => {
+      void fetch("/api/v1/analytics/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query,
+          results_count: queryMatchedProducts.length,
+        }),
+      }).catch(() => {});
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [query, queryMatchedProducts.length]);
 
   // ── Step 2: Dynamic Category & Brand Counts (Derived directly from Query Matches!) ──
   const categoryCounts = useMemo(() => {
@@ -420,19 +567,19 @@ function SearchPageInner() {
 
   const allAvailableSizes = useMemo(() => {
     const sizes = new Set<string>();
-    for (const p of allCatalogProducts) {
+    for (const p of baseProducts) {
       for (const s of p.sizes || []) sizes.add(s);
     }
     return Array.from(sizes);
-  }, [allCatalogProducts]);
+  }, [baseProducts]);
 
   const allAvailableTags = useMemo(() => {
     const tags = new Set<string>();
-    for (const p of allCatalogProducts) {
+    for (const p of baseProducts) {
       for (const t of p.tags || []) tags.add(t);
     }
     return Array.from(tags);
-  }, [allCatalogProducts]);
+  }, [baseProducts]);
 
   // ── Step 3: Secondary Filters Applied on Top of Query Matches ─────────────
   const results = useMemo(() => {
@@ -478,8 +625,37 @@ function SearchPageInner() {
     return list;
   }, [queryMatchedProducts, activeCategory, priceRange, minDiscount, activeBrands, activeSizes, activeTags, sortBy]);
 
+  const removeSectionFilter = () => {
+    setActiveFilter("");
+    setSectionProducts([]);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("filter");
+    params.delete("section");
+    const newQuery = params.toString();
+    router.push(newQuery ? `/search?${newQuery}` : "/search");
+  };
+
+  const getSectionLabel = (f: string) => {
+    switch (f.toLowerCase()) {
+      case "trending":
+        return "Trending";
+      case "bestselling":
+        return "Bestselling";
+      case "new-arrivals":
+        return "New Arrivals";
+      case "for-you":
+        return "For You";
+      case "deals":
+      case "crazy-deals":
+        return "Crazy Deals";
+      default:
+        return f;
+    }
+  };
+
   // ── Active Filter Chips ───────────────────────────────────────────────────
   const activeFilters: { label: string; remove: () => void }[] = [
+    ...(activeFilter ? [{ label: getSectionLabel(activeFilter), remove: removeSectionFilter }] : []),
     ...(activeCategory !== "All" ? [{ label: activeCategory, remove: () => setActiveCategory("All") }] : []),
     ...(priceRange[0] !== MIN_PRICE || priceRange[1] !== MAX_PRICE
       ? [
@@ -496,6 +672,7 @@ function SearchPageInner() {
   ];
 
   const clearAll = () => {
+    removeSectionFilter();
     setActiveCategory("All");
     setPriceRange([MIN_PRICE, MAX_PRICE]);
     setMinDiscount(null);
@@ -756,7 +933,7 @@ function SearchPageInner() {
                 </div>
               ))}
             </div>
-          ) : loadingDb ? (
+          ) : loadingDb || (loadingSection && results.length === 0) ? (
             /* ── Shimmer Skeleton Loading ── */
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 border-b border-gray-100 divide-x divide-y divide-gray-100 pb-12 animate-pulse">
               {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (

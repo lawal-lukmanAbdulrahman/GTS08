@@ -3,16 +3,54 @@
 import Link from "next/link";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { ProductCard } from "../ui/product-card";
-
 import { useCatalogue } from "../catalogue-context";
+import { dbProductToItem, type ApiProduct } from "../../_lib/catalogue";
+import type { ProductItem } from "../../_data/products";
+import { getCartSessionId } from "../../_lib/server-sync";
 
-export function Bestsellers() {
+export function ForYou() {
   const { products: catalogue } = useCatalogue();
-  const PRODUCTS = useMemo(() => catalogue.filter((p) => ["Appliances", "Electronics", "Home & Office", "Supermarket"].includes(p.category)), [catalogue]);
+  const [apiProducts, setApiProducts] = useState<ProductItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [source, setSource] = useState<string>("personalized");
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function fetchForYou() {
+      try {
+        const sessionId = getCartSessionId();
+        const res = await fetch(`/api/v1/storefront/for-you?limit=12&session_id=${encodeURIComponent(sessionId)}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (mounted && Array.isArray(json.data) && json.data.length > 0) {
+            const mapped = json.data.map((p: ApiProduct) => dbProductToItem(p));
+            setApiProducts(mapped);
+            if (json.source) setSource(json.source);
+          }
+        }
+      } catch {
+        // silent fallback to catalogue
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    void fetchForYou();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Instant-on: use cached/computed catalogue items immediately so the shopper NEVER sees empty skeletons
+  const PRODUCTS = useMemo(() => {
+    if (apiProducts.length > 0) return apiProducts;
+    return [...catalogue]
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+      .slice(0, 12);
+  }, [apiProducts, catalogue]);
 
   const updateScrollState = () => {
     if (scrollContainerRef.current) {
@@ -33,7 +71,7 @@ export function Bestsellers() {
         window.removeEventListener("resize", updateScrollState);
       };
     }
-  }, []);
+  }, [PRODUCTS]);
 
   const toggleWishlist = (id: string) => {
     setWishlisted((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -51,6 +89,8 @@ export function Bestsellers() {
     }
   };
 
+  if (!loading && PRODUCTS.length === 0) return null;
+
   return (
     <section className="w-full px-3 md:px-4 pt-3 sm:pt-4 md:pt-5 pb-3 sm:pb-4 md:pb-5">
       <div className="max-w-[1240px] mx-auto">
@@ -58,17 +98,17 @@ export function Bestsellers() {
         <div className="flex justify-between items-end mb-5 sm:mb-6">
           <div>
             <h2 className="text-lg sm:text-xl md:text-3xl font-normal text-[#010101] tracking-tight flex items-center gap-2">
-              Bestselling <span className="text-[#EDCF5D] font-bold">✦</span>
-              <span className="font-serif italic font-bold text-[#010101]">Products</span>
+              For You <span className="text-[#EDCF5D] font-bold">✦</span>
+              <span className="font-serif italic font-bold text-[#010101]">Picks</span>
             </h2>
           </div>
 
           <Link
-            href="/search"
+            href="/search?filter=for-you"
             className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
           >
             <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">
-              More products
+              Discover more
             </span>
             <span className="group-hover:translate-x-0.5 transition-transform inline-block">→</span>
           </Link>
@@ -85,7 +125,7 @@ export function Bestsellers() {
 
           {/* Left Arrow Button */}
           <button
-            aria-label="Previous products"
+            aria-label="Previous personalized products"
             onClick={handleScrollLeft}
             className={`absolute left-3 sm:left-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md ${
               canScrollLeft ? "opacity-100 flex" : "opacity-0 pointer-events-none hidden"
@@ -102,26 +142,33 @@ export function Bestsellers() {
             className="flex gap-4 sm:gap-5 overflow-x-auto scroll-smooth no-scrollbar py-1"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
-            {PRODUCTS.map((product) => {
-              const isWishlisted = wishlisted[product.id];
-              return (
-                <ProductCard
-                  key={product.id}
-                  id={product.id}
-                  title={product.title}
-                  price={product.price}
-                  originalPrice={product.originalPrice}
-                  badge={product.badge}
-                  rating={product.rating}
-                  reviews={product.reviews}
-                  image={product.image}
-                  hasTransparentBg={product.hasTransparentBg}
-                  isWishlisted={isWishlisted}
-                  onToggleWishlist={toggleWishlist}
-                  className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0"
-                />
-              );
-            })}
+            {PRODUCTS.length === 0 && loading
+              ? Array.from({ length: 6 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0 h-64 rounded-xl bg-gray-100 animate-pulse"
+                  />
+                ))
+              : PRODUCTS.map((product) => {
+                  const isWishlisted = wishlisted[product.id];
+                  return (
+                    <ProductCard
+                      key={product.id}
+                      id={product.id}
+                      title={product.title}
+                      price={product.price}
+                      originalPrice={product.originalPrice}
+                      badge={product.badge || "RECOMMENDED"}
+                      rating={product.rating}
+                      reviews={product.reviews}
+                      image={product.image}
+                      hasTransparentBg={product.hasTransparentBg}
+                      isWishlisted={isWishlisted}
+                      onToggleWishlist={toggleWishlist}
+                      className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0"
+                    />
+                  );
+                })}
           </div>
 
           {/* Right Fade Overlay */}
@@ -133,7 +180,7 @@ export function Bestsellers() {
 
           {/* Right Arrow Button */}
           <button
-            aria-label="Next products"
+            aria-label="Next personalized products"
             onClick={handleScrollRight}
             className={`absolute right-3 sm:right-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md ${
               canScrollRight ? "opacity-100 flex" : "opacity-0 pointer-events-none hidden"

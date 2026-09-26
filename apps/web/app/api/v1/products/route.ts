@@ -9,6 +9,7 @@ import { serverError, dbError } from "../_lib/http";
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search") || searchParams.get("q");
     const categorySlug = searchParams.get("category");
     const size = searchParams.get("size");
     const color = searchParams.get("color");
@@ -75,6 +76,11 @@ export async function GET(request: NextRequest) {
       if (catData) {
         query = query.eq("category_id", catData.id);
       }
+    }
+
+    // Filter by Search Query
+    if (search) {
+      query = query.ilike("name", `%${search}%`);
     }
 
     // Filter by Price

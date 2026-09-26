@@ -28,4 +28,9 @@ export interface ProductItem {
   tags: string[];
   hasTransparentBg?: boolean;
   descriptionImages?: string[];
+  totalSold?: number;
+  createdAt?: string;
+  rawCompareAtPrice?: number | null;
+  rawBasePrice?: number;
+  discountPercent?: number;
 }

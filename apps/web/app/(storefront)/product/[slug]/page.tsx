@@ -17,6 +17,7 @@ import { ProductZoomLightbox } from "../../_components/ui/product-zoom-lightbox"
 import { MarkdownContent } from "../../_components/markdown-content";
 import { NIGERIAN_STATES, NIGERIAN_LOCATIONS } from "../../_data/nigerian-locations";
 import { saveRecentlyViewed } from "../../_components/landing/search-history";
+import { useProductDwellTracker, trackProductWishlist, trackProductCart } from "../../_lib/analytics";
 
 export default function ProductDetailPage({
   params,
@@ -29,6 +30,9 @@ export default function ProductDetailPage({
   const [loading, setLoading] = useState<boolean>(true);
   const { addToCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
+
+  // Active dwell time, detail reading, and scroll tracking
+  useProductDwellTracker(product?.id);
 
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -302,6 +306,16 @@ export default function ProductDetailPage({
           };
 
           setProduct(formatted);
+
+          // Track product page view in analytics for Trending scoring
+          if (matched.id) {
+            void fetch("/api/v1/analytics/view", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ product_id: matched.id }),
+            }).catch(() => {});
+          }
+
           if (finalSizes && finalSizes.length > 0) {
             setSelectedSize(finalSizes[0] || "Standard");
           }
@@ -392,6 +406,7 @@ export default function ProductDetailPage({
 
   const handleToggleWishlist = () => {
     toggleWishlist(product.id);
+    trackProductWishlist(product.id, !isWishlisted ? "add" : "remove");
   };
 
   // Check if product has real multiple color options (hide for single-variant / snacks)
@@ -445,6 +460,7 @@ export default function ProductDetailPage({
 
   const handleAddToCart = () => {
     addToCart(product, selectedSize || product.sizes?.[0] || "Standard", activeColor.label, quantity);
+    trackProductCart(product.id);
     setAddedToCart(true);
     setTimeout(() => setAddedToCart(false), 2000);
   };
