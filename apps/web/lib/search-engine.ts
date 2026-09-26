@@ -1,18 +1,16 @@
 /**
- * GTS Product Search Engine v2
+ * GTS Product Search Engine v3
  * ─────────────────────────────────────────────────────────────────────────────
- * High-performance, zero-dependency search engine with:
+ * High-performance, zero-dependency client-side search engine with:
  * - Token-level inverted index (sorted Uint32Array posting lists)
- * - Vocabulary-level trigram fuzzy matching (not document-level)
+ * - TOKENIZED prefix trie (individual words, not full names)
+ * - Vocabulary-level trigram fuzzy matching with Damerau-Levenshtein typo correction
  * - BM25 relevance scoring with field weights
  * - NLP intent parsing (colors, price, stock, stopwords)
- * - Prefix trie autocomplete
+ * - Synonym expansion (hoodie→hoody→sweatshirt, phone→mobile→cell)
+ * - Character-transposition typo tolerance ("bule"→"blue", "jodran"→"jordan")
  *
- * Architecture:
- *   Query → NLP Parse → Token Lookup (exact) or Vocab Fuzzy → Candidate
- *   Intersection/Union → BM25 Score → Rank → Return
- *
- * Target: < 0.19ms search latency at 500K+ products
+ * Target: < 1ms autocomplete, < 5ms search at 10K products
  */
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -76,10 +74,41 @@ const COLOR_SET = new Set([
   "ruby", "wine", "champagne", "nude", "blush",
 ]);
 
-// Price keywords that REQUIRE a following number to activate price filtering
+// ─── Synonym Map ─────────────────────────────────────────────────────────────
+// Each group shares meaning; searching any member also matches the others.
+const SYNONYM_GROUPS: string[][] = [
+  ["hoodie", "hoody", "sweatshirt", "pullover"],
+  ["phone", "mobile", "cell", "smartphone", "handset"],
+  ["laptop", "notebook", "computer"],
+  ["sneaker", "sneakers", "trainer", "trainers", "kicks"],
+  ["shirt", "tee", "tshirt", "top"],
+  ["pants", "trousers", "bottoms", "jeans"],
+  ["bag", "handbag", "purse", "tote"],
+  ["watch", "watches", "timepiece", "wristwatch"],
+  ["headphone", "headphones", "earphone", "earphones", "earbuds", "airpods"],
+  ["television", "tv", "monitor", "screen"],
+  ["fridge", "refrigerator", "freezer"],
+  ["washer", "washing", "laundry"],
+  ["shoe", "shoes", "footwear"],
+  ["dress", "gown", "frock"],
+  ["jacket", "coat", "blazer", "outerwear"],
+  ["cap", "hat", "beanie", "beret"],
+  ["perfume", "fragrance", "cologne", "scent"],
+  ["cream", "moisturizer", "lotion"],
+  ["charger", "cable", "adapter", "cord"],
+  ["speaker", "speakers", "soundbar", "boombox"],
+];
+
+const SYNONYM_MAP = new Map<string, string[]>();
+for (const group of SYNONYM_GROUPS) {
+  for (const word of group) {
+    SYNONYM_MAP.set(word, group.filter((w) => w !== word));
+  }
+}
+
+// Price keywords
 const PRICE_BELOW_KEYWORDS = new Set(["under", "below", "less", "max", "cheaper"]);
 const PRICE_ABOVE_KEYWORDS = new Set(["above", "over", "more", "min"]);
-// Price keywords that activate WITHOUT a number (set a default)
 const CHEAP_KEYWORDS = new Set(["cheap", "budget", "affordable"]);
 const EXPENSIVE_KEYWORDS = new Set(["expensive", "premium", "luxury"]);
 const STOCK_KEYWORDS = new Set(["available", "instock", "stock", "ready"]);
@@ -109,7 +138,41 @@ function tokenize(text: string): string[] {
     .filter((t) => t.length >= 2);
 }
 
-// ─── Trigram Generator (used only for vocabulary fuzzy matching) ─────────────
+// ─── Damerau-Levenshtein Distance (handles transpositions like "bule"→"blue") ─
+
+function damerauLevenshtein(a: string, b: string): number {
+  const la = a.length, lb = b.length;
+  if (la === 0) return lb;
+  if (lb === 0) return la;
+  if (Math.abs(la - lb) > 2) return 3; // Early exit for very different lengths
+
+  const d: number[][] = [];
+  for (let i = 0; i <= la; i++) {
+    d[i] = [];
+    d[i]![0] = i;
+  }
+  for (let j = 0; j <= lb; j++) {
+    d[0]![j] = j;
+  }
+
+  for (let i = 1; i <= la; i++) {
+    for (let j = 1; j <= lb; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i]![j] = Math.min(
+        d[i - 1]![j]! + 1,      // deletion
+        d[i]![j - 1]! + 1,      // insertion
+        d[i - 1]![j - 1]! + cost // substitution
+      );
+      // Transposition (swapped adjacent characters)
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d[i]![j] = Math.min(d[i]![j]!, d[i - 2]![j - 2]! + cost);
+      }
+    }
+  }
+  return d[la]![lb]!;
+}
+
+// ─── Trigram Generator ──────────────────────────────────────────────────────
 
 function getTrigramsSet(word: string): Set<string> {
   const padded = `__${word}_`;
@@ -136,24 +199,21 @@ export function parseIntent(query: string): ParsedIntent {
   for (let i = 0; i < tokens.length; i++) {
     const tok = tokens[i]!;
 
-    // Stock keywords
     if (STOCK_KEYWORDS.has(tok) || (tok === "in" && tokens[i + 1] === "stock")) {
       inStockOnly = true;
       if (tok === "in" && tokens[i + 1] === "stock") i++;
       continue;
     }
 
-    // "under/below/less/max/cheaper" + NUMBER → maxPrice
     if (PRICE_BELOW_KEYWORDS.has(tok)) {
       const next = tokens[i + 1];
       if (next) {
         const parsed = parsePrice(next);
         if (parsed !== null) { maxPrice = parsed; i++; continue; }
       }
-      continue; // Skip the keyword itself but don't set a default price
+      continue;
     }
 
-    // "above/over/more/min" + NUMBER → minPrice
     if (PRICE_ABOVE_KEYWORDS.has(tok)) {
       const next = tokens[i + 1];
       if (next) {
@@ -163,30 +223,45 @@ export function parseIntent(query: string): ParsedIntent {
       continue;
     }
 
-    // "cheap/budget/affordable" → set default maxPrice AND keep as search term
     if (CHEAP_KEYWORDS.has(tok)) {
       if (maxPrice === null) maxPrice = 15000;
-      terms.push(tok); // Keep as search term too (matches product descriptions)
+      terms.push(tok);
       continue;
     }
 
-    // "expensive/premium/luxury" → keep as search term only
-    // These are commonly used in product names, so don't consume them as price filters
     if (EXPENSIVE_KEYWORDS.has(tok)) {
       terms.push(tok);
       continue;
     }
 
-    // Colors
-    if (COLOR_SET.has(tok)) { colors.push(tok); continue; }
+    // Try to correct color typos (e.g., "bule" → "blue")
+    if (COLOR_SET.has(tok)) {
+      colors.push(tok);
+      continue;
+    }
+    // Check if it's a typo of a color
+    const correctedColor = fuzzyMatchColor(tok);
+    if (correctedColor) {
+      colors.push(correctedColor);
+      continue;
+    }
 
-    // Stopwords
     if (STOPWORDS.has(tok)) continue;
 
     terms.push(tok);
   }
 
   return { terms, colors, maxPrice, minPrice, inStockOnly, category };
+}
+
+/** Check if a token is a misspelling of a known color (edit distance ≤ 1) */
+function fuzzyMatchColor(token: string): string | null {
+  if (token.length < 3) return null;
+  for (const color of COLOR_SET) {
+    if (Math.abs(token.length - color.length) > 1) continue;
+    if (damerauLevenshtein(token, color) <= 1) return color;
+  }
+  return null;
 }
 
 function parsePrice(token: string): number | null {
@@ -199,36 +274,115 @@ function parsePrice(token: string): number | null {
   return null;
 }
 
-// ─── Prefix Trie for Autocomplete ────────────────────────────────────────────
+// ─── Tokenized Prefix Trie for Autocomplete ──────────────────────────────────
+// Key difference from v2: inserts INDIVIDUAL TOKENS (words), not full names.
+// Each token maps back to a set of "suggestion phrases" (product name, brand, category).
 
 interface TrieNode {
-  c: Map<number, TrieNode>; // children by char code
-  t: string[]; // complete terms at this node
+  c: Map<number, TrieNode>;
+  /** Complete suggestions reachable from this node */
+  suggestions: Set<string>;
 }
 
-class PrefixTrie {
-  private root: TrieNode = { c: new Map(), t: [] };
+class TokenizedTrie {
+  private root: TrieNode = { c: new Map(), suggestions: new Set() };
 
-  insert(term: string): void {
-    const lower = term.toLowerCase();
+  /** Insert a phrase, indexing each word token as a trie entry pointing to the full phrase */
+  insertPhrase(phrase: string): void {
+    const lower = phrase.toLowerCase().trim();
+    if (!lower) return;
+    const tokens = lower.split(/\s+/).filter((t) => t.length >= 2);
+    // Insert each token individually so "hoodie" matches "streetwear hoodie"
+    for (const token of tokens) {
+      this._insertToken(token, lower);
+    }
+    // Also insert the full phrase as one entry
+    this._insertToken(lower, lower);
+  }
+
+  /** Insert a single word/token */
+  insertToken(word: string): void {
+    const lower = word.toLowerCase().trim();
+    if (lower.length < 2) return;
+    this._insertToken(lower, lower);
+  }
+
+  private _insertToken(token: string, suggestion: string): void {
     let node = this.root;
-    for (let i = 0; i < lower.length; i++) {
-      const code = lower.charCodeAt(i);
+    for (let i = 0; i < token.length; i++) {
+      const code = token.charCodeAt(i);
       let child = node.c.get(code);
       if (!child) {
-        child = { c: new Map(), t: [] };
+        child = { c: new Map(), suggestions: new Set() };
         node.c.set(code, child);
       }
       node = child;
     }
-    if (!node.t.includes(term)) node.t.push(term);
+    node.suggestions.add(suggestion);
   }
 
+  /** Find suggestions matching a prefix, with typo tolerance */
   search(prefix: string, limit: number = 10): string[] {
-    const lower = prefix.toLowerCase();
+    const lower = prefix.toLowerCase().trim();
+    if (!lower) return [];
+
+    // Split multi-word query: match last word as prefix, earlier words as filters
+    const words = lower.split(/\s+/).filter((w) => w.length >= 1);
+    const lastWord = words[words.length - 1]!;
+    const prefixWords = words.slice(0, -1);
+
+    // 1. Exact prefix match on the last word
+    let results = this._prefixSearch(lastWord, limit * 3);
+
+    // 2. If few results, try fuzzy: check trie entries within edit distance 1
+    if (results.length < limit && lastWord.length >= 3) {
+      const fuzzyResults = this._fuzzySearch(lastWord, limit * 3);
+      const existing = new Set(results);
+      for (const r of fuzzyResults) {
+        if (!existing.has(r)) results.push(r);
+      }
+    }
+
+    // 3. Filter by prefix words if multi-word query
+    if (prefixWords.length > 0) {
+      results = results.filter((suggestion) => {
+        const lowerSug = suggestion.toLowerCase();
+        return prefixWords.every((pw) => lowerSug.includes(pw));
+      });
+    }
+
+    // 4. Score by relevance: exact prefix match > starts with > contains
+    const scored = results.map((s) => {
+      let score = 0;
+      const ls = s.toLowerCase();
+      if (ls.startsWith(lower)) score += 10;
+      else if (ls.includes(lower)) score += 5;
+      // Bonus for shorter suggestions (more specific)
+      score += Math.max(0, 20 - s.length) * 0.3;
+      // Bonus for word starting with the last query word
+      if (ls.split(/\s+/).some((w) => w.startsWith(lastWord))) score += 8;
+      return { text: s, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+
+    // Deduplicate case-insensitive
+    const seen = new Set<string>();
+    const final: string[] = [];
+    for (const item of scored) {
+      const key = item.text.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      final.push(item.text);
+      if (final.length >= limit) break;
+    }
+    return final;
+  }
+
+  private _prefixSearch(prefix: string, limit: number): string[] {
     let node = this.root;
-    for (let i = 0; i < lower.length; i++) {
-      const child = node.c.get(lower.charCodeAt(i));
+    for (let i = 0; i < prefix.length; i++) {
+      const child = node.c.get(prefix.charCodeAt(i));
       if (!child) return [];
       node = child;
     }
@@ -237,14 +391,90 @@ class PrefixTrie {
     return results;
   }
 
+  /** Fuzzy search: find trie paths within edit distance 1 of the query */
+  private _fuzzySearch(word: string, limit: number): string[] {
+    const results = new Set<string>();
+    this._fuzzyRecurse(this.root, word, 0, 1, results, limit);
+    return Array.from(results);
+  }
+
+  private _fuzzyRecurse(
+    node: TrieNode, word: string, depth: number, maxEdits: number,
+    results: Set<string>, limit: number
+  ): void {
+    if (results.size >= limit) return;
+
+    // If we've consumed the word, collect suggestions from here
+    if (depth >= word.length) {
+      if (maxEdits >= 0) {
+        for (const s of node.suggestions) {
+          results.add(s);
+          if (results.size >= limit) return;
+        }
+        // Also collect from children (prefix completion after fuzzy match)
+        this._collectInto(node, results, limit);
+      }
+      return;
+    }
+
+    if (maxEdits < 0) return;
+
+    const targetChar = word.charCodeAt(depth);
+
+    for (const [charCode, child] of node.c) {
+      if (charCode === targetChar) {
+        // Exact match: no edit cost
+        this._fuzzyRecurse(child, word, depth + 1, maxEdits, results, limit);
+      } else if (maxEdits > 0) {
+        // Substitution: consume one edit
+        this._fuzzyRecurse(child, word, depth + 1, maxEdits - 1, results, limit);
+      }
+    }
+
+    // Deletion: skip a character in the word
+    if (maxEdits > 0) {
+      this._fuzzyRecurse(node, word, depth + 1, maxEdits - 1, results, limit);
+    }
+
+    // Insertion: consume a trie char without advancing in the word
+    if (maxEdits > 0) {
+      for (const [, child] of node.c) {
+        this._fuzzyRecurse(child, word, depth, maxEdits - 1, results, limit);
+      }
+    }
+
+    // Transposition: swap adjacent characters ("bule" → "blue")
+    if (maxEdits > 0 && depth + 1 < word.length) {
+      const nextChar = word.charCodeAt(depth + 1);
+      const child1 = node.c.get(nextChar);
+      if (child1) {
+        const child2 = child1.c.get(targetChar);
+        if (child2) {
+          this._fuzzyRecurse(child2, word, depth + 2, maxEdits - 1, results, limit);
+        }
+      }
+    }
+  }
+
   private _collect(node: TrieNode, results: string[], limit: number): void {
-    for (const term of node.t) {
+    for (const s of node.suggestions) {
       if (results.length >= limit) return;
-      results.push(term);
+      results.push(s);
     }
     for (const child of node.c.values()) {
       if (results.length >= limit) return;
       this._collect(child, results, limit);
+    }
+  }
+
+  private _collectInto(node: TrieNode, results: Set<string>, limit: number): void {
+    for (const s of node.suggestions) {
+      if (results.size >= limit) return;
+      results.add(s);
+    }
+    for (const child of node.c.values()) {
+      if (results.size >= limit) return;
+      this._collectInto(child, results, limit);
     }
   }
 }
@@ -266,17 +496,11 @@ function intersectSorted(a: Uint32Array, b: Uint32Array): Uint32Array {
 
 interface CompactDoc {
   id: string;
-  /** Pre-computed weighted term frequencies: token → weighted TF */
   wtf: Map<string, number>;
-  /** Total token count (for BM25 length normalization) */
   len: number;
-  /** Lowercased color strings for NLP color matching */
   colors: string[];
-  /** Product price */
   price: number | undefined;
-  /** In-stock status */
   inStock: boolean | undefined;
-  /** Category lowercased */
   cat: string;
 }
 
@@ -284,24 +508,15 @@ interface CompactDoc {
 
 export class ProductSearchEngine {
   private docs: CompactDoc[] = [];
-
-  /** Token → sorted array of doc indices */
   private tokenIndex: Map<string, Uint32Array> = new Map();
-  /** Token → document frequency count */
   private tokenDf: Map<string, number> = new Map();
-
-  /** All unique vocabulary tokens */
   private vocab: string[] = [];
-  /** Vocabulary trigram index: trigram → indices into this.vocab */
   private vocabTrigramIdx: Map<string, Uint16Array | Uint32Array> = new Map();
-  /** Pre-computed trigram sets for each vocabulary token */
   private vocabTrigramSets: Set<string>[] = [];
-
   private avgDocLength: number = 0;
-  private trie: PrefixTrie = new PrefixTrie();
+  private trie: TokenizedTrie = new TokenizedTrie();
   private docCount: number = 0;
 
-  /** Number of indexed products */
   get size(): number {
     return this.docCount;
   }
@@ -312,9 +527,8 @@ export class ProductSearchEngine {
   buildIndex(products: SearchableProduct[]): void {
     this.docCount = products.length;
     this.docs = new Array(products.length);
-    this.trie = new PrefixTrie();
+    this.trie = new TokenizedTrie();
 
-    // Phase 1: Tokenize all docs, build token → doc-indices map
     const tokenToDocSet = new Map<string, number[]>();
     let totalTokensAll = 0;
 
@@ -342,6 +556,15 @@ export class ProductSearchEngine {
         for (const t of tokens) {
           uniqueTokens.add(t);
           wtf.set(t, (wtf.get(t) || 0) + weight);
+          // Also index synonyms
+          const syns = SYNONYM_MAP.get(t);
+          if (syns) {
+            for (const syn of syns) {
+              uniqueTokens.add(syn);
+              // Synonyms get slightly lower weight than the original
+              wtf.set(syn, (wtf.get(syn) || 0) + weight * 0.7);
+            }
+          }
         }
       }
 
@@ -372,39 +595,37 @@ export class ProductSearchEngine {
 
       totalTokensAll += docLen;
 
-      // Track which docs contain each token
       for (const token of uniqueTokens) {
         let arr = tokenToDocSet.get(token);
         if (!arr) { arr = []; tokenToDocSet.set(token, arr); }
         arr.push(i);
       }
 
-      // Feed trie (only top-level fields, not description)
-      this.trie.insert(p.name);
-      if (p.brand) this.trie.insert(p.brand);
-      if (p.category) this.trie.insert(p.category);
-      if (p.subCategory) this.trie.insert(p.subCategory);
-      if (p.tags) { for (const tag of p.tags) this.trie.insert(tag); }
+      // Feed trie with TOKENIZED entries (individual words, not full names)
+      this.trie.insertPhrase(p.name);
+      if (p.brand) this.trie.insertPhrase(p.brand);
+      if (p.category) this.trie.insertPhrase(p.category);
+      if (p.subCategory) this.trie.insertPhrase(p.subCategory);
+      if (p.tags) {
+        for (const tag of p.tags) this.trie.insertPhrase(tag);
+      }
     }
 
     this.avgDocLength = products.length > 0 ? totalTokensAll / products.length : 0;
 
-    // Phase 2: Convert token posting lists to sorted Uint32Array
+    // Build token posting lists
     this.tokenIndex = new Map();
     this.tokenDf = new Map();
-
     for (const [token, indices] of tokenToDocSet) {
-      // Indices are already in insertion order (0..N), which is sorted
       this.tokenIndex.set(token, new Uint32Array(indices));
       this.tokenDf.set(token, indices.length);
     }
 
-    // Phase 3: Build vocabulary-level trigram index for fuzzy matching
+    // Build vocabulary trigram index for fuzzy matching
     this.vocab = Array.from(tokenToDocSet.keys());
     this.vocabTrigramSets = new Array(this.vocab.length);
 
     const triToVocabIndices = new Map<string, number[]>();
-
     for (let vi = 0; vi < this.vocab.length; vi++) {
       const triSet = getTrigramsSet(this.vocab[vi]!);
       this.vocabTrigramSets[vi] = triSet;
@@ -418,9 +639,7 @@ export class ProductSearchEngine {
     this.vocabTrigramIdx = new Map();
     const useU16 = this.vocab.length <= 65535;
     for (const [tri, indices] of triToVocabIndices) {
-      this.vocabTrigramIdx.set(tri, useU16
-        ? new Uint16Array(indices)
-        : new Uint32Array(indices));
+      this.vocabTrigramIdx.set(tri, useU16 ? new Uint16Array(indices) : new Uint32Array(indices));
     }
   }
 
@@ -438,21 +657,32 @@ export class ProductSearchEngine {
     const effectiveInStockOnly = options?.inStockOnly ?? intent.inStockOnly;
     const effectiveColors = options?.colors ?? (intent.colors.length > 0 ? intent.colors : null);
     const effectiveCategory = options?.category ?? intent.category;
-    const searchTerms = intent.terms;
+    let searchTerms = intent.terms;
 
-    if (searchTerms.length === 0 && (!effectiveColors || effectiveColors.length === 0)) return [];
+    // Expand search terms with synonyms
+    const expandedTerms: string[] = [...searchTerms];
+    for (const term of searchTerms) {
+      const syns = SYNONYM_MAP.get(term);
+      if (syns) {
+        for (const syn of syns) {
+          if (!expandedTerms.includes(syn)) expandedTerms.push(syn);
+        }
+      }
+    }
 
-    // Step 1: Resolve each search term to posting list + actual vocab tokens
+    if (expandedTerms.length === 0 && (!effectiveColors || effectiveColors.length === 0)) return [];
+
+    // Resolve each search term to posting list
     const resolvedTerms: { original: string; resolved: string[]; posting: Uint32Array }[] = [];
 
-    for (const term of searchTerms) {
+    for (const term of expandedTerms) {
       const result = this._resolveAndGetPosting(term);
       if (result && result.posting.length > 0) {
         resolvedTerms.push(result);
       }
     }
 
-    // Step 2: Determine candidate set
+    // Determine candidate set
     let candidates: Uint32Array;
 
     if (resolvedTerms.length === 0) {
@@ -463,45 +693,45 @@ export class ProductSearchEngine {
     } else if (resolvedTerms.length === 1) {
       candidates = resolvedTerms[0]!.posting;
     } else {
-      // Sort by posting list size (smallest first) for efficient intersection
       resolvedTerms.sort((a, b) => a.posting.length - b.posting.length);
 
-      // Try AND intersection
-      let intersection = resolvedTerms[0]!.posting;
-      for (let i = 1; i < resolvedTerms.length; i++) {
-        intersection = intersectSorted(intersection, resolvedTerms[i]!.posting);
-        if (intersection.length === 0) break;
+      // Try AND intersection with original terms first
+      const originalResolved = resolvedTerms.filter((rt) => searchTerms.includes(rt.original));
+      let intersection: Uint32Array | null = null;
+
+      if (originalResolved.length > 0) {
+        intersection = originalResolved[0]!.posting;
+        for (let i = 1; i < originalResolved.length; i++) {
+          intersection = intersectSorted(intersection, originalResolved[i]!.posting);
+          if (intersection.length === 0) break;
+        }
       }
 
-      if (intersection.length > 0) {
+      if (intersection && intersection.length > 0) {
         candidates = intersection;
       } else {
-        // Fallback: use smallest posting list
-        candidates = resolvedTerms[0]!.posting;
+        // Union all posting lists (OR mode) for maximum recall
+        candidates = this._mergePostingLists(resolvedTerms.map((rt) => rt.posting));
       }
     }
 
-    // Step 3: Score candidates using resolved tokens for TF lookup
-    // Cap candidates to keep scoring O(1) — 1500 is enough for top-50 quality
-    const maxCandidates = Math.min(candidates.length, 1500);
+    // Score candidates
+    const maxCandidates = Math.min(candidates.length, 2000);
     const scored: SearchResult[] = [];
 
     for (let ci = 0; ci < maxCandidates; ci++) {
       const docIdx = candidates[ci]!;
       const doc = this.docs[docIdx]!;
 
-      // Hard filters
       if (effectiveInStockOnly && doc.inStock === false) continue;
       if (effectiveMaxPrice !== null && doc.price !== undefined && doc.price > effectiveMaxPrice) continue;
       if (effectiveMinPrice !== null && doc.price !== undefined && doc.price < effectiveMinPrice) continue;
       if (effectiveCategory && doc.cat !== effectiveCategory.toLowerCase()) continue;
 
-      // BM25 score using resolved tokens
       let totalScore = 0;
       const matchedFields: string[] = [];
 
       for (const rt of resolvedTerms) {
-        // Look up TF using each resolved vocabulary token (not the raw query typo)
         let bestWtf = 0;
         let bestDf = 1;
         for (const resolvedToken of rt.resolved) {
@@ -540,7 +770,8 @@ export class ProductSearchEngine {
   }
 
   /**
-   * Get autocomplete suggestions for a prefix query.
+   * Get autocomplete suggestions for a query with typo tolerance.
+   * Uses tokenized trie with fuzzy matching (edit distance 1 + transpositions).
    */
   autocomplete(prefix: string, limit: number = 10): string[] {
     const trimmed = prefix.trim();
@@ -550,19 +781,16 @@ export class ProductSearchEngine {
 
   /**
    * Resolve a query term to matching vocabulary tokens and their merged posting list.
-   * Returns the resolved tokens + combined posting list.
    */
   private _resolveAndGetPosting(term: string): { original: string; resolved: string[]; posting: Uint32Array } | null {
     // 1. Exact match
     const exact = this.tokenIndex.get(term);
     if (exact) return { original: term, resolved: [term], posting: exact };
 
-    // 2. Prefix match: find vocab tokens that share a prefix with this term
-    // Guard: shorter string must be ≥50% the length of the longer
-    // Limit to 3 matches to avoid expensive merges
+    // 2. Prefix match
     const prefixResolved: string[] = [];
     const prefixPostings: Uint32Array[] = [];
-    for (let vi = 0; vi < this.vocab.length && prefixPostings.length < 3; vi++) {
+    for (let vi = 0; vi < this.vocab.length && prefixPostings.length < 5; vi++) {
       const v = this.vocab[vi]!;
       if (v.startsWith(term) || (term.startsWith(v) && v.length >= term.length * 0.5)) {
         const posting = this.tokenIndex.get(v);
@@ -576,7 +804,30 @@ export class ProductSearchEngine {
       return { original: term, resolved: prefixResolved, posting: prefixPostings.length === 1 ? prefixPostings[0]! : this._mergePostingLists(prefixPostings) };
     }
 
-    // 3. Fuzzy match via vocabulary trigram index — take BEST match only
+    // 3. Typo correction via Damerau-Levenshtein (handles transpositions like "bule"→"blue")
+    if (term.length >= 3) {
+      let bestVocab: string | null = null;
+      let bestDist = 3;
+      const maxDist = term.length <= 4 ? 1 : 2;
+
+      for (let vi = 0; vi < this.vocab.length; vi++) {
+        const v = this.vocab[vi]!;
+        if (Math.abs(v.length - term.length) > maxDist) continue;
+        const dist = damerauLevenshtein(term, v);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestVocab = v;
+          if (dist === 0) break; // Perfect match (shouldn't happen since exact match checked above)
+        }
+      }
+
+      if (bestVocab && bestDist <= maxDist) {
+        const posting = this.tokenIndex.get(bestVocab);
+        if (posting) return { original: term, resolved: [bestVocab], posting };
+      }
+    }
+
+    // 4. Trigram fuzzy fallback (for longer words where edit distance is expensive)
     const queryTrigrams = getTrigramsSet(term);
     if (queryTrigrams.size === 0) return null;
 
@@ -590,14 +841,13 @@ export class ProductSearchEngine {
       }
     }
 
-    // Find the single best Jaccard match
     let bestVi = -1;
     let bestJaccard = 0;
     for (const [vi, count] of vocabScores) {
       const vocabTrigramSize = this.vocabTrigramSets[vi]!.size;
       const unionSize = queryTrigrams.size + vocabTrigramSize - count;
       const jaccard = count / unionSize;
-      if (jaccard > bestJaccard && jaccard >= 0.3) {
+      if (jaccard > bestJaccard && jaccard >= 0.25) {
         bestJaccard = jaccard;
         bestVi = vi;
       }
@@ -606,17 +856,12 @@ export class ProductSearchEngine {
     if (bestVi >= 0) {
       const token = this.vocab[bestVi]!;
       const posting = this.tokenIndex.get(token);
-      if (posting) {
-        return { original: term, resolved: [token], posting };
-      }
+      if (posting) return { original: term, resolved: [token], posting };
     }
 
     return null;
   }
 
-  /**
-   * Merge multiple sorted posting lists into one sorted deduplicated array.
-   */
   private _mergePostingLists(lists: Uint32Array[]): Uint32Array {
     if (lists.length === 1) return lists[0]!;
     const merged = new Set<number>();
@@ -630,16 +875,9 @@ export class ProductSearchEngine {
     return arr;
   }
 
-  /**
-   * Color-only scan (when query has no text terms, only colors).
-   */
   private _colorOnlyScan(
-    colors: string[],
-    maxPrice: number | null,
-    minPrice: number | null,
-    inStockOnly: boolean,
-    category: string | null,
-    limit: number,
+    colors: string[], maxPrice: number | null, minPrice: number | null,
+    inStockOnly: boolean, category: string | null, limit: number,
   ): SearchResult[] {
     const results: SearchResult[] = [];
     for (let i = 0; i < this.docCount && results.length < limit; i++) {
@@ -660,4 +898,3 @@ export class ProductSearchEngine {
     return results;
   }
 }
-

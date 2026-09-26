@@ -14,6 +14,7 @@ export type ApiResult<T> =
 interface CallInit {
   method?: string;
   json?: unknown;
+  headers?: Record<string, string>;
 }
 
 const UNREACHABLE = "Couldn't reach the server. Check your connection and try again.";
@@ -27,8 +28,8 @@ const UNREACHABLE = "Couldn't reach the server. Check your connection and try ag
  */
 export async function apiCall<T = unknown>(path: string, init: CallInit = {}): Promise<ApiResult<T>> {
   const token = getToken();
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const headers: Record<string, string> = { ...(init.headers || {}) };
+  if (token && !headers.Authorization) headers.Authorization = `Bearer ${token}`;
   if (init.json !== undefined) headers["Content-Type"] = "application/json";
 
   let res: Response;

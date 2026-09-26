@@ -8,6 +8,8 @@
  * migration is required.
  */
 
+import { invalidateStorefrontCaches } from "../../_lib/storefront-cache";
+
 // The service client is untyped (createClient<any>) across this codebase.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type InventoryClient = { from(table: string): any };
@@ -106,6 +108,10 @@ export async function adjustAll(
     applied.push(change);
   }
 
+  if (applied.length > 0) {
+    invalidateStorefrontCaches();
+  }
+
   return { ok: true };
 }
 
@@ -116,5 +122,8 @@ export async function rollback(client: InventoryClient, applied: InventoryChange
       deltaQuantity: -(change.deltaQuantity ?? 0),
       deltaReserved: -(change.deltaReserved ?? 0),
     });
+  }
+  if (applied.length > 0) {
+    invalidateStorefrontCaches();
   }
 }

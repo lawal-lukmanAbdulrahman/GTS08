@@ -30,6 +30,9 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "analytics/inventory/alerts": { GET: "admin" },
   "analytics/customers/new": { GET: "admin" },
   "analytics/orders/average-value": { GET: "admin" },
+  "analytics/event": { POST: "public" }, // visitor engagement event recording; rate limited
+  "analytics/search": { POST: "public" }, // user search query recording; rate limited
+  "analytics/view": { POST: "public" }, // product view duration tracking; rate limited
 
   // ── auth
   "auth/delete-account": { POST: "session" },
@@ -69,6 +72,10 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "content-slots/[key]": { GET: "public", PUT: "admin" },
   "settings": { GET: "public", PATCH: "admin" },
   "storefront/sections": { GET: "public", PUT: "admin" },
+  "storefront/hero": { GET: "public", PUT: "admin" },
+  "storefront/bestselling": { GET: "public" },
+  "storefront/trending": { GET: "public" },
+  "storefront/for-you": { GET: "public" },
 
   // ── cart, checkout, promos, wishlist
   "cart/[sessionId]": { GET: "public", PUT: "public", DELETE: "public" }, // the session id is a random UUID and the only key to the cart

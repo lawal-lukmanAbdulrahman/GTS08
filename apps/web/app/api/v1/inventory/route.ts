@@ -5,90 +5,10 @@ import { requirePermission } from "../_lib/staff-access";
 import { serverError, dbError } from "../_lib/http";
 
 function resolveVariantImage(
-  productName: string,
-  variantColor?: string,
+  _productName: string,
+  _variantColor?: string,
   variantImageUrl?: string
 ): string {
-  const p = (productName || "").toLowerCase();
-  const c = (variantColor || "").toLowerCase();
-
-  // If a specific custom image URL was provided (not generic fallback)
-  if (variantImageUrl && variantImageUrl !== "/products/denim_jacket.png") {
-    const isGenericHero =
-      variantImageUrl.includes("samsung_fridge_black.png") ||
-      variantImageUrl.includes("pixel_10_metal.png") ||
-      variantImageUrl.includes("nexus_washing_machine_blue.png") ||
-      variantImageUrl.includes("air_jordan_retro_1_red.png");
-
-    if (!isGenericHero) {
-      return variantImageUrl;
-    }
-  }
-
-  // 1. Samsung Fridge
-  if (p.includes("samsung") || p.includes("fridge") || p.includes("refrigerator") || p.includes("bespoke")) {
-    if (c.includes("bronze") || c.includes("tuscan") || c.includes("brown")) {
-      return "/products/hero/samsung_fridge_bronze.png";
-    }
-    if (c.includes("grey") || c.includes("gray") || c.includes("silver") || c.includes("metallic") || c.includes("stainless")) {
-      return "/products/hero/samsung_fridge_grey.png";
-    }
-    if (c.includes("white") || c.includes("cream") || c.includes("classic")) {
-      return "/products/hero/samsung_fridge_white.png";
-    }
-    if (c.includes("black") || c.includes("matte") || c.includes("dark")) {
-      return "/products/hero/samsung_fridge_black.png";
-    }
-  }
-
-  // 2. Google Pixel 10 Pro
-  if (p.includes("pixel")) {
-    if (c.includes("red") || c.includes("coral")) {
-      return "/products/hero/pixel_10_red.png";
-    }
-    if (c.includes("purple") || c.includes("obsidian")) {
-      return "/products/hero/pixel_10_purple.png";
-    }
-    if (c.includes("green") || c.includes("hazel") || c.includes("mint")) {
-      return "/products/hero/pixel_10_green.png";
-    }
-    if (c.includes("metal") || c.includes("titanium") || c.includes("silver") || c.includes("grey") || c.includes("gray")) {
-      return "/products/hero/pixel_10_metal.png";
-    }
-  }
-
-  // 3. Nexus Washing Machine
-  if (p.includes("nexus") || p.includes("wash") || p.includes("twin tub")) {
-    if (c.includes("grey") || c.includes("gray") || c.includes("metallic")) {
-      return "/products/hero/nexus_washing_machine_grey.png";
-    }
-    if (c.includes("white") || c.includes("classic")) {
-      return "/products/hero/nexus_washing_machine_white.png";
-    }
-    if (c.includes("green") || c.includes("mint")) {
-      return "/products/hero/nexus_washing_machine_green.png";
-    }
-    if (c.includes("yellow") || c.includes("solar")) {
-      return "/products/hero/nexus_washing_machine_yellow.png";
-    }
-    if (c.includes("blue") || c.includes("royal")) {
-      return "/products/hero/nexus_washing_machine_blue.png";
-    }
-  }
-
-  // 4. Air Jordan 1
-  if (p.includes("jordan")) {
-    if (c.includes("blue") || c.includes("royal")) {
-      return "/products/hero/air_jordan_retro_1_blue.png";
-    }
-    if (c.includes("black") || c.includes("shadow")) {
-      return "/products/hero/air_jordan_retro_1_black.png";
-    }
-    if (c.includes("red") || c.includes("chicago")) {
-      return "/products/hero/air_jordan_retro_1_red.png";
-    }
-  }
-
   return variantImageUrl || "";
 }
 

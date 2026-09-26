@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ProductCard } from "../_components/ui/product-card";
 import { checkPromo } from "../_lib/checkout-client";
 import { useCheckoutQuote } from "../_lib/use-checkout-quote";
@@ -11,12 +11,33 @@ import { Footer } from "../_components/landing/footer";
 import { useCart } from "../_components/cart-context";
 
 export default function CartPage() {
-  const { cartItems, updateQuantity, removeFromCart, clearCart, totalItemCount } = useCart();
+  const { cartItems, updateQuantity, setQuantity, syncCartLimits, removeFromCart, clearCart, totalItemCount } = useCart();
 
   const [promoCode, setPromoCode] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number } | null>(null); // discount in kobo, from the server
   const [promoError, setPromoError] = useState("");
-  const { quote } = useCheckoutQuote(cartItems);
+  const { quote, error: quoteError } = useCheckoutQuote(cartItems);
+
+  // Sync server stock limits to cart items
+  useEffect(() => {
+    if (quote?.lines && quote.lines.length > 0) {
+      syncCartLimits(quote.lines);
+    }
+  }, [quote?.lines, syncCartLimits]);
+
+  // Check if any cart item exceeds live inventory or is out of stock
+  const hasStockIssue = cartItems.some((item) => {
+    const quoteLine = quote?.lines?.find(
+      (l) =>
+        l.product_slug === item.product.id &&
+        (l.size ?? "").toLowerCase() === (item.size ?? "").toLowerCase() &&
+        (l.color ?? "").toLowerCase() === (item.color ?? "").toLowerCase()
+    );
+    const available = quoteLine ? quoteLine.available : (item.maxAvailable ?? item.product.availableStock ?? 999);
+    return item.quantity > available || available <= 0;
+  });
+
+  const canProceedToCheckout = cartItems.length > 0 && !hasStockIssue && (quote ? quote.all_available : true);
 
   const handleApplyPromo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,10 +123,27 @@ export default function CartPage() {
             <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-4">
               {cartItems.map((item, index) => {
                 const itemSubtotal = item.product.priceNum * item.quantity;
+                const quoteLine = quote?.lines?.find(
+                  (l) =>
+                    l.product_slug === item.product.id &&
+                    (l.size ?? "").toLowerCase() === (item.size ?? "").toLowerCase() &&
+                    (l.color ?? "").toLowerCase() === (item.color ?? "").toLowerCase()
+                );
+                const maxStock = quoteLine !== undefined ? quoteLine.available : (item.maxAvailable ?? item.product.availableStock ?? 999);
+                const isOutOfStock = maxStock <= 0;
+                const isStockExceeded = item.quantity > maxStock;
+                const isAtMaxStock = item.quantity >= maxStock;
+
                 return (
                   <div
                     key={`${item.product.id}-${index}`}
-                    className="relative bg-[#F9F8F5] rounded-2xl p-4 sm:p-5 border border-gray-200/80 shadow-2xs flex flex-col gap-3 transition-all hover:border-gray-300"
+                    className={`relative rounded-2xl p-4 sm:p-5 border shadow-2xs flex flex-col gap-3 transition-all ${
+                      isOutOfStock
+                        ? "bg-red-50/50 border-red-200"
+                        : isStockExceeded
+                        ? "bg-amber-50/40 border-amber-200"
+                        : "bg-[#F9F8F5] border-gray-200/80 hover:border-gray-300"
+                    }`}
                   >
                     {/* Absolutely Positioned Red Trash Delete Icon (Top Right) */}
                     <button
@@ -162,6 +200,29 @@ export default function CartPage() {
                             </span>
                           )}
                         </div>
+
+                        {/* Real-time Inventory Warnings */}
+                        {isOutOfStock ? (
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-red-600 mt-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
+                            <span>Out of stock · Please remove to proceed</span>
+                          </div>
+                        ) : isStockExceeded ? (
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-amber-700 mt-1">
+                            <span>Only <strong>{maxStock}</strong> available in stock.</span>
+                            <button
+                              type="button"
+                              onClick={() => setQuantity(index, maxStock)}
+                              className="text-xs font-bold text-[#010101] underline hover:text-[#EDCF5D] cursor-pointer"
+                            >
+                              Set to {maxStock}
+                            </button>
+                          </div>
+                        ) : maxStock <= 5 ? (
+                          <span className="text-[11px] font-semibold text-amber-600 mt-0.5">
+                            Only {maxStock} left in stock
+                          </span>
+                        ) : null}
                       </div>
                     </div>
 
@@ -190,21 +251,23 @@ export default function CartPage() {
                         <button
                           aria-label="Decrease quantity"
                           onClick={() => updateQuantity(index, -1)}
-                          className="text-[#010101] hover:text-[#EDCF5D] flex items-center justify-center transition-all active:scale-90 p-0.5"
+                          disabled={item.quantity <= 1}
+                          className="text-[#010101] hover:text-[#EDCF5D] flex items-center justify-center transition-all p-0.5 disabled:opacity-30 disabled:cursor-not-allowed hover:disabled:text-[#010101]"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
                           </svg>
                         </button>
 
-                        <span className="text-xs sm:text-sm font-black text-[#010101] min-w-[16px] text-center tabular-nums font-sans">
+                        <span className={`text-xs sm:text-sm font-black min-w-[16px] text-center tabular-nums font-sans ${isStockExceeded ? "text-amber-700" : isOutOfStock ? "text-red-600" : "text-[#010101]"}`}>
                           {item.quantity}
                         </span>
 
                         <button
                           aria-label="Increase quantity"
                           onClick={() => updateQuantity(index, 1)}
-                          className="text-[#010101] hover:text-[#EDCF5D] flex items-center justify-center transition-all active:scale-90 p-0.5"
+                          disabled={isAtMaxStock || isOutOfStock}
+                          className="text-[#010101] hover:text-[#EDCF5D] flex items-center justify-center transition-all p-0.5 disabled:opacity-30 disabled:cursor-not-allowed hover:disabled:text-[#010101]"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -306,17 +369,40 @@ export default function CartPage() {
                   </span>
                 </div>
 
+                {/* Stock Issue Alert */}
+                {(!canProceedToCheckout || (quote && !quote.all_available)) && (
+                  <div className="rounded-xl bg-red-50 border border-red-200 p-3.5 text-xs font-semibold text-red-700 flex items-start gap-2">
+                    <svg className="w-4 h-4 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>Some items in your cart exceed available stock. Please adjust quantities or remove out-of-stock items before checkout.</span>
+                  </div>
+                )}
+
                 {/* Proceed to Checkout Button */}
-                <Link
-                  href="/checkout"
-                  className="w-full bg-[#010101] hover:bg-[#EDCF5D] text-white hover:text-[#010101] font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-95 group font-sans mt-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25V12.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                  </svg>
-                  <span>Proceed to Checkout</span>
-                  <span className="group-hover:translate-x-1 transition-transform inline-block">→</span>
-                </Link>
+                {canProceedToCheckout ? (
+                  <Link
+                    href="/checkout"
+                    className="w-full bg-[#010101] hover:bg-[#EDCF5D] text-white hover:text-[#010101] font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-95 group font-sans mt-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25V12.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                    <span>Proceed to Checkout</span>
+                    <span className="group-hover:translate-x-1 transition-transform inline-block">→</span>
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full bg-gray-200 text-gray-400 font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 cursor-not-allowed mt-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25V12.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                    <span>Adjust Stock Limits to Checkout</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>

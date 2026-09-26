@@ -516,18 +516,88 @@ function SearchPageInner() {
     return { engine: e, productMap: map };
   }, [baseProducts]);
 
-  // ── Step 1: Text Query Matching via Search Engine ─────────────────────────
-  const queryMatchedProducts = useMemo(() => {
-    if (!query) return baseProducts;
+  // Server-side search results (comprehensive FTS + trigram fuzzy)
+  const [serverResults, setServerResults] = useState<ProductItem[]>([]);
+  const [serverSuggestions, setServerSuggestions] = useState<string[]>([]);
+  const [serverLoading, setServerLoading] = useState(false);
 
+  // ── Step 1a: Client-side instant results ──────────────────────────────────
+  const clientMatchedProducts = useMemo(() => {
+    if (!query) return baseProducts;
     const results = engine.search(query, { limit: 200 });
     const matched: ProductItem[] = [];
     for (const r of results) {
       const p = productMap.get(r.id);
       if (p) matched.push(p);
     }
-    return matched.length > 0 ? matched : baseProducts;
+    return matched;
   }, [query, baseProducts, engine, productMap]);
+
+  // ── Step 1b: Server-side comprehensive search (FTS + trigram typo correction) ─
+  useEffect(() => {
+    if (!query) {
+      setServerResults([]);
+      setServerSuggestions([]);
+      setServerLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setServerLoading(true);
+    setServerResults([]);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/v1/search?q=${encodeURIComponent(query)}&limit=60`);
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        if (cancelled) return;
+        if (Array.isArray(json.data)) {
+          // Convert server results to ProductItem format
+          const items: ProductItem[] = json.data.map((p: any) => {
+            // Check if this product is already in our catalogue
+            const existing = productMap.get(p.id);
+            if (existing) return existing;
+            // Build a minimal ProductItem from server data
+            return dbProductToItem(p);
+          });
+          setServerResults(items);
+        }
+        if (Array.isArray(json.suggestions) && json.suggestions.length > 0) {
+          setServerSuggestions(json.suggestions);
+        } else {
+          setServerSuggestions([]);
+        }
+      } catch {
+        // Server search failed, client results are still available
+      } finally {
+        if (!cancelled) setServerLoading(false);
+      }
+    }, 150);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [query, productMap]);
+
+  // ── Step 1c: Merge client + server results (client first, deduplicated) ────
+  const queryMatchedProducts = useMemo(() => {
+    if (!query) return baseProducts;
+
+    // Start with client results (instant)
+    const seen = new Set<string>();
+    const merged: ProductItem[] = [];
+    for (const p of clientMatchedProducts) {
+      if (!seen.has(p.id)) {
+        seen.add(p.id);
+        merged.push(p);
+      }
+    }
+    // Add server results that aren't already in client results
+    for (const p of serverResults) {
+      if (!seen.has(p.id)) {
+        seen.add(p.id);
+        merged.push(p);
+      }
+    }
+    return merged;
+  }, [query, baseProducts, clientMatchedProducts, serverResults]);
 
   // Log search query in analytics for Trending and For-You personalization
   useEffect(() => {
@@ -911,6 +981,31 @@ function SearchPageInner() {
 
         {/* ── Scrollable Product Grid inside Right Panel ── */}
         <main className="flex-1 overflow-y-auto filter-card-scroll">
+          {/* ── "Did you mean?" banner from server suggestions ── */}
+          {query && serverSuggestions.length > 0 && (
+            <div className="px-4 py-3 bg-[#FEFCF3] border-b border-[#EDCF5D]/30 flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-[#737373] font-sans">Did you mean:</span>
+              {serverSuggestions.map((sug) => (
+                <button
+                  key={sug}
+                  type="button"
+                  onClick={() => router.push(`/search?q=${encodeURIComponent(sug)}`)}
+                  className="text-xs font-bold text-[#010101] underline underline-offset-2 decoration-[#EDCF5D] hover:text-[#EDCF5D] transition-colors cursor-pointer font-sans"
+                >
+                  {sug}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Server search loading indicator */}
+          {serverLoading && query && (
+            <div className="px-4 py-1.5 flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full border-2 border-[#010101] border-t-transparent animate-spin" />
+              <span className="text-[10px] text-[#A4A4A4] font-sans">Searching more results…</span>
+            </div>
+          )}
+
           {results.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 border-b border-gray-100 divide-x divide-y divide-gray-100 pb-12">
               {results.map((product) => (
@@ -933,7 +1028,7 @@ function SearchPageInner() {
                 </div>
               ))}
             </div>
-          ) : loadingDb || (loadingSection && results.length === 0) ? (
+          ) : loadingDb || (loadingSection && results.length === 0) || (serverLoading && results.length === 0) ? (
             /* ── Shimmer Skeleton Loading ── */
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 border-b border-gray-100 divide-x divide-y divide-gray-100 pb-12 animate-pulse">
               {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (

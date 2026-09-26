@@ -94,10 +94,24 @@ export async function getOrComputeCached<T>(
 /**
  * Manually invalidate a cache key or prefix
  */
-export function invalidateCache(keyOrPrefix: string) {
+export function invalidateCache(keyOrPrefix?: string) {
+  if (!keyOrPrefix) {
+    memoryCache.clear();
+    slugToUuidCache.clear();
+    return;
+  }
   for (const key of memoryCache.keys()) {
-    if (key === keyOrPrefix || key.startsWith(`${keyOrPrefix}:`)) {
+    if (key === keyOrPrefix || key.startsWith(keyOrPrefix) || key.startsWith(`${keyOrPrefix}:`)) {
       memoryCache.delete(key);
     }
   }
+}
+
+/**
+ * Invalidate all storefront algorithmic caches when products, inventory, or sections change.
+ * Ensures zero clash in real-world traffic and instant reflection of dashboard updates.
+ */
+export function invalidateStorefrontCaches() {
+  invalidateCache("storefront");
+  slugToUuidCache.clear();
 }

@@ -219,6 +219,7 @@ export default function PosPage() {
       "/pos/orders",
       {
         method: "POST",
+        headers: { "Idempotency-Key": `pos_${crypto.randomUUID()}` },
         json: {
           items: cart.map((l) => ({ variant_id: l.variantId, quantity: l.quantity })),
           payment_method: paymentMethod,
@@ -446,7 +447,11 @@ export default function PosPage() {
     if (!foundOrder || !waPaymentMethod) return;
     const result = await apiCall<{ order_number: string; total: number }>(
       `/pos/whatsapp-orders/${foundOrder.id}/confirm`,
-      { method: "POST", json: { payment_method: waPaymentMethod } }
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": `wa_${crypto.randomUUID()}` },
+        json: { payment_method: waPaymentMethod },
+      }
     );
     if (!result.ok) {
       setSaleError(result.message);

@@ -6,6 +6,7 @@ import { ProductCard } from "../ui/product-card";
 import { useCatalogue } from "../catalogue-context";
 import { dbProductToItem, type ApiProduct } from "../../_lib/catalogue";
 import type { ProductItem } from "../../_data/products";
+import { getCartSessionId } from "../../_lib/server-sync";
 
 export function Trending() {
   const { products: catalogue } = useCatalogue();
@@ -20,7 +21,12 @@ export function Trending() {
     let mounted = true;
     async function fetchTrending() {
       try {
-        const res = await fetch("/api/v1/storefront/trending?limit=12");
+        const sessionId = typeof window !== "undefined" ? getCartSessionId() : "";
+        const url = sessionId
+          ? `/api/v1/storefront/trending?limit=12&session_id=${encodeURIComponent(sessionId)}`
+          : `/api/v1/storefront/trending?limit=12`;
+
+        const res = await fetch(url);
         if (res.ok) {
           const json = await res.json();
           if (mounted && Array.isArray(json.data) && json.data.length > 0) {
@@ -40,9 +46,20 @@ export function Trending() {
     };
   }, []);
 
-  // Instant-on: use cached/computed catalogue items immediately so the shopper NEVER sees empty skeletons
+  // Instant-on & Never Short: prioritize personalized + global trending, backfilled with catalogue
   const PRODUCTS = useMemo(() => {
-    if (apiProducts.length > 0) return apiProducts;
+    if (apiProducts.length >= 10) return apiProducts.slice(0, 12);
+    if (apiProducts.length > 0) {
+      const existingIds = new Set(apiProducts.map((p) => p.id));
+      const filler = [...catalogue]
+        .filter((p) => !existingIds.has(p.id))
+        .sort((a, b) => {
+          const scoreB = (Number(b.rating) || 0) * 10 + (Number(b.reviews) || 0);
+          const scoreA = (Number(a.rating) || 0) * 10 + (Number(a.reviews) || 0);
+          return scoreB - scoreA;
+        });
+      return [...apiProducts, ...filler].slice(0, 12);
+    }
     return [...catalogue]
       .sort((a, b) => {
         const scoreB = (Number(b.rating) || 0) * 10 + (Number(b.reviews) || 0);

@@ -96,27 +96,83 @@ export async function GET(request: NextRequest) {
     categoryIds = all.filter((c) => c.id === root.id || c.parent_id === root.id).map((c) => c.id);
   }
 
-  let query = serviceClient
-    .from("products")
-    .select(
-      `
-      id, name, slug, base_price,
-      category:categories(id, name, slug),
-      images:product_images(cloudinary_public_id, alt_text, is_primary),
-      variants:product_variants(id, size, color, color_hex, sku, price_modifier, is_active,
-        inventory(quantity, reserved_quantity, low_stock_threshold))
-      `,
-      { count: "exact" }
-    )
-    .eq("status", "active");
+  // Build the base select query with all relations needed for POS
+  const selectFields = `
+    id, name, slug, base_price,
+    category:categories(id, name, slug),
+    images:product_images(cloudinary_public_id, alt_text, is_primary),
+    variants:product_variants(id, size, color, color_hex, sku, price_modifier, is_active,
+      inventory(quantity, reserved_quantity, low_stock_threshold))
+  `;
 
-  if (q) query = query.or(`name.ilike.%${q}%,sku.ilike.%${q}%`);
-  if (categoryIds) query = query.in("category_id", categoryIds);
+  // ── Strategy: FTS first, ilike fallback ──────────────────────────────────
+  // When a search query is provided, first try FTS prefix matching,
+  // falling back to ilike if fts column isn't available yet (pre-migration).
+
+  let data: any = null;
+  let count: number | null = null;
+  let error: any = null;
+
+  if (q) {
+    // Build prefix tsquery: each word becomes prefix search
+    const words = q.toLowerCase().split(/\s+/).filter((w: string) => w.length >= 2);
+    const prefixQuery = words.map((w: string) => `${w}:*`).join(" & ");
+
+    // Try FTS search first
+    try {
+      const ftsResult = await serviceClient
+        .from("products")
+        .select(selectFields, { count: "exact" })
+        .eq("status", "active")
+        .textSearch("fts", prefixQuery, { type: "websearch" })
+        .order("total_sold", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (!ftsResult.error && ftsResult.data && ftsResult.data.length > 0) {
+        data = ftsResult.data;
+        count = ftsResult.count;
+      }
+    } catch {
+      // FTS column may not exist yet
+    }
+
+    // Fallback to ilike if FTS gave no results or failed
+    if (!data || data.length === 0) {
+      let fallbackQuery = serviceClient
+        .from("products")
+        .select(selectFields, { count: "exact" })
+        .eq("status", "active")
+        .or(`name.ilike.%${q}%,sku.ilike.%${q}%`);
+
+      if (categoryIds) fallbackQuery = fallbackQuery.in("category_id", categoryIds);
+
+      const fallbackResult = await fallbackQuery
+        .order("total_sold", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      data = fallbackResult.data;
+      count = fallbackResult.count;
+      error = fallbackResult.error;
+    }
+  } else {
+    // No search text: return full catalogue for the POS grid
+    let query = serviceClient
+      .from("products")
+      .select(selectFields, { count: "exact" })
+      .eq("status", "active");
+
+    if (categoryIds) query = query.in("category_id", categoryIds);
+
+    const result = await query
+      .order("total_sold", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    data = result.data;
+    count = result.count;
+    error = result.error;
+  }
 
   // No search text: the POS opens on the catalogue, best sellers first.
-  const { data, count, error } = await query
-    .order("total_sold", { ascending: false })
-    .range(offset, offset + limit - 1);
 
   if (error) {
     // Paging past the last row is just an empty page (e.g. a product was removed mid-scroll).

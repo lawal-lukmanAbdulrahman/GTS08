@@ -2,13 +2,15 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, use, useRef, useEffect } from "react";
+import { useState, use, useRef, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@gts/database/client";
 import { Footer } from "../../_components/landing/footer";
 import { ProductCard } from "../../_components/ui/product-card";
 import { useCatalogue } from "../../_components/catalogue-context";
 import type { ProductItem } from "../../_data/products";
+import { dbProductToItem, type ApiProduct } from "../../_lib/catalogue";
+import { getCartSessionId } from "../../_lib/server-sync";
 import { useCart } from "../../_components/cart-context";
 import { useWishlist } from "../../_components/wishlist-context";
 import { useAuth } from "../../_components/auth-context";
@@ -18,6 +20,104 @@ import { MarkdownContent } from "../../_components/markdown-content";
 import { NIGERIAN_STATES, NIGERIAN_LOCATIONS } from "../../_data/nigerian-locations";
 import { saveRecentlyViewed } from "../../_components/landing/search-history";
 import { useProductDwellTracker, trackProductWishlist, trackProductCart } from "../../_lib/analytics";
+
+// Universal standard color swatch map for when merchant hasn't provided a hex code
+const STANDARD_COLOR_PALETTE: Record<string, string> = {
+  black: "#181818",
+  white: "#FFFFFF",
+  red: "#DC2626",
+  crimson: "#991B1B",
+  coral: "#EA580C",
+  blue: "#2563EB",
+  navy: "#1E3A8A",
+  green: "#10B981",
+  emerald: "#059669",
+  mint: "#34D399",
+  yellow: "#F59E0B",
+  amber: "#D97706",
+  gold: "#EAB308",
+  orange: "#EA580C",
+  purple: "#7C3AED",
+  violet: "#8B5CF6",
+  pink: "#EC4899",
+  rose: "#F43F5E",
+  gray: "#6B7280",
+  grey: "#6B7280",
+  silver: "#94A3B8",
+  metal: "#64748B",
+  titanium: "#475569",
+  brown: "#78350F",
+  bronze: "#92400E",
+  mocha: "#5B3A29",
+  teal: "#0D9488",
+  cyan: "#06B6D4",
+  beige: "#D4C5B9",
+};
+
+// Generic color hex resolver: respects variant's DB hex code first, then falls back to standard color names
+function getColorHex(colorName: string, fallbackHex?: string): string {
+  if (fallbackHex && fallbackHex.trim().startsWith("#")) {
+    return fallbackHex.trim();
+  }
+  const c = colorName.toLowerCase();
+  for (const [name, hex] of Object.entries(STANDARD_COLOR_PALETTE)) {
+    if (c.includes(name)) return hex;
+  }
+  return fallbackHex || "#6B7280";
+}
+
+// Generic image matcher: scores images based on whether their filename/alt text contains any words from the variant's color name
+function matchImageByColor(colorName: string, images: any[]): string | null {
+  if (!colorName || !images || images.length === 0) return null;
+  const words = colorName
+    .toLowerCase()
+    .split(/[\s/_-]+/)
+    .filter((w) => w.length >= 3);
+
+  if (words.length === 0) return null;
+
+  let bestImg: string | null = null;
+  let bestScore = 0;
+
+  for (const img of images) {
+    const url = (img.cloudinary_public_id || img.url || (typeof img === "string" ? img : "")).toLowerCase();
+    const alt = (img.alt_text || "").toLowerCase();
+    let score = 0;
+
+    for (const word of words) {
+      if (url.includes(word)) score += 3;
+      if (alt.includes(word)) score += 2;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestImg = img.cloudinary_public_id || img.url || (typeof img === "string" ? img : null);
+    }
+  }
+
+  return bestScore > 0 ? bestImg : null;
+}
+
+// Generic transparency detector: transparent formats (.png, transparent flag, removebg)
+function isImageTransparent(imgUrl?: string | null, productHasTransparent?: boolean): boolean {
+  if (!imgUrl || typeof imgUrl !== "string") return false;
+  const lower = imgUrl.toLowerCase();
+  if (
+    lower.endsWith(".png") ||
+    lower.includes(".png?") ||
+    lower.includes("transparent") ||
+    lower.includes("removebg")
+  ) {
+    return true;
+  }
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+    return false;
+  }
+  if (productHasTransparent && !lower.includes("cloudinary.com") && !lower.includes("unsplash.com")) {
+    return true;
+  }
+  return false;
+}
 
 export default function ProductDetailPage({
   params,
@@ -103,11 +203,11 @@ export default function ProductDetailPage({
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
+    const decodedSlug = decodeURIComponent(slug).trim().toLowerCase();
 
     async function fetchProductDetails() {
       try {
         const supabase = createClient() as any;
-        const decodedSlug = decodeURIComponent(slug).trim().toLowerCase();
         const localFallback = getFromCatalogue.current(slug);
 
         const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -132,7 +232,7 @@ export default function ProductDetailPage({
             review_count,
             tags,
             category:categories(name),
-            variants:product_variants(*),
+            variants:product_variants(*, inventory(quantity, reserved_quantity)),
             images:product_images(*)
           `);
 
@@ -173,7 +273,7 @@ export default function ProductDetailPage({
                 review_count,
                 tags,
                 category:categories(name),
-                variants:product_variants(*),
+                variants:product_variants(*, inventory(quantity, reserved_quantity)),
                 images:product_images(*)
               `)
               .ilike("name", `%${keywords}%`)
@@ -198,21 +298,76 @@ export default function ProductDetailPage({
             sortedImages[0]?.cloudinary_public_id ||
             localFallback?.image ||
             "/placeholder-product.png";
-          const allImgUrls = sortedImages.map((img: any) => img.cloudinary_public_id).filter(Boolean);
+          const allImgUrls: string[] = Array.from(
+            new Set(sortedImages.map((img: any) => img.cloudinary_public_id).filter(Boolean))
+          );
+
+          // Check has_transparent_bg:
+          // 1. Explicit boolean in DB takes highest precedence if true
+          // 2. localFallback?.hasTransparentBg if true
+          // 3. Auto-detect if primary image is .png or includes transparent
+          const rawTransparent = matched.has_transparent_bg;
+          const isPrimaryPng =
+            typeof primaryImg === "string" &&
+            (primaryImg.toLowerCase().endsWith(".png") ||
+              primaryImg.toLowerCase().includes(".png?") ||
+              primaryImg.toLowerCase().includes("transparent") ||
+              primaryImg.toLowerCase().includes("removebg"));
+
+          const detectedTransparent =
+            rawTransparent === true ||
+            localFallback?.hasTransparentBg === true ||
+            isPrimaryPng;
 
           // Variants / Colors
           const dbVariants = matched.variants || [];
-          const uniqueColorsMap = new Map<string, { color: string; label: string; main: string; thumbnails: string[] }>();
+          const uniqueColorsMap = new Map<
+            string,
+            { color: string; label: string; main: string; thumbnails: string[]; hasTransparentBg?: boolean }
+          >();
 
+          let colorIndex = 0;
           dbVariants.forEach((v: any) => {
             const colorName = v.color || v.variant_color;
             if (colorName && !uniqueColorsMap.has(colorName)) {
+              // 1. Check if variant has an explicit image_url
+              let resolvedImg = v.image_url;
+
+              // 2. Check if an image in sortedImages has variant_id matching this variant
+              if (!resolvedImg) {
+                const linkedImg = sortedImages.find(
+                  (img: any) => img.variant_id && (img.variant_id === v.id || img.variant_id === v.variant_id)
+                );
+                if (linkedImg?.cloudinary_public_id) {
+                  resolvedImg = linkedImg.cloudinary_public_id;
+                }
+              }
+
+              // 3. Match against sortedImages by color keyword in url or alt text
+              if (!resolvedImg && sortedImages.length > 0) {
+                const colorMatched = matchImageByColor(colorName, sortedImages);
+                if (colorMatched) {
+                  resolvedImg = colorMatched;
+                }
+              }
+
+              // 4. Index fallback if there are multiple images for multiple variants
+              if (!resolvedImg) {
+                resolvedImg = sortedImages[colorIndex]?.cloudinary_public_id || primaryImg;
+              }
+
+              const resolvedHex = getColorHex(colorName, v.color_hex || v.color_code);
+              const isImgTrans = isImageTransparent(resolvedImg, detectedTransparent);
+
               uniqueColorsMap.set(colorName, {
-                color: v.color_hex || v.color_code || colorName,
+                color: resolvedHex,
                 label: colorName,
-                main: v.image_url || primaryImg,
-                thumbnails: [v.image_url || primaryImg, ...allImgUrls.filter((u: string) => u !== v.image_url)],
+                main: resolvedImg,
+                thumbnails: [resolvedImg, ...allImgUrls.filter((u: string) => u !== resolvedImg)],
+                hasTransparentBg: isImgTrans,
               });
+
+              colorIndex++;
             }
           });
 
@@ -228,6 +383,7 @@ export default function ProductDetailPage({
                         label: "Standard",
                         main: primaryImg,
                         thumbnails: allImgUrls.length > 0 ? allImgUrls : [primaryImg],
+                        hasTransparentBg: detectedTransparent,
                       },
                     ]);
 
@@ -266,17 +422,27 @@ export default function ProductDetailPage({
             shortDesc = localFallback.description;
           }
 
-          // Check has_transparent_bg:
-          // 1. Explicit boolean in DB takes highest precedence if true
-          // 2. localFallback?.hasTransparentBg if present
-          // 3. Auto-detect if image ends with .png
-          const rawTransparent = matched.has_transparent_bg;
-          const detectedTransparent =
-            rawTransparent === true
-              ? true
-              : typeof localFallback?.hasTransparentBg === "boolean"
-              ? localFallback.hasTransparentBg
-              : primaryImg.toLowerCase().endsWith(".png");
+          // Map variant inventory
+          const mappedVariants = dbVariants.map((v: any) => {
+            const inv = Array.isArray(v.inventory) ? v.inventory[0] : v.inventory;
+            const qty = Number(inv?.quantity ?? v.quantity ?? 0);
+            const reserved = Number(inv?.reserved_quantity ?? 0);
+            const available = Math.max(0, qty - reserved);
+            return {
+              id: v.id,
+              size: v.size || v.variant_size || "Standard",
+              color: v.color || v.variant_color || "Default",
+              colorHex: v.color_hex || v.color_code,
+              sku: v.sku,
+              quantity: qty,
+              available,
+              inStock: available > 0,
+            };
+          });
+
+          const totalAvailable = mappedVariants.length > 0
+            ? mappedVariants.reduce((sum: number, v: any) => sum + v.available, 0)
+            : 0;
 
           const formatted: ProductItem = {
             id: matched.slug || matched.id,
@@ -301,8 +467,20 @@ export default function ProductDetailPage({
             images: finalImages,
             sizes: finalSizes,
             tags: matched.tags || localFallback?.tags || [],
-            descriptionImages: allImgUrls.length > 0 ? allImgUrls : (localFallback?.descriptionImages || []),
+            descriptionImages: (() => {
+              const dbDesc = Array.isArray(matched.description_image_urls) && matched.description_image_urls.length > 0
+                ? matched.description_image_urls
+                : (Array.isArray(matched.description_images) && matched.description_images.length > 0
+                    ? matched.description_images.map((d: any) => (typeof d === "string" ? d : d.url)).filter(Boolean)
+                    : []);
+              return Array.from(
+                new Set([...dbDesc, ...allImgUrls, ...(localFallback?.descriptionImages || [])].filter(Boolean))
+              ) as string[];
+            })(),
             hasTransparentBg: detectedTransparent,
+            variants: mappedVariants,
+            availableStock: totalAvailable,
+            inStock: totalAvailable > 0,
           };
 
           setProduct(formatted);
@@ -361,8 +539,22 @@ export default function ProductDetailPage({
 
     fetchProductDetails();
 
+    // Subscribe to live inventory updates via Supabase Realtime
+    const supabase = createClient() as any;
+    const channel = supabase
+      .channel(`inventory-live-${decodedSlug}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inventory" },
+        () => {
+          if (isMounted) fetchProductDetails();
+        }
+      )
+      .subscribe();
+
     return () => {
       isMounted = false;
+      void supabase.removeChannel(channel);
     };
   }, [slug]);
 
@@ -450,19 +642,38 @@ export default function ProductDetailPage({
   const activeMainImage =
     allThumbnails[selectedImageIndex] || activeColorMain || product.image || "/placeholder-product.png";
 
-  // Distinguish between primary product shot and description gallery images:
-  // 1. Description images (selectedImageIndex > 0) are ALWAYS treated as full solid photos (fill card, p-0, object-cover).
-  // 2. Primary product/variant shot (selectedImageIndex === 0) is centered with padding & radial background ONLY IF product has transparent background.
-  // 3. Primary product/variant shot with solid background fills the card (p-0, object-cover).
-  const isDescriptionImage = selectedImageIndex > 0;
   const isMainTransparent = Boolean(product.hasTransparentBg);
-  const isCurrentTransparent = !isDescriptionImage && isMainTransparent;
+  const isCurrentTransparent = isImageTransparent(activeMainImage, isMainTransparent);
+
+  // Match active variant and calculate available stock
+  const currentVariant =
+    product.variants?.find((v) => {
+      const matchSize = !selectedSize || selectedSize.toLowerCase() === v.size.toLowerCase();
+      const matchColor = !activeColor?.label || activeColor.label.toLowerCase() === v.color.toLowerCase() || activeColor.color.toLowerCase() === v.color.toLowerCase();
+      return matchSize && matchColor;
+    }) ||
+    product.variants?.find((v) => !selectedSize || selectedSize.toLowerCase() === v.size.toLowerCase()) ||
+    product.variants?.[0];
+
+  const currentAvailableStock = currentVariant ? currentVariant.available : (product.availableStock ?? 0);
+  const isOutOfStock = currentAvailableStock <= 0;
 
   const handleAddToCart = () => {
-    addToCart(product, selectedSize || product.sizes?.[0] || "Standard", activeColor.label, quantity);
-    trackProductCart(product.id);
-    setAddedToCart(true);
-    setTimeout(() => setAddedToCart(false), 2000);
+    if (isOutOfStock) return;
+    const addQty = Math.min(currentAvailableStock, quantity);
+    const result = addToCart(
+      product,
+      selectedSize || product.sizes?.[0] || "Standard",
+      activeColor.label,
+      addQty,
+      currentVariant?.id,
+      currentAvailableStock
+    );
+    if (result.ok) {
+      trackProductCart(product.id);
+      setAddedToCart(true);
+      setTimeout(() => setAddedToCart(false), 2000);
+    }
   };
 
   // Calculate delivery date ranges
@@ -512,12 +723,16 @@ export default function ProductDetailPage({
                   <div className="md:hidden w-full">
                     <div className="flex items-center gap-3 overflow-x-auto snap-x snap-mandatory scroll-pl-4 sm:scroll-pl-6 pb-1 pt-0.5 px-4 -mx-4 sm:px-6 sm:-mx-6 scrollbar-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                       {allThumbnails.map((imgSrc, idx) => {
-                        const thumbTransparent = idx === 0 && isMainTransparent;
+                        const thumbTransparent = isImageTransparent(imgSrc, isMainTransparent);
                         return (
                           <div
                             key={idx}
                             onClick={() => {
                               setSelectedImageIndex(idx);
+                              const matchedColorIdx = product.images?.findIndex((col) => col.main === imgSrc);
+                              if (matchedColorIdx !== -1 && matchedColorIdx !== undefined) {
+                                setSelectedColorIndex(matchedColorIdx);
+                              }
                               setIsZoomOpen(true);
                             }}
                             className={`shrink-0 snap-start w-[78vw] max-w-[320px] aspect-square rounded-2xl overflow-hidden relative border border-gray-200/80 shadow-2xs group transition-all cursor-zoom-in flex items-center justify-center ${
@@ -556,10 +771,10 @@ export default function ProductDetailPage({
                         setIsZoomOpen(true);
                       }}
                       className={`w-full aspect-square rounded-2xl overflow-hidden relative border border-gray-200/80 shadow-2xs group transition-all cursor-zoom-in shrink-0 flex items-center justify-center ${
-                        isMainTransparent ? "" : "bg-white"
+                        isCurrentTransparent ? "" : "bg-white"
                       }`}
                       style={
-                        isMainTransparent
+                        isCurrentTransparent
                           ? { background: "radial-gradient(ellipse at center, #ECEAE6 0%, #DDDAD4 100%)" }
                           : undefined
                       }
@@ -569,7 +784,7 @@ export default function ProductDetailPage({
                         alt={product.title}
                         fill
                         className={`group-hover:scale-105 transition-transform duration-300 ${
-                          isMainTransparent
+                          isCurrentTransparent
                             ? "object-contain p-6 drop-shadow-md"
                             : "object-cover p-0"
                         }`}
@@ -613,12 +828,18 @@ export default function ProductDetailPage({
                     <div className="flex items-center gap-2 overflow-x-auto shrink-0 pt-1 pb-2 px-0.5 -mx-0.5 [scrollbar-width:thin] [scrollbar-color:#D1D5DB_transparent] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-400">
                       {allThumbnails.map((thumb, idx) => {
                         const isSelected = selectedImageIndex === idx;
-                        const thumbTransparent = idx === 0 && isMainTransparent;
+                        const thumbTransparent = isImageTransparent(thumb, isMainTransparent);
 
                         return (
                           <button
                             key={idx}
-                            onClick={() => setSelectedImageIndex(idx)}
+                            onClick={() => {
+                              setSelectedImageIndex(idx);
+                              const matchedColorIdx = product.images?.findIndex((col) => col.main === thumb);
+                              if (matchedColorIdx !== -1 && matchedColorIdx !== undefined) {
+                                setSelectedColorIndex(matchedColorIdx);
+                              }
+                            }}
                             className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl border flex items-center justify-center shrink-0 transition-all overflow-hidden relative cursor-pointer ${
                               thumbTransparent ? "p-1" : "p-0"
                             } ${
@@ -810,6 +1031,29 @@ export default function ProductDetailPage({
               </div>
             )}
 
+            {/* Live Stock Status Indicator */}
+            <div className="pt-1">
+              {isOutOfStock ? (
+                <div className="inline-flex items-center gap-2 py-1 px-3 rounded-lg bg-red-50 border border-red-200">
+                  <span className="w-2 h-2 rounded-full bg-red-500" />
+                  <span className="text-xs font-bold text-red-700">Out of Stock</span>
+                  <span className="text-[11px] text-red-600">Currently unavailable for order</span>
+                </div>
+              ) : currentAvailableStock <= 5 ? (
+                <div className="inline-flex items-center gap-2 py-1 px-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="text-xs font-bold text-amber-800">Only {currentAvailableStock} left in stock!</span>
+                  <span className="text-[11px] text-amber-700">Order soon to secure yours</span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-2 py-1 px-3 rounded-lg bg-emerald-50 border border-emerald-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="text-xs font-semibold text-emerald-800">In Stock</span>
+                  <span className="text-[11px] text-emerald-700 font-mono">({currentAvailableStock} units available)</span>
+                </div>
+              )}
+            </div>
+
             {/* ── Color Selection (only if real color options exist) ── */}
             {hasMultipleColors && (
               <div className="space-y-2 sm:space-y-2.5 pt-1.5 sm:pt-2 border-t border-gray-100">
@@ -824,15 +1068,16 @@ export default function ProductDetailPage({
                     const swatchTransparent =
                       typeof img.hasTransparentBg === "boolean"
                         ? img.hasTransparentBg
-                        : isMainTransparent;
+                        : isImageTransparent(img.main, isMainTransparent);
 
                     return (
                       <button
-                        key={img.color}
+                        key={img.label || img.color || idx}
                         onClick={() => {
                           setSelectedColorIndex(idx);
                           setSelectedImageIndex(0);
                         }}
+                        title={img.label}
                         className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl border flex items-center justify-center transition-all cursor-pointer overflow-hidden relative ${
                           swatchTransparent ? "p-1" : "p-0"
                         } ${
@@ -893,8 +1138,9 @@ export default function ProductDetailPage({
               <div className="flex items-center gap-2.5 sm:gap-3 bg-[#F9F8F5] border border-gray-200 rounded-full px-3.5 py-2.5 shrink-0">
                 <button
                   aria-label="Decrease quantity"
+                  disabled={quantity <= 1 || isOutOfStock}
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="text-[#010101] hover:text-[#EDCF5D] flex items-center justify-center transition-all active:scale-90 p-0.5"
+                  className="text-[#010101] hover:text-[#EDCF5D] disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center transition-all active:scale-90 p-0.5 cursor-pointer"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
@@ -902,13 +1148,14 @@ export default function ProductDetailPage({
                 </button>
 
                 <span className="text-sm font-black text-[#010101] min-w-[18px] text-center tabular-nums font-sans">
-                  {quantity}
+                  {isOutOfStock ? 0 : Math.min(currentAvailableStock, quantity)}
                 </span>
 
                 <button
                   aria-label="Increase quantity"
-                  onClick={() => setQuantity((q) => q + 1)}
-                  className="text-[#010101] hover:text-[#EDCF5D] flex items-center justify-center transition-all active:scale-90 p-0.5"
+                  disabled={quantity >= currentAvailableStock || isOutOfStock}
+                  onClick={() => setQuantity((q) => Math.min(currentAvailableStock, q + 1))}
+                  className="text-[#010101] hover:text-[#EDCF5D] disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center transition-all active:scale-90 p-0.5 cursor-pointer"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -919,12 +1166,19 @@ export default function ProductDetailPage({
               {/* Add to Cart Button */}
               <button
                 onClick={handleAddToCart}
-                className="flex-1 bg-[#010101] hover:bg-black text-white font-bold py-3 px-4 rounded-full shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs sm:text-sm font-sans"
+                disabled={isOutOfStock}
+                className={`flex-1 font-bold py-3 px-4 rounded-full shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs sm:text-sm font-sans ${
+                  isOutOfStock
+                    ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                    : addedToCart
+                    ? "bg-emerald-600 text-white"
+                    : "bg-[#010101] hover:bg-black text-white cursor-pointer"
+                }`}
               >
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-current" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
                 </svg>
-                <span>{addedToCart ? "Added to Cart!" : "Add to cart"}</span>
+                <span>{isOutOfStock ? "Out of Stock" : addedToCart ? "Added to Cart!" : "Add to cart"}</span>
               </button>
 
               <button
@@ -1144,7 +1398,7 @@ export default function ProductDetailPage({
       />
 
       {/* ── Similar Finds Section: Landing page style carousel ── */}
-      <SimilarFinds />
+      <SimilarFinds currentProduct={product} />
 
       {/* ── Product Full-Screen Pan & Zoom Lightbox ── */}
       <ProductZoomLightbox
@@ -1164,8 +1418,9 @@ export default function ProductDetailPage({
             <button
               type="button"
               aria-label="Decrease quantity"
+              disabled={quantity <= 1 || isOutOfStock}
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="text-[#010101] hover:text-[#EDCF5D] flex items-center justify-center transition-all active:scale-90 p-0.5"
+              className="text-[#010101] hover:text-[#EDCF5D] disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center transition-all active:scale-90 p-0.5 cursor-pointer"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
@@ -1173,14 +1428,15 @@ export default function ProductDetailPage({
             </button>
 
             <span className="text-sm font-black text-[#010101] min-w-[16px] text-center tabular-nums font-sans">
-              {quantity}
+              {isOutOfStock ? 0 : Math.min(currentAvailableStock, quantity)}
             </span>
 
             <button
               type="button"
               aria-label="Increase quantity"
-              onClick={() => setQuantity((q) => q + 1)}
-              className="text-[#010101] hover:text-[#EDCF5D] flex items-center justify-center transition-all active:scale-90 p-0.5"
+              disabled={quantity >= currentAvailableStock || isOutOfStock}
+              onClick={() => setQuantity((q) => Math.min(currentAvailableStock, q + 1))}
+              className="text-[#010101] hover:text-[#EDCF5D] disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center transition-all active:scale-90 p-0.5 cursor-pointer"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -1191,17 +1447,20 @@ export default function ProductDetailPage({
           {/* Add to Cart Button */}
           <button
             type="button"
+            disabled={isOutOfStock}
             onClick={handleAddToCart}
             className={`flex-1 font-bold py-3 px-4 rounded-full shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs sm:text-sm font-sans ${
-              addedToCart
+              isOutOfStock
+                ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                : addedToCart
                 ? "bg-emerald-600 text-white"
-                : "bg-[#010101] hover:bg-black text-white"
+                : "bg-[#010101] hover:bg-black text-white cursor-pointer"
             }`}
           >
-            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-current" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
             </svg>
-            <span>{addedToCart ? "Added to Cart!" : "Add to cart"}</span>
+            <span>{isOutOfStock ? "Out of Stock" : addedToCart ? "Added to Cart!" : "Add to cart"}</span>
           </button>
 
           {/* Wishlist Button */}
@@ -1323,19 +1582,27 @@ function ProductBentoGallery({
   productTitle: string;
   onImageClick?: (imgUrl: string, idx: number) => void;
 }) {
+  // Strictly deduplicate images to eliminate any repeated color or showcase photos
+  const uniqueImages = useMemo(() => Array.from(new Set((images || []).filter(Boolean))), [images]);
+
   const [imageMetas, setImageMetas] = useState<ImageMeta[]>(() =>
-    (images || []).map((url) => ({
+    uniqueImages.map((url) => ({
       url,
       aspect: 1.33,
       orientation: "landscape",
     }))
   );
 
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [hasMoreThan3Rows, setHasMoreThan3Rows] = useState(false);
+  const [max3RowsHeight, setMax3RowsHeight] = useState<number | undefined>(undefined);
+  const gridRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (!images || images.length === 0) return;
+    if (uniqueImages.length === 0) return;
     let isMounted = true;
 
-    images.forEach((url, idx) => {
+    uniqueImages.forEach((url, idx) => {
       if (!url) return;
       const img = new window.Image();
       img.src = url;
@@ -1365,13 +1632,62 @@ function ProductBentoGallery({
     return () => {
       isMounted = false;
     };
-  }, [images]);
+  }, [uniqueImages]);
 
-  if (!images || images.length === 0) return null;
+  // Measure row offsets to detect if gallery exceeds 3 rows
+  useEffect(() => {
+    const calculate3RowsHeight = () => {
+      const grid = gridRef.current;
+      if (!grid) return;
+      const children = Array.from(grid.children) as HTMLElement[];
+      if (children.length === 0) return;
+
+      const rowTops: number[] = [];
+      children.forEach((child) => {
+        const top = child.offsetTop;
+        if (!rowTops.some((t) => Math.abs(t - top) < 14)) {
+          rowTops.push(top);
+        }
+      });
+
+      rowTops.sort((a, b) => a - b);
+
+      if (rowTops.length > 3 && typeof rowTops[2] === "number") {
+        setHasMoreThan3Rows(true);
+        const thirdRowTop = rowTops[2];
+        let maxBottom = 0;
+        children.forEach((child) => {
+          if (child.offsetTop <= thirdRowTop + 18) {
+            const bottom = child.offsetTop + child.offsetHeight;
+            if (bottom > maxBottom) {
+              maxBottom = bottom;
+            }
+          }
+        });
+
+        if (maxBottom > 0) {
+          setMax3RowsHeight(maxBottom);
+        }
+      } else {
+        setHasMoreThan3Rows(false);
+        setMax3RowsHeight(undefined);
+      }
+    };
+
+    calculate3RowsHeight();
+    window.addEventListener("resize", calculate3RowsHeight);
+    const timer = setTimeout(calculate3RowsHeight, 350);
+    return () => {
+      window.removeEventListener("resize", calculate3RowsHeight);
+      clearTimeout(timer);
+    };
+  }, [uniqueImages, imageMetas]);
+
+  if (uniqueImages.length === 0) return null;
 
   // Single Image Case
-  if (images.length === 1 && images[0]) {
-    const meta0 = imageMetas[0] || { url: images[0], orientation: "landscape", aspect: 1.5 };
+  if (uniqueImages.length === 1 && uniqueImages[0]) {
+    const meta0 = imageMetas[0] || { url: uniqueImages[0], orientation: "landscape", aspect: 1.5 };
     const isPortrait = meta0.orientation === "portrait";
     const isSquare = meta0.orientation === "square";
 
@@ -1407,14 +1723,14 @@ function ProductBentoGallery({
   }
 
   // 2 Images Case (Dimension Aware)
-  if (images.length === 2 && images[0] && images[1]) {
-    const meta0 = imageMetas[0] || { url: images[0], orientation: "landscape", aspect: 1.33 };
-    const meta1 = imageMetas[1] || { url: images[1], orientation: "landscape", aspect: 1.33 };
+  if (uniqueImages.length === 2 && uniqueImages[0] && uniqueImages[1]) {
+    const meta0 = imageMetas[0] || { url: uniqueImages[0], orientation: "landscape", aspect: 1.33 };
+    const meta1 = imageMetas[1] || { url: uniqueImages[1], orientation: "landscape", aspect: 1.33 };
 
     const is0Portrait = meta0.orientation === "portrait";
     const is1Portrait = meta1.orientation === "portrait";
 
-    // Scenario 1: One landscape, one portrait (e.g. kid with octopus plushie + phone)
+    // Scenario 1: One landscape, one portrait
     if (!is0Portrait && is1Portrait) {
       return (
         <div className="pt-2 w-full">
@@ -1575,17 +1891,15 @@ function ProductBentoGallery({
   }
 
   // 3 Images Case
-  if (images.length === 3 && images[0] && images[1] && images[2]) {
-    const meta0 = imageMetas[0] || { url: images[0], orientation: "landscape" };
-    const meta1 = imageMetas[1] || { url: images[1], orientation: "landscape" };
-    const meta2 = imageMetas[2] || { url: images[2], orientation: "landscape" };
+  if (uniqueImages.length === 3 && uniqueImages[0] && uniqueImages[1] && uniqueImages[2]) {
+    const meta0 = imageMetas[0] || { url: uniqueImages[0], orientation: "landscape" };
+    const meta1 = imageMetas[1] || { url: uniqueImages[1], orientation: "landscape" };
+    const meta2 = imageMetas[2] || { url: uniqueImages[2], orientation: "landscape" };
 
-    // Check if 1st image is portrait and others landscape:
     if (meta0.orientation === "portrait" && meta1.orientation !== "portrait") {
       return (
         <div className="pt-2 w-full">
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3">
-            {/* Portrait Item on Left (spanning height) */}
             <div
               onClick={() => onImageClick?.(meta0.url, 0)}
               className="sm:col-span-5 sm:row-span-2 group relative aspect-[3/4] sm:aspect-auto sm:min-h-[300px] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
@@ -1603,7 +1917,6 @@ function ProductBentoGallery({
               </div>
             </div>
 
-            {/* 2 stacked items on Right */}
             <div
               onClick={() => onImageClick?.(meta1.url, 1)}
               className="sm:col-span-7 group relative aspect-[16/10] sm:h-[145px] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
@@ -1632,11 +1945,9 @@ function ProductBentoGallery({
       );
     }
 
-    // Default 3 images (Large landscape hero on left + 2 stacked on right)
     return (
       <div className="pt-2 w-full">
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3">
-          {/* Main Large Hero Item */}
           <div
             onClick={() => onImageClick?.(meta0.url, 0)}
             className="sm:col-span-7 sm:row-span-2 group relative aspect-[4/3] sm:aspect-auto sm:min-h-[295px] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
@@ -1654,7 +1965,6 @@ function ProductBentoGallery({
             </div>
           </div>
 
-          {/* 2 stacked secondary items */}
           <div
             onClick={() => onImageClick?.(meta1.url, 1)}
             className={`sm:col-span-5 group relative ${
@@ -1691,71 +2001,110 @@ function ProductBentoGallery({
     );
   }
 
-  // 4+ Images Case (Dimension & Orientation Aware Grid)
+  // 4+ Images Case (Dimension & Orientation Aware Grid with 3-Row Clamp & Smooth Fade)
   return (
-    <div className="pt-2 w-full">
-      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3">
-        {images.map((imgUrl, idx) => {
-          const meta = imageMetas[idx] || { url: imgUrl, orientation: "landscape", aspect: 1.33 };
-          const isPortrait = meta.orientation === "portrait";
-          const isSquare = meta.orientation === "square";
+    <div className="pt-2 w-full space-y-3">
+      <div
+        className={`relative transition-[max-height] duration-500 ease-in-out ${
+          hasMoreThan3Rows && !isExpanded ? "overflow-hidden" : ""
+        }`}
+        style={
+          hasMoreThan3Rows && !isExpanded && max3RowsHeight
+            ? { maxHeight: `${max3RowsHeight}px` }
+            : undefined
+        }
+      >
+        <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3">
+          {uniqueImages.map((imgUrl, idx) => {
+            const meta = imageMetas[idx] || { url: imgUrl, orientation: "landscape", aspect: 1.33 };
+            const isPortrait = meta.orientation === "portrait";
+            const isSquare = meta.orientation === "square";
 
-          // Dynamic grid spans based on orientation
-          let colSpan = "sm:col-span-6";
-          let aspectClass = "aspect-[16/10]";
+            let colSpan = "sm:col-span-6";
+            let aspectClass = "aspect-[16/10]";
 
-          if (images.length === 4) {
-            if (idx === 0 && !isPortrait) {
-              colSpan = "sm:col-span-8 sm:row-span-2";
-              aspectClass = "aspect-[4/3] sm:aspect-auto sm:min-h-[295px]";
-            } else if (isPortrait) {
-              colSpan = "sm:col-span-4";
-              aspectClass = "aspect-[3/4] sm:h-[145px]";
-            } else if (idx === 3) {
-              colSpan = "sm:col-span-12";
-              aspectClass = "aspect-[21/9] sm:aspect-[24/8] max-h-[190px]";
+            if (uniqueImages.length === 4) {
+              if (idx === 0 && !isPortrait) {
+                colSpan = "sm:col-span-8 sm:row-span-2";
+                aspectClass = "aspect-[4/3] sm:aspect-auto sm:min-h-[295px]";
+              } else if (isPortrait) {
+                colSpan = "sm:col-span-4";
+                aspectClass = "aspect-[3/4] sm:h-[145px]";
+              } else if (idx === 3) {
+                colSpan = "sm:col-span-12";
+                aspectClass = "aspect-[21/9] sm:aspect-[24/8] max-h-[190px]";
+              } else {
+                colSpan = "sm:col-span-4";
+                aspectClass = "aspect-square sm:h-[145px]";
+              }
             } else {
-              colSpan = "sm:col-span-4";
-              aspectClass = "aspect-square sm:h-[145px]";
+              // 5+ images
+              if (isPortrait) {
+                colSpan = "sm:col-span-4";
+                aspectClass = "aspect-[3/4] sm:aspect-[4/5]";
+              } else if (isSquare) {
+                colSpan = "sm:col-span-4";
+                aspectClass = "aspect-square";
+              } else {
+                // landscape
+                colSpan = idx % 3 === 0 ? "sm:col-span-8" : "sm:col-span-6";
+                aspectClass = "aspect-[16/10]";
+              }
             }
-          } else {
-            // 5+ images
-            if (isPortrait) {
-              colSpan = "sm:col-span-4";
-              aspectClass = "aspect-[3/4] sm:aspect-[4/5]";
-            } else if (isSquare) {
-              colSpan = "sm:col-span-4";
-              aspectClass = "aspect-square";
-            } else {
-              // landscape
-              colSpan = idx % 3 === 0 ? "sm:col-span-8" : "sm:col-span-6";
-              aspectClass = "aspect-[16/10]";
-            }
-          }
 
-          return (
-            <div
-              key={idx}
-              onClick={() => onImageClick?.(imgUrl, idx)}
-              className={`${colSpan} ${aspectClass} group relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200`}
-            >
-              <img
-                src={imgUrl}
-                alt={`${productTitle} showcase ${idx + 1}`}
-                className={`w-full h-full transition-transform duration-300 group-hover:scale-103 ${
-                  isPortrait ? "object-contain p-2" : "object-cover"
-                }`}
-              />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
-              <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
-                </svg>
+            return (
+              <div
+                key={`${imgUrl}-${idx}`}
+                onClick={() => onImageClick?.(imgUrl, idx)}
+                className={`${colSpan} ${aspectClass} group relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200`}
+              >
+                <img
+                  src={imgUrl}
+                  alt={`${productTitle} showcase ${idx + 1}`}
+                  className={`w-full h-full transition-transform duration-300 group-hover:scale-103 ${
+                    isPortrait ? "object-contain p-2" : "object-cover"
+                  }`}
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
+                <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
+                  </svg>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+
+        {/* Bottom Fade Gradient when collapsed */}
+        {hasMoreThan3Rows && !isExpanded && (
+          <div className="absolute bottom-0 left-0 right-0 h-44 bg-gradient-to-t from-white via-white/85 to-transparent pointer-events-none z-10" />
+        )}
       </div>
+
+      {/* Expand / Collapse Action Button */}
+      {hasMoreThan3Rows && (
+        <div className="flex justify-center pt-1">
+          <button
+            type="button"
+            onClick={() => setIsExpanded((prev) => !prev)}
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#010101] text-white hover:bg-[#EDCF5D] hover:text-[#010101] text-xs sm:text-sm font-semibold transition-all duration-200 shadow-md active:scale-95 cursor-pointer z-20 group"
+          >
+            <span>{isExpanded ? "Show fewer images" : "See more images"}</span>
+            <svg
+              className={`w-4 h-4 transition-transform duration-200 ${
+                isExpanded ? "rotate-180" : "group-hover:translate-y-0.5"
+              }`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -2719,7 +3068,6 @@ function ProductTabs({
             <div className="space-y-6 w-full text-xs sm:text-sm text-gray-600 leading-relaxed pt-2">
               {product?.description ? (
                 <div className="space-y-3">
-                  <h3 className="font-bold text-base text-[#010101]">Product Overview & Specifications</h3>
                   <MarkdownContent content={product.description} />
                 </div>
               ) : (
@@ -3096,75 +3444,120 @@ function ProductTabs({
   );
 }
 
-// ─── Similar Finds Component ─────────────────────────────────────────────────
-const SIMILAR_PRODUCTS = [
-  {
-    id: "denim-jacket",
-    badge: "50% OFF",
-    title: "Urban Classic Denim Jacket",
-    price: "₦32,400",
-    originalPrice: "₦64,800",
-    rating: 4.8,
-    reviews: "1.2k",
-    image: "/products/denim_jacket.png",
-  },
-  {
-    id: "oxford-shirt",
-    badge: "50% OFF",
-    title: "Classic Oxford Shirt",
-    price: "₦32,400",
-    originalPrice: "₦64,800",
-    rating: 4.9,
-    reviews: "850",
-    image: "/products/oxford_shirt.png",
-  },
-  {
-    id: "hoodie",
-    badge: "50% OFF",
-    title: "Premium Streetwear Hoodie",
-    price: "₦32,400",
-    originalPrice: "₦64,800",
-    rating: 4.7,
-    reviews: "2.1k",
-    image: "/products/hoodie.png",
-  },
-  {
-    id: "linen-coat",
-    badge: "50% OFF",
-    title: "Urban Tailored Linen Coat",
-    price: "₦32,400",
-    originalPrice: "₦64,800",
-    rating: 4.9,
-    reviews: "1.5k",
-    image: "/products/linen_coat.png",
-  },
-  {
-    id: "pixel-10-pro",
-    badge: "7% OFF",
-    title: "Google Pixel 10 Pro 5G",
-    price: "₦1,350,000",
-    originalPrice: "₦1,450,000",
-    rating: 4.9,
-    reviews: "940",
-    image: "/products/pixel_10.png",
-  },
-  {
-    id: "ps5-spiderman",
-    badge: "LIMITED",
-    title: "PlayStation 5 Console Spider-Man Edition",
-    price: "₦850,000",
-    originalPrice: "₦950,000",
-    rating: 4.9,
-    reviews: "2.1k",
-    image: "/products/spiderman_ps5.png",
-  },
-];
+// ─── Dynamic Similar Finds Component ─────────────────────────────────────────
+interface SimilarFindsProps {
+  currentProduct?: ProductItem | null;
+}
 
-function SimilarFinds() {
+function SimilarFinds({ currentProduct }: SimilarFindsProps) {
+  const { products: catalogue } = useCatalogue();
+  const [apiProducts, setApiProducts] = useState<ProductItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [recommendationSource, setRecommendationSource] = useState<string>("co_purchase_and_affinity");
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Immediate zero-latency fallback: filter & rank catalogue items related to current product
+  const fallbackProducts = useMemo(() => {
+    if (!catalogue || catalogue.length === 0) return [];
+    if (!currentProduct) return catalogue.slice(0, 10);
+
+    const curId = (currentProduct.id || "").toLowerCase();
+    const curSku = (currentProduct.sku || "").toLowerCase();
+    const curTitle = (currentProduct.title || "").toLowerCase();
+    const curCat = (currentProduct.category || "").toLowerCase();
+    const curSub = (currentProduct.subCategory || "").toLowerCase();
+    const curBrand = (currentProduct.brand || "").toLowerCase();
+
+    // Strictly exclude the current product itself
+    const eligible = catalogue.filter((p) => {
+      const pId = (p.id || "").toLowerCase();
+      const pSku = (p.sku || "").toLowerCase();
+      const pTitle = (p.title || "").toLowerCase();
+      if (pId === curId || (curSku && pSku === curSku) || pTitle === curTitle) return false;
+      return true;
+    });
+
+    // Score based on subCategory, category, brand, and social proof
+    const scored = eligible.map((p) => {
+      let score = 0;
+      const pCat = (p.category || "").toLowerCase();
+      const pSub = (p.subCategory || "").toLowerCase();
+      const pBrand = (p.brand || "").toLowerCase();
+
+      if (curSub && pSub && pSub === curSub) score += 35;
+      else if (curCat && pCat && pCat === curCat) score += 20;
+
+      if (curBrand && pBrand && pBrand === curBrand) score += 18;
+
+      score += Number(p.rating || 4) * 2;
+      return { product: p, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 12).map((s) => s.product);
+  }, [catalogue, currentProduct]);
+
+  // Live personalized & co-purchase query from backend recommendation engine
+  useEffect(() => {
+    if (!currentProduct?.id && !currentProduct?.sku) return;
+
+    let mounted = true;
+    setLoading(true);
+
+    async function fetchSimilar() {
+      try {
+        const sessionId = getCartSessionId();
+        const targetId = currentProduct?.id || currentProduct?.sku || "";
+        const targetSlug = currentProduct?.sku || currentProduct?.id || "";
+
+        const url = `/api/v1/storefront/similar-finds?product_id=${encodeURIComponent(
+          targetId
+        )}&slug=${encodeURIComponent(targetSlug)}&session_id=${encodeURIComponent(
+          sessionId
+        )}&limit=12`;
+
+        const res = await fetch(url);
+        if (res.ok) {
+          const json = await res.json();
+          if (mounted && Array.isArray(json.data) && json.data.length > 0) {
+            const mapped = json.data.map((p: ApiProduct) => dbProductToItem(p));
+
+            // Strictly filter out current product
+            const curId = (currentProduct?.id || "").toLowerCase();
+            const curSku = (currentProduct?.sku || "").toLowerCase();
+            const curTitle = (currentProduct?.title || "").toLowerCase();
+
+            const clean = mapped.filter((p: ProductItem) => {
+              const pId = (p.id || "").toLowerCase();
+              const pSku = (p.sku || "").toLowerCase();
+              const pTitle = (p.title || "").toLowerCase();
+              return pId !== curId && (!curSku || pSku !== curSku) && pTitle !== curTitle;
+            });
+
+            if (clean.length > 0) {
+              setApiProducts(clean);
+              if (json.source) setRecommendationSource(json.source);
+            }
+          }
+        }
+      } catch {
+        // Fallback products remain active seamlessly
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    void fetchSimilar();
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentProduct?.id, currentProduct?.sku, currentProduct?.category, currentProduct?.subCategory]);
+
+  const displayProducts: ProductItem[] = apiProducts.length > 0 ? apiProducts : fallbackProducts;
 
   const updateScrollState = () => {
     if (scrollRef.current) {
@@ -3185,13 +3578,21 @@ function SimilarFinds() {
         window.removeEventListener("resize", updateScrollState);
       };
     }
-  }, []);
+  }, [displayProducts]);
 
   const toggleWishlist = (id: string) =>
     setWishlisted((prev) => ({ ...prev, [id]: !prev[id] }));
 
   const scrollBy = (dir: "left" | "right") =>
     scrollRef.current?.scrollBy({ left: dir === "left" ? -290 : 290, behavior: "smooth" });
+
+  if (displayProducts.length === 0) {
+    return null;
+  }
+
+  const viewAllHref = currentProduct?.category
+    ? `/search?category=${encodeURIComponent(currentProduct.category)}`
+    : "/search";
 
   return (
     <section className="w-full px-5 md:px-8 pt-10 sm:pt-14 pb-10">
@@ -3203,13 +3604,10 @@ function SimilarFinds() {
             <span className="text-[#EDCF5D] font-bold">✦</span>
             <span className="font-serif italic font-bold text-[#010101]">Finds</span>
           </h2>
-          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-            More styles you might love
-          </p>
         </div>
 
         <Link
-          href="/search"
+          href={viewAllHref}
           className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
         >
           <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">
@@ -3246,23 +3644,31 @@ function SimilarFinds() {
           className="flex gap-4 sm:gap-5 overflow-x-auto scroll-smooth py-1"
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
-          {SIMILAR_PRODUCTS.map((product) => (
-            <ProductCard
-              key={product.id}
-              id={product.id}
-              title={product.title}
-              price={product.price}
-              originalPrice={product.originalPrice}
-              badge={product.badge}
-              rating={product.rating}
-              reviews={product.reviews}
-              image={product.image}
-              hasTransparentBg={(product as any).hasTransparentBg ?? true}
-              isWishlisted={wishlisted[product.id]}
-              onToggleWishlist={toggleWishlist}
-              className="w-[180px] sm:w-[200px] md:w-[220px] shrink-0"
-            />
-          ))}
+          {displayProducts.map((product: ProductItem) => {
+            const badge =
+              product.badge ||
+              (product.discountPercent && product.discountPercent > 0
+                ? `${product.discountPercent}% OFF`
+                : undefined);
+
+            return (
+              <ProductCard
+                key={product.id}
+                id={product.id}
+                title={product.title}
+                price={product.price}
+                originalPrice={product.originalPrice}
+                badge={badge}
+                rating={product.rating}
+                reviews={product.reviews}
+                image={product.image}
+                hasTransparentBg={product.hasTransparentBg}
+                isWishlisted={wishlisted[product.id]}
+                onToggleWishlist={toggleWishlist}
+                className="w-[180px] sm:w-[200px] md:w-[220px] shrink-0"
+              />
+            );
+          })}
         </div>
 
         {/* Right Fade */}

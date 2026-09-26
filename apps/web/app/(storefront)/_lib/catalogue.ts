@@ -90,6 +90,27 @@ export function dbProductToItem(p: ApiProduct): ProductItem {
   const rating = Number(p.average_rating ?? 0);
   const count = Number(p.review_count ?? 0);
 
+  const mappedVariants = variants.map((v: any) => {
+    const inv = Array.isArray(v.inventory) ? v.inventory[0] : v.inventory;
+    const qty = Number(inv?.quantity ?? v.quantity ?? 0);
+    const reserved = Number(inv?.reserved_quantity ?? 0);
+    const available = Math.max(0, qty - reserved);
+    return {
+      id: v.id,
+      size: v.size || "Standard",
+      color: v.color || "Default",
+      colorHex: v.color_hex,
+      sku: v.sku,
+      quantity: qty,
+      available,
+      inStock: available > 0,
+    };
+  });
+
+  const totalAvailable = mappedVariants.length > 0
+    ? mappedVariants.reduce((sum, v) => sum + v.available, 0)
+    : 0;
+
   return {
     id: p.slug,
     brand: p.brand || "GTS",
@@ -117,5 +138,8 @@ export function dbProductToItem(p: ApiProduct): ProductItem {
     rawCompareAtPrice: p.compare_at_price,
     rawBasePrice: p.base_price,
     discountPercent: p.compare_at_price && p.compare_at_price > p.base_price ? Math.round(((p.compare_at_price - p.base_price) / p.compare_at_price) * 100) : 0,
+    variants: mappedVariants,
+    availableStock: totalAvailable,
+    inStock: totalAvailable > 0,
   };
 }

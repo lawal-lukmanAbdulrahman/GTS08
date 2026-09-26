@@ -18,11 +18,11 @@ type SlideRole = "far-left" | "left" | "center" | "right" | "far-right";
 const POSITION: Record<SlideRole, {
   x: string; scale: number; opacity: number; zIndex: number;
 }> = {
-  "far-left":  { x: "-160%", scale: 0.40, opacity: 0,    zIndex: 0  },
-  "left":      { x: "-72%",  scale: 0.58, opacity: 0.82, zIndex: 10 },
-  "center":    { x: "0%",    scale: 1.0,  opacity: 1,    zIndex: 20 },
-  "right":     { x: "72%",   scale: 0.58, opacity: 0.82, zIndex: 10 },
-  "far-right": { x: "160%",  scale: 0.40, opacity: 0,    zIndex: 0  },
+  "far-left":  { x: "-140%", scale: 0.35, opacity: 0,    zIndex: 0  },
+  "left":      { x: "-64%",  scale: 0.52, opacity: 0.78, zIndex: 10 },
+  "center":    { x: "0%",    scale: 0.94, opacity: 1,    zIndex: 20 },
+  "right":     { x: "64%",   scale: 0.52, opacity: 0.78, zIndex: 10 },
+  "far-right": { x: "140%",  scale: 0.35, opacity: 0,    zIndex: 0  },
 };
 
 interface ColorVariant {
@@ -509,11 +509,12 @@ export function Hero() {
 
   return (
     <div
-      className="w-full p-3 md:p-4 pt-1 md:pt-2 bg-white flex flex-col box-border"
+      className="w-full px-3 md:px-4 pt-1 md:pt-2 bg-white flex flex-col box-border"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
-      <section className="relative w-full h-[75vh] sm:h-[calc(100vh-140px)] min-h-[380px] sm:min-h-[520px] max-h-[780px] overflow-hidden rounded-[18px] border border-white/10 shadow-xl">
+      <div className="w-full max-w-[1240px] mx-auto">
+        <section className="relative w-full h-[52vh] sm:h-[430px] md:h-[460px] lg:h-[490px] min-h-[340px] max-h-[510px] overflow-hidden rounded-[18px] border border-white/10 shadow-xl">
         {/* ── Background Gradient Layers ── */}
         {productsList.map((product, pi) => {
           const eligible = getHeroEligibleVariants(product);
@@ -545,7 +546,7 @@ export function Hero() {
             return (
               <div
                 key={`glow-${variant.id}`}
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] sm:w-[540px] sm:h-[540px] rounded-full z-0 blur-3xl pointer-events-none transition-opacity duration-1000"
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[280px] h-[280px] sm:w-[400px] sm:h-[400px] rounded-full z-0 blur-3xl pointer-events-none transition-opacity duration-1000"
                 style={{ background: variant.glowColor, opacity: isActive ? 0.7 : 0 }}
               />
             );
@@ -554,11 +555,11 @@ export function Hero() {
 
         {/* ── Edge Fades (match bg edge color) ── */}
         <div
-          className="absolute left-0 top-0 bottom-0 w-[28%] z-30 pointer-events-none transition-[background] duration-700"
+          className="absolute left-0 top-0 bottom-0 w-[22%] z-30 pointer-events-none transition-[background] duration-700"
           style={{ background: `linear-gradient(to right, ${activeVariant.edgeColor} 0%, transparent 100%)` }}
         />
         <div
-          className="absolute right-0 top-0 bottom-0 w-[28%] z-30 pointer-events-none transition-[background] duration-700"
+          className="absolute right-0 top-0 bottom-0 w-[22%] z-30 pointer-events-none transition-[background] duration-700"
           style={{ background: `linear-gradient(to left, ${activeVariant.edgeColor} 0%, transparent 100%)` }}
         />
 
@@ -571,8 +572,8 @@ export function Hero() {
               animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
               exit={{ opacity: 0, filter: "blur(8px)", y: -6 }}
               transition={TEXT_SPRING}
-              className="absolute top-0 right-0 z-40 bg-[#EDCF5D] text-[#010101] text-sm sm:text-base font-black px-4 sm:px-6 py-2 sm:py-2.5 tracking-wider shadow-md"
-              style={{ borderRadius: "0 0 0 18px" }}
+              className="absolute top-0 right-0 z-40 bg-[#EDCF5D] text-[#010101] text-xs sm:text-sm font-black px-3.5 sm:px-5 py-1.5 sm:py-2 tracking-wider shadow-md"
+              style={{ borderRadius: "0 0 0 14px" }}
             >
               {activeProduct.badge}
             </motion.span>
@@ -605,7 +606,7 @@ export function Hero() {
                   zIndex:  pos.zIndex,
                 }}
                 transition={SPRING}
-                className="absolute w-[68vw] sm:w-[42vw] md:w-[38vw] lg:w-[34vw] max-w-[440px] aspect-square"
+                className="absolute w-[58vw] sm:w-[36vw] md:w-[32vw] lg:w-[28vw] max-w-[320px] sm:max-w-[350px] md:max-w-[370px] aspect-square"
                 style={{ cursor: isCenter ? "pointer" : isSide ? "pointer" : "default" }}
                 onClick={() => {
                   if (isCenter) router.push(`/product/${product.slug}`);
@@ -623,7 +624,7 @@ export function Hero() {
                     fill
                     priority={isCenter}
                     className="object-contain object-center"
-                    sizes="(max-width: 640px) 68vw, (max-width: 1024px) 42vw, 420px"
+                    sizes="(max-width: 640px) 58vw, (max-width: 1024px) 36vw, 370px"
                   />
                 </div>
               </motion.div>
@@ -654,7 +655,7 @@ export function Hero() {
         </button>
 
         {/* ── Title + Tagline (blur-fade) ── */}
-        <div className="absolute top-4 sm:top-7 left-4 sm:left-8 z-40 max-w-[70%] sm:max-w-xs md:max-w-sm pointer-events-none">
+        <div className="absolute top-4 sm:top-6 left-4 sm:left-7 z-40 max-w-[65%] sm:max-w-[260px] md:max-w-[300px] pointer-events-none">
           <AnimatePresence mode="wait">
             <motion.div
               key={`title-${currentIndex}`}
@@ -663,10 +664,10 @@ export function Hero() {
               exit={{ opacity: 0, filter: "blur(12px)", y: -8 }}
               transition={TEXT_SPRING}
             >
-              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-white leading-[1.08] tracking-tight font-sans drop-shadow-lg whitespace-pre-line">
+              <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-[38px] font-extrabold text-white leading-[1.1] tracking-tight font-sans drop-shadow-lg whitespace-pre-line">
                 {activeProduct.headline}
               </h1>
-              <p className="mt-2 sm:mt-3 text-xs sm:text-sm text-white/80 font-light leading-relaxed">
+              <p className="mt-1.5 sm:mt-2 text-xs sm:text-[13px] text-white/80 font-light leading-snug line-clamp-2">
                 {activeProduct.tagline}
               </p>
             </motion.div>
@@ -674,7 +675,7 @@ export function Hero() {
         </div>
 
         {/* ── Color Swatches (hidden on mobile) ── */}
-        <div className="absolute bottom-5 sm:bottom-8 left-5 sm:left-8 z-40 hidden sm:flex items-center gap-2 sm:gap-3">
+        <div className="absolute bottom-4 sm:bottom-6 left-4 sm:left-7 z-40 hidden sm:flex items-center gap-2 sm:gap-2.5">
           <AnimatePresence mode="wait">
             <motion.div
               key={`swatches-${currentIndex}`}
@@ -682,7 +683,7 @@ export function Hero() {
               animate={{ opacity: 1, filter: "blur(0px)" }}
               exit={{ opacity: 0, filter: "blur(8px)" }}
               transition={{ ...TEXT_SPRING, delay: 0.05 }}
-              className="flex items-center gap-2 sm:gap-3"
+              className="flex items-center gap-2 sm:gap-2.5"
             >
               {activeVariants.map((variant, vi) => {
                 const isSelected = vi === activeVariantIndex;
@@ -693,7 +694,7 @@ export function Hero() {
                       setSelectedVariants((prev) => ({ ...prev, [activeProduct.id]: vi }))
                     }
                     aria-label={`Select ${variant.colorName}`}
-                    className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full transition-all duration-300 shrink-0 ${
+                    className={`w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-full transition-all duration-300 shrink-0 ${
                       isSelected
                         ? "scale-110 ring-2 ring-white ring-offset-2 ring-offset-black/60 shadow-lg"
                         : "opacity-70 hover:opacity-100 hover:scale-105"
@@ -708,7 +709,7 @@ export function Hero() {
 
         {/* ── Price + Rating + CTA ── */}
         <div
-          className="absolute bottom-5 sm:bottom-8 left-3 sm:left-auto right-3 sm:right-8 z-40 flex flex-row sm:flex-col items-center justify-between sm:justify-end sm:items-end gap-2 sm:gap-2"
+          className="absolute bottom-4 sm:bottom-6 left-3 sm:left-auto right-3 sm:right-6 md:right-7 z-40 flex flex-row sm:flex-col items-center justify-between sm:justify-end sm:items-end gap-2 sm:gap-2"
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
           onFocus={() => setIsPaused(true)}
@@ -721,17 +722,17 @@ export function Hero() {
               animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
               exit={{ opacity: 0, filter: "blur(10px)", y: -8 }}
               transition={{ ...TEXT_SPRING, delay: 0.08 }}
-              className="flex flex-col items-start sm:items-end gap-0.5 sm:gap-1.5 text-left sm:text-right"
+              className="flex flex-col items-start sm:items-end gap-0.5 sm:gap-1 text-left sm:text-right"
             >
               <div className="flex items-baseline gap-1.5 sm:gap-2">
-                <span className="text-2xl sm:text-4xl md:text-5xl font-extrabold text-[#EDCF5D] tracking-tight font-sans drop-shadow-lg">
+                <span className="text-2xl sm:text-3xl md:text-[38px] font-extrabold text-[#EDCF5D] tracking-tight font-sans drop-shadow-lg">
                   {formatCompact(activeProduct.price)}
                 </span>
-                <span className="text-xs sm:text-base text-white/50 line-through">
+                <span className="text-xs sm:text-sm text-white/50 line-through">
                   {formatCompact(activeProduct.originalPrice)}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-white/90 font-medium whitespace-nowrap">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-white/90 font-medium whitespace-nowrap">
                 <FiveStarRating rating={activeProduct.rating} />
                 <span className="text-white/60">({activeProduct.reviews})</span>
               </div>
@@ -743,7 +744,7 @@ export function Hero() {
         </div>
 
         {/* ── Dot Indicators — always centered, all breakpoints ── */}
-        <div className="absolute bottom-2 sm:bottom-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 pt-4">
+        <div className="absolute bottom-2 sm:bottom-2.5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 pt-4">
           {productsList.map((_, pi) => (
             <button
               key={pi}
@@ -755,12 +756,13 @@ export function Hero() {
               }}
               aria-label={`Go to slide ${pi + 1}`}
               className={`h-1.5 rounded-full transition-all duration-500 ${
-                pi === currentIndex ? "w-6 bg-white" : "w-1.5 bg-white/40 hover:bg-white/70"
+                pi === currentIndex ? "w-5 bg-white" : "w-1.5 bg-white/40 hover:bg-white/70"
               }`}
             />
           ))}
         </div>
       </section>
+      </div>
     </div>
   );
 }

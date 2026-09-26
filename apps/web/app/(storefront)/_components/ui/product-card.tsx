@@ -21,6 +21,8 @@ export interface ProductCardProps {
   hasTransparentBg?: boolean;
   className?: string;
   isWishlisted?: boolean;
+  inStock?: boolean;
+  availableStock?: number;
   onToggleWishlist?: (id: string) => void;
   onAddToCart?: (id: string) => void;
   showAddToCart?: boolean;
@@ -51,6 +53,8 @@ export function ProductCard({
   hasTransparentBg,
   className = "",
   isWishlisted: externalIsWishlisted,
+  inStock,
+  availableStock,
   onToggleWishlist,
   onAddToCart,
   showAddToCart = true,
@@ -61,14 +65,23 @@ export function ProductCard({
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { products: catalogue } = useCatalogue();
 
+  const matchingProduct = catalogue.find((p) => p.id === id);
+  const isOutOfStock =
+    inStock === false ||
+    availableStock === 0 ||
+    (matchingProduct && (matchingProduct.inStock === false || (typeof matchingProduct.availableStock === "number" && matchingProduct.availableStock <= 0)));
+
   // Resolve transparent background:
   // 1. If explicit boolean passed, use it.
   // 2. Otherwise look it up in the catalogue.
-  // 3. Fallback to false (no padding, full bleed cover)
+  // 3. Fallback: check image path for transparent formats (.png, transparent)
   const isTransparent =
-    typeof hasTransparentBg === "boolean"
-      ? hasTransparentBg
-      : (catalogue.find((p) => p.id === id)?.hasTransparentBg ?? false);
+    (typeof hasTransparentBg === "boolean" && hasTransparentBg) ||
+    Boolean(catalogue.find((p) => p.id === id)?.hasTransparentBg) ||
+    (typeof image === "string" &&
+      (image.toLowerCase().endsWith(".png") ||
+        image.toLowerCase().includes("transparent") ||
+        image.toLowerCase().includes(".png?")));
 
   const isWishlisted =
     externalIsWishlisted !== undefined ? externalIsWishlisted : isInWishlist(id);
@@ -87,6 +100,7 @@ export function ProductCard({
   const handleCartClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isOutOfStock) return;
     trackProductCart(id);
     if (onAddToCart) {
       onAddToCart(id);
@@ -112,11 +126,15 @@ export function ProductCard({
         sizes: ["Standard"],
         tags: [],
         hasTransparentBg: isTransparent,
+        inStock: !isOutOfStock,
+        availableStock: availableStock ?? 0,
       };
 
-      addToCart(fullProduct);
-      setAdded(true);
-      setTimeout(() => setAdded(false), 1500);
+      const res = addToCart(fullProduct);
+      if (res.ok) {
+        setAdded(true);
+        setTimeout(() => setAdded(false), 1500);
+      }
     }
   };
 
@@ -144,19 +162,24 @@ export function ProductCard({
       >
         {/* ── Image Box ── */}
         <div
-          className={`relative w-full aspect-[4/4.2] rounded-[14px] overflow-hidden flex items-center justify-center border border-gray-200/80 ${
-            isTransparent ? "p-3 sm:p-3.5" : "p-0"
-          }`}
+          className="relative w-full aspect-[4/4.2] rounded-[14px] overflow-hidden flex items-center justify-center border border-gray-200/80"
           style={
             isTransparent
-              ? { background: "radial-gradient(ellipse at center, #ECEAE6 0%, #DDDAD4 100%)" }
+              ? { background: "radial-gradient(ellipse at center, #F4F3F0 0%, #E7E5E0 100%)" }
               : { background: "#F2F0EA" }
           }
         >
+          {/* Top-Left Sold Out Badge */}
+          {isOutOfStock && (
+            <span className="absolute top-2 left-2 z-20 bg-[#010101]/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full tracking-wider uppercase shadow-xs">
+              Sold Out
+            </span>
+          )}
+
           {/* Top-Right Discount Badge — matching hero section */}
-          {badge && (
+          {badge && !isOutOfStock && (
             <span
-              className="absolute top-0 right-0 z-10 bg-[#EDCF5D] text-[#010101] text-[10px] sm:text-xs font-extrabold px-2 sm:px-2.5 py-0.5 sm:py-1 tracking-wider shadow-2xs"
+              className="absolute top-0 right-0 z-20 bg-[#EDCF5D] text-[#010101] text-[10px] sm:text-xs font-extrabold px-2 sm:px-2.5 py-0.5 sm:py-1 tracking-wider shadow-2xs"
               style={{ borderRadius: "0 0 0 10px" }}
             >
               {badge}
@@ -168,7 +191,7 @@ export function ProductCard({
             <button
               aria-label="Add to wishlist"
               onClick={handleWishlistClick}
-              className="absolute bottom-2.5 right-2.5 z-10 bg-[#010101] text-white p-2 rounded-full shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
+              className="absolute bottom-2.5 right-2.5 z-20 bg-[#010101] text-white p-2 rounded-full shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
             >
               <svg
                 className="w-4 h-4 transition-colors"
@@ -186,18 +209,28 @@ export function ProductCard({
             </button>
           )}
 
-          {/* Product Image */}
-          <Image
-            src={image}
-            alt={title}
-            fill
-            className={`transition-transform duration-500 group-hover/card:scale-105 ${
-              isTransparent
-                ? "object-contain object-center"
-                : "object-cover object-center p-0"
+          {/* Centered Product Image with proper internal padding */}
+          <div
+            className={`absolute inset-0 flex items-center justify-center z-10 ${
+              isTransparent ? "p-3.5 sm:p-4.5" : "p-0"
             }`}
-            sizes="(max-width: 768px) 50vw, 20vw"
-          />
+          >
+            <div className="relative w-full h-full flex items-center justify-center">
+              <Image
+                src={image}
+                alt={title}
+                fill
+                className={`transition-transform duration-500 group-hover/card:scale-105 ${
+                  isOutOfStock ? "opacity-60 grayscale-[30%]" : ""
+                } ${
+                  isTransparent
+                    ? "object-contain object-center"
+                    : "object-cover object-center"
+                }`}
+                sizes="(max-width: 768px) 50vw, 20vw"
+              />
+            </div>
+          </div>
         </div>
 
         {/* ── Card Body ── */}
@@ -230,15 +263,18 @@ export function ProductCard({
       {showAddToCart && (
         <div className="pt-2 flex flex-col items-center">
           <button
-            aria-label="Add to cart"
-            onClick={handleCartClick}
-            className={`w-full font-semibold text-xs py-1.5 rounded-full flex items-center justify-center gap-1.5 shadow-2xs transition-all duration-300 active:scale-95 font-sans ${
-              added
+            aria-label={isOutOfStock ? "Out of stock" : "Add to cart"}
+            disabled={isOutOfStock}
+            onClick={isOutOfStock ? undefined : handleCartClick}
+            className={`w-full font-semibold text-xs py-1.5 rounded-full flex items-center justify-center gap-1.5 shadow-2xs transition-all duration-300 font-sans ${
+              isOutOfStock
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
+                : added
                 ? "bg-emerald-600 text-white"
-                : "bg-[#010101] hover:bg-[#EDCF5D] text-white hover:text-[#010101]"
+                : "bg-[#010101] hover:bg-[#EDCF5D] text-white hover:text-[#010101] active:scale-95 cursor-pointer"
             }`}
           >
-            {added ? "Added!" : "Add to cart"}
+            {isOutOfStock ? "Out of stock" : added ? "Added!" : "Add to cart"}
           </button>
         </div>
       )}
