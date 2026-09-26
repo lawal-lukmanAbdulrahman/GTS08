@@ -782,23 +782,6 @@ export default function AdminQuestionDetailPage() {
 
           {/* ────── PINNED BOTTOM OVERLAY REPLY BAR (Messages scroll under it) ────── */}
           <div className="shrink-0 pt-2 pb-1 bg-[#F8F7F4] dark:bg-[#1C1C1C]">
-            {/* Quick Response Chips */}
-            <div className="pb-2 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
-              <span className="text-[10px] text-gray-400 dark:text-[#8E8E8E] font-mono font-bold shrink-0 uppercase tracking-wider">
-                Quick:
-              </span>
-              {quickReplies.map((q, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setReplyText(q)}
-                  className="text-[11px] bg-white dark:bg-[#222222] hover:bg-gray-100 dark:hover:bg-[#2A2A2A] border border-gray-200 dark:border-[#333333] text-gray-700 dark:text-gray-200 px-2.5 py-1 rounded-full shrink-0 transition-colors cursor-pointer truncate max-w-[200px] shadow-2xs"
-                  title={q}
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
 
             {/* Anchored Input Bar matching Storefront Ash Style */}
             <form

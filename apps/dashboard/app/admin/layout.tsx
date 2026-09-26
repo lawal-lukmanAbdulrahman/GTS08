@@ -2,17 +2,32 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { SidebarProvider, useSidebar } from "./sidebar-context";
 import { isAdminInquiryUnread } from "../../lib/notifications";
 import { authFetch } from "../lib/session";
+import type { PermissionsView } from "../lib/staff-types";
+
+interface NavItemConfig {
+  name: string;
+  href: string;
+  exact: boolean;
+  icon: React.ReactNode;
+  badge?: number | null;
+  isAllowed: (isAdmin: boolean, perms: PermissionsView | null, role?: string) => boolean;
+}
 
 function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ full_name?: string; email?: string; role?: string } | null>(null);
+  const [user, setUser] = useState<{ full_name?: string; email?: string; role?: string; is_admin?: boolean } | null>(null);
+  const [permissions, setPermissions] = useState<PermissionsView | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const { isCollapsed, mobileOpen, setMobileOpen } = useSidebar();
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Read saved theme preference (default to light)
@@ -24,6 +39,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       document.documentElement.classList.remove("dark");
     }
 
+    // 1. Initial instant load from localStorage
     const savedUser = localStorage.getItem("gts_user");
     if (savedUser) {
       try {
@@ -32,6 +48,41 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         // ignore
       }
     }
+    const savedPerms = localStorage.getItem("gts_permissions");
+    if (savedPerms) {
+      try {
+        setPermissions(JSON.parse(savedPerms));
+      } catch {
+        // ignore
+      }
+    }
+
+    // 2. Real-time background sync from /api/v1/staff/me
+    const syncStaffProfile = async () => {
+      try {
+        const res = await authFetch("/api/v1/staff/me");
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            const userData = {
+              full_name: json.data.full_name,
+              email: json.data.email,
+              role: json.data.role,
+              is_admin: json.data.is_admin,
+            };
+            setUser(userData);
+            setPermissions(json.data.permissions || null);
+            localStorage.setItem("gts_user", JSON.stringify(userData));
+            if (json.data.permissions) {
+              localStorage.setItem("gts_permissions", JSON.stringify(json.data.permissions));
+            }
+          }
+        }
+      } catch {
+        // silent
+      }
+    };
+    syncStaffProfile();
   }, []);
 
   const [inquiriesBadge, setInquiriesBadge] = useState<number>(0);
@@ -67,6 +118,30 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     };
   }, [pathname]);
 
+  // Global keyboard shortcut: Cmd+K / Ctrl+K focuses the search input
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (mobileOpen) {
+          mobileSearchInputRef.current?.focus();
+          mobileSearchInputRef.current?.select();
+        } else {
+          searchInputRef.current?.focus();
+          searchInputRef.current?.select();
+        }
+      }
+      if (e.key === "Escape") {
+        if (document.activeElement === searchInputRef.current || document.activeElement === mobileSearchInputRef.current) {
+          setSearchQuery("");
+          (document.activeElement as HTMLElement).blur();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mobileOpen]);
+
   // Close mobile drawer on route change
   useEffect(() => {
     setMobileOpen(false);
@@ -87,11 +162,15 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     document.cookie = "gts_access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     document.cookie = "gts_user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     localStorage.removeItem("gts_user");
+    localStorage.removeItem("gts_permissions");
     localStorage.removeItem("gts_token");
     router.push("/login");
   };
 
-  const navItems = [
+  const isAdmin = user?.role === "admin" || user?.is_admin === true;
+
+  // Master definition of all navigable sections with strict permission gates
+  const allNavItems: NavItemConfig[] = useMemo(() => [
     {
       name: "Dashboard",
       href: "/admin",
@@ -101,36 +180,18 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           <path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z" />
         </svg>
       ),
+      isAllowed: (admin) => admin,
     },
     {
-      name: "Products Catalog",
-      href: "/admin/products",
+      name: "POS Terminal",
+      href: "/pos",
       exact: false,
       icon: (
         <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
         </svg>
       ),
-    },
-    {
-      name: "Inventory Control",
-      href: "/admin/inventory",
-      exact: false,
-      icon: (
-        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-        </svg>
-      ),
-    },
-    {
-      name: "Orders & Shipping",
-      href: "/admin/orders",
-      exact: false,
-      icon: (
-        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0c-.565.058-.987.538-.987 1.106v.958m12 0A2.25 2.25 0 0116.5 9.75v5.25m-12 0V9.75A2.25 2.25 0 016.75 7.5h7.5" />
-        </svg>
-      ),
+      isAllowed: (admin, perms, role) => admin || !!perms?.can_process_pos || role === "cashier",
     },
     {
       name: "Customer Inquiries",
@@ -142,6 +203,40 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a.75.75 0 01-.874-1.006l.732-1.755A7.838 7.838 0 013 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
         </svg>
       ),
+      isAllowed: (admin, perms) => admin || !!perms?.can_handle_tickets,
+    },
+    {
+      name: "Inventory Control",
+      href: "/admin/inventory",
+      exact: false,
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+        </svg>
+      ),
+      isAllowed: (admin, perms, role) => admin || !!perms?.can_manage_inventory || role === "inventory_staff",
+    },
+    {
+      name: "Orders & Shipping",
+      href: "/admin/orders",
+      exact: false,
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0c-.565.058-.987.538-.987 1.106v.958m12 0A2.25 2.25 0 0116.5 9.75v5.25m-12 0V9.75A2.25 2.25 0 016.75 7.5h7.5" />
+        </svg>
+      ),
+      isAllowed: (admin, perms) => admin || !!perms?.can_view_all_orders,
+    },
+    {
+      name: "Products Catalog",
+      href: "/admin/products",
+      exact: false,
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+        </svg>
+      ),
+      isAllowed: (admin, perms) => admin || !!perms?.can_manage_products,
     },
     {
       name: "Broadcast & Popups",
@@ -152,9 +247,10 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.213m3.095-9.18c.253-.962.584-1.892.985-2.783.247-.55.06-1.21-.463-1.511l-.657-.38c-.551-.318-1.26-.117-1.527.461a20.845 20.845 0 00-1.44 4.213m3.095 9.18a44.697 44.697 0 000-9.18m0 9.18c2.09.282 4.148.74 6.143 1.353a.75.75 0 00.957-.72V7.747a.75.75 0 00-.957-.72 45.419 45.419 0 00-6.143 1.353m11.25 1.5a.75.75 0 010 1.5h-1.5a.75.75 0 010-1.5h1.5zm0 3a.75.75 0 010 1.5h-1.5a.75.75 0 010-1.5h1.5z" />
         </svg>
       ),
+      isAllowed: (admin, perms) => admin || !!perms?.can_manage_broadcasts,
     },
     {
-      name: "Storefront Editor",
+      name: "Content Manager",
       href: "/admin/storefront",
       exact: false,
       icon: (
@@ -162,6 +258,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
         </svg>
       ),
+      isAllowed: (admin) => admin,
     },
     {
       name: "Staff & Roles",
@@ -172,6 +269,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94-3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
         </svg>
       ),
+      isAllowed: (admin) => admin,
     },
     {
       name: "Promo Codes",
@@ -183,6 +281,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
         </svg>
       ),
+      isAllowed: (admin) => admin,
     },
     {
       name: "Product Flags",
@@ -193,6 +292,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18M3 4.5h13.5l-2.25 4.5 2.25 4.5H3" />
         </svg>
       ),
+      isAllowed: (admin) => admin,
     },
     {
       name: "Store Details",
@@ -204,61 +304,52 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       ),
+      isAllowed: (admin) => admin,
     },
     {
-      name: "POS Terminal",
-      href: "/pos",
+      name: "My Profile",
+      href: "/profile",
       exact: false,
       icon: (
         <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
         </svg>
       ),
+      isAllowed: () => true,
     },
-  ];
+  ], [inquiriesBadge]);
 
-  const recentActions = [
-    {
-      name: "Added Product",
-      time: "2m ago",
-      href: "/admin/products",
-      icon: (
-        <svg className="w-3.5 h-3.5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-        </svg>
-      ),
-    },
-    {
-      name: "Adjusted Stock (+50)",
-      time: "15m ago",
-      href: "/admin/inventory",
-      icon: (
-        <svg className="w-3.5 h-3.5 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m13.254-4.636a8.25 8.25 0 00-13.99-3.754l-2.222 2.22m13.254 9.176l-2.22 2.22a8.25 8.25 0 01-13.99-3.754" />
-        </svg>
-      ),
-    },
-    {
-      name: "Updated Order #1004",
-      time: "1h ago",
-      href: "/admin/orders",
-      icon: (
-        <svg className="w-3.5 h-3.5 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0c-.565.058-.987.538-.987 1.106v.958m12 0A2.25 2.25 0 0116.5 9.75v5.25m-12 0V9.75A2.25 2.25 0 016.75 7.5h7.5" />
-        </svg>
-      ),
-    },
-    {
-      name: "Issued POS Receipt",
-      time: "3h ago",
-      href: "/pos",
-      icon: (
-        <svg className="w-3.5 h-3.5 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-12v.75m0 3v.75m0 3v.75m0 3V18m3-12v.75m0 3v.75m0 3v.75m0 3V18M4.5 4.5h15a2.25 2.25 0 012.25 2.25v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75A2.25 2.25 0 014.5 4.5z" />
-        </svg>
-      ),
-    },
-  ];
+  // 1. Only items that the staff member is explicitly allowed to see
+  const allowedNavItems = useMemo(() => {
+    return allNavItems.filter((item) => item.isAllowed(isAdmin, permissions, user?.role));
+  }, [allNavItems, isAdmin, permissions, user?.role]);
+
+  // 2. Real-time filtering by search input query
+  const filteredNavItems = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return allowedNavItems;
+    return allowedNavItems.filter((item) => item.name.toLowerCase().includes(q));
+  }, [allowedNavItems, searchQuery]);
+
+  // Handle enter key in search input: jump straight to the first match
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && filteredNavItems.length > 0) {
+      router.push(filteredNavItems[0]!.href);
+      setSearchQuery("");
+      (document.activeElement as HTMLElement)?.blur();
+      setMobileOpen(false);
+    }
+  };
+
+  // Route security gate: check if current route is allowed for this user
+  const matchingConfig = allNavItems.find((item) =>
+    item.exact ? pathname === item.href : pathname.startsWith(item.href)
+  );
+
+  const isCurrentRouteForbidden =
+    user !== null &&
+    matchingConfig !== undefined &&
+    !matchingConfig.isAllowed(isAdmin, permissions, user?.role);
 
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col lg:flex-row bg-[#F8F7F4] dark:bg-[#1C1C1C] text-[#010101] dark:text-[#FFFFFF] font-sans antialiased selection:bg-[#EDCF5D] selection:text-[#010101]">
@@ -284,7 +375,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               G
             </div>
             <span className="font-bold text-sm text-[#010101] dark:text-white tracking-tight">
-              GTS Admin
+              GTS
             </span>
           </div>
         </div>
@@ -306,9 +397,9 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
             )}
           </button>
 
-          <div className="w-7 h-7 rounded-full bg-[#010101] text-white dark:bg-[#EDCF5D]/20 dark:text-[#EDCF5D] flex items-center justify-center font-bold text-xs border border-gray-300 dark:border-[#EDCF5D]/30">
-            {user?.full_name?.charAt(0) || "A"}
-          </div>
+          <Link href="/profile" className="w-7 h-7 rounded-full bg-[#010101] text-white dark:bg-[#EDCF5D]/20 dark:text-[#EDCF5D] flex items-center justify-center font-bold text-xs border border-gray-300 dark:border-[#EDCF5D]/30" title="My Profile">
+            {user?.full_name?.charAt(0) || "U"}
+          </Link>
         </div>
       </header>
 
@@ -320,7 +411,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
             : "w-64 opacity-100 translate-x-0"
         }`}
       >
-        {/* 1. TOP HEADER: Logo & Theme Toggle (Perfect matching height h-7 with top padding pt-3.5) */}
+        {/* 1. TOP HEADER: Logo & Theme Toggle */}
         <div className="shrink-0 px-3.5 pt-3.5 pb-2.5 space-y-3">
           <div className="flex items-center justify-between px-1 h-7">
             <div className="flex items-center gap-2.5 overflow-hidden">
@@ -328,7 +419,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                 G
               </div>
               <span className="font-bold text-sm text-[#010101] dark:text-white tracking-tight truncate">
-                GTS Admin
+                GTS
               </span>
             </div>
 
@@ -351,18 +442,37 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
             </button>
           </div>
 
-          {/* Search Bar */}
+          {/* Functional Search Bar */}
           <div className="relative">
-            <div className="flex items-center justify-between w-full bg-gray-100 dark:bg-[#292929] border-none rounded-[6px] px-3 py-2 text-xs text-[#010101] dark:text-white">
-              <div className="flex items-center gap-2.5">
-                <svg className="w-3.5 h-3.5 text-gray-400 dark:text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <div className="flex items-center justify-between w-full bg-gray-100 dark:bg-[#292929] border border-transparent focus-within:border-gray-300 dark:focus-within:border-gray-700 rounded-[6px] px-2.5 py-1.5 text-xs text-[#010101] dark:text-white transition-all">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <svg className="w-3.5 h-3.5 text-gray-400 dark:text-[#6B7280] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                 </svg>
-                <span className="text-gray-400 dark:text-[#6B7280] font-medium">Search</span>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="Search pages..."
+                  style={{ outline: "none", boxShadow: "none" }}
+                  className="bg-transparent border-none outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 text-xs text-[#010101] dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#6B7280] w-full shadow-none"
+                />
               </div>
-              <span className="text-[11px] font-mono text-gray-400 dark:text-[#9CA3AF]">
-                ⌘ K
-              </span>
+              {searchQuery ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer text-xs"
+                >
+                  ✕
+                </button>
+              ) : (
+                <span className="text-[10px] font-mono text-gray-400 dark:text-[#9CA3AF] shrink-0 ml-1.5 select-none pointer-events-none">
+                  ⌘ K
+                </span>
+              )}
             </div>
           </div>
 
@@ -370,15 +480,11 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           <div className="mx-1 pt-1 border-b border-gray-100 dark:border-[#262626]" />
         </div>
 
-        {/* 2. MIDDLE SCROLLABLE NAVIGATION CONTENT */}
+        {/* 2. MIDDLE SCROLLABLE NAVIGATION CONTENT (Gated by Permissions) */}
         <div className="flex-1 overflow-y-auto p-2.5 space-y-4">
-          {/* Navigation Section */}
           <div className="space-y-1">
-            <p className="px-2 text-[10px] font-mono text-gray-400 dark:text-[#6B7280] tracking-wider uppercase mb-1.5">
-              Navigation
-            </p>
 
-            {navItems.map((item) => {
+            {filteredNavItems.map((item) => {
               const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
               return (
                 <Link
@@ -409,61 +515,38 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
-          </div>
 
-          {/* Inset Divider */}
-          <div className="mx-2 border-t border-gray-100 dark:border-[#262626] my-1" />
-
-          {/* Section: Recent Actions */}
-          <div className="space-y-1.5">
-            <p className="px-2 text-[10px] font-mono text-gray-400 dark:text-[#6B7280] tracking-wider uppercase">
-              Recent Actions
-            </p>
-
-            {recentActions.map((action, idx) => (
-              <Link
-                key={idx}
-                href={action.href}
-                className="flex items-center justify-between px-2.5 py-1.5 rounded-[6px] text-xs text-gray-600 dark:text-[#9CA3AF] hover:bg-gray-100 dark:hover:bg-[#242424] transition-colors"
-              >
-                <div className="flex items-center gap-2 overflow-hidden">
-                  {action.icon}
-                  <span className="font-medium text-[#010101] dark:text-white truncate">
-                    {action.name}
-                  </span>
-                </div>
-                <span className="text-[9px] font-mono text-gray-400 dark:text-[#6B7280] shrink-0">
-                  {action.time}
-                </span>
-              </Link>
-            ))}
+            {filteredNavItems.length === 0 && (
+              <div className="py-6 text-center text-xs text-gray-400 dark:text-[#6B7280]">
+                No pages matching &ldquo;{searchQuery}&rdquo;
+              </div>
+            )}
           </div>
         </div>
 
         {/* 3. PINNED BOTTOM USER PROFILE CARD */}
         <div className="shrink-0 p-2.5 bg-white dark:bg-[#151515]">
-          {/* Inset Divider above user card */}
           <div className="mx-1 mb-2.5 border-t border-gray-200 dark:border-[#262626]" />
           <div className="p-2.5 rounded-[8px] bg-gray-50 dark:bg-[#2B2B2B] hover:bg-gray-100 dark:hover:bg-[#333333] border-none flex items-center justify-between transition-all group">
-            <div className="flex items-center gap-2 overflow-hidden">
+            <Link href="/profile" className="flex items-center gap-2 overflow-hidden flex-1 min-w-0" title="View Profile">
               <div className="w-7 h-7 rounded-full bg-[#010101] text-white dark:bg-[#EDCF5D]/20 dark:text-[#EDCF5D] flex items-center justify-center font-bold text-xs shrink-0 border border-gray-300 dark:border-[#EDCF5D]/30">
-                {user?.full_name?.charAt(0) || "A"}
+                {user?.full_name?.charAt(0) || "U"}
               </div>
               <div className="truncate">
                 <p className="text-xs font-bold text-[#010101] dark:text-white truncate">
-                  {user?.full_name || "Admin Staff"}
+                  {user?.full_name || "Staff Member"}
                 </p>
                 <p className="text-[9px] text-gray-500 dark:text-[#9CA3AF] uppercase font-mono">
-                  {user?.role || "admin"}
+                  {user?.role || (isAdmin ? "admin" : "staff")}
                 </p>
               </div>
-            </div>
+            </Link>
 
             {/* Vector Logout Button */}
             <button
               onClick={handleLogout}
               title="Sign Out"
-              className="p-1.5 rounded-[6px] text-gray-400 hover:text-red-600 dark:text-[#8E9299] dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/20 active:scale-95 transition-all cursor-pointer"
+              className="p-1.5 rounded-[6px] text-gray-400 hover:text-red-600 dark:text-[#8E9299] dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/20 active:scale-95 transition-all cursor-pointer shrink-0"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l3 3m0 0l-3 3m3-3H2.25" />
@@ -492,7 +575,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                     G
                   </div>
                   <span className="font-bold text-base text-[#010101] dark:text-white tracking-tight">
-                    GTS Admin
+                    GTS
                   </span>
                 </div>
 
@@ -524,6 +607,36 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                   </button>
                 </div>
               </div>
+
+              {/* Mobile Drawer Search Bar */}
+              <div className="mt-3">
+                <div className="flex items-center justify-between w-full bg-gray-100 dark:bg-[#292929] border border-transparent focus-within:border-gray-300 dark:focus-within:border-gray-700 rounded-[6px] px-2.5 py-1.5 text-xs text-[#010101] dark:text-white">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <svg className="w-3.5 h-3.5 text-gray-400 dark:text-[#6B7280] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                    </svg>
+                    <input
+                      ref={mobileSearchInputRef}
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={handleSearchKeyDown}
+                      placeholder="Search pages..."
+                      style={{ outline: "none", boxShadow: "none" }}
+                      className="bg-transparent border-none outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 text-xs text-[#010101] dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#6B7280] w-full shadow-none"
+                    />
+                  </div>
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Drawer Links */}
@@ -532,7 +645,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                 <p className="px-2 text-[10px] font-mono text-gray-400 dark:text-[#6B7280] tracking-wider uppercase mb-1.5">
                   Navigation
                 </p>
-                {navItems.map((item) => {
+                {filteredNavItems.map((item) => {
                   const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
                   return (
                     <Link
@@ -564,50 +677,35 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                     </Link>
                   );
                 })}
-              </div>
 
-              {/* Section: Recent Actions in Drawer */}
-              <div className="space-y-1 pt-2 border-t border-gray-100 dark:border-[#262626]">
-                <p className="px-2 text-[10px] font-mono text-gray-400 dark:text-[#6B7280] tracking-wider uppercase">
-                  Recent Actions
-                </p>
-                {recentActions.map((action, idx) => (
-                  <Link
-                    key={idx}
-                    href={action.href}
-                    onClick={() => setMobileOpen(false)}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-gray-600 dark:text-[#9CA3AF] hover:bg-gray-100 dark:hover:bg-[#242424] transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5 overflow-hidden">
-                      {action.icon}
-                      <span className="font-medium text-[#010101] dark:text-white truncate">
-                        {action.name}
-                      </span>
-                    </div>
-                    <span className="text-[9px] font-mono text-gray-400 dark:text-[#6B7280] shrink-0">
-                      {action.time}
-                    </span>
-                  </Link>
-                ))}
+                {filteredNavItems.length === 0 && (
+                  <div className="py-6 text-center text-xs text-gray-400 dark:text-[#6B7280]">
+                    No pages matching &ldquo;{searchQuery}&rdquo;
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Bottom Profile in Drawer */}
             <div className="shrink-0 p-3 border-t border-gray-100 dark:border-[#262626] bg-gray-50/50 dark:bg-[#181818]">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5 overflow-hidden">
+                <Link
+                  href="/profile"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center gap-2.5 overflow-hidden flex-1 min-w-0"
+                >
                   <div className="w-8 h-8 rounded-full bg-[#010101] text-white dark:bg-[#EDCF5D]/20 dark:text-[#EDCF5D] flex items-center justify-center font-bold text-xs shrink-0 border border-gray-300 dark:border-[#EDCF5D]/30">
-                    {user?.full_name?.charAt(0) || "A"}
+                    {user?.full_name?.charAt(0) || "U"}
                   </div>
                   <div className="truncate">
                     <p className="text-xs font-bold text-[#010101] dark:text-white truncate">
-                      {user?.full_name || "Admin Staff"}
+                      {user?.full_name || "Staff Member"}
                     </p>
                     <p className="text-[10px] text-gray-500 dark:text-[#9CA3AF] uppercase font-mono">
-                      {user?.role || "admin"}
+                      {user?.role || (isAdmin ? "admin" : "staff")}
                     </p>
                   </div>
-                </div>
+                </Link>
                 <button
                   onClick={handleLogout}
                   title="Sign Out"
@@ -626,9 +724,33 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       {/* ────── MAIN CONTENT AREA ────── */}
       <div className="flex-1 h-full flex flex-col min-w-0 overflow-hidden">
         {/* Main Page Scroll Canvas */}
-        <main className="flex-1 h-full overflow-y-auto bg-[#F8F7F4] dark:bg-[#1C1C1C] transition-colors duration-200">
-          {children}
-        </main>
+        {isCurrentRouteForbidden ? (
+          <main className="flex-1 h-full overflow-y-auto bg-[#F8F7F4] dark:bg-[#1C1C1C] flex items-center justify-center p-6">
+            <div className="max-w-md w-full bg-white dark:bg-[#181818] border border-gray-200 dark:border-[#262626] rounded-2xl p-8 text-center shadow-lg space-y-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center mx-auto text-xl font-bold">
+                🚫
+              </div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                Access Restricted
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                You do not have permission to access this section. Please ask an administrator to grant you access in staff permissions.
+              </p>
+              <div className="pt-2">
+                <Link
+                  href={allowedNavItems[0]?.href || "/profile"}
+                  className="inline-block px-5 py-2.5 rounded-lg bg-[#010101] dark:bg-[#EDCF5D] text-white dark:text-[#010101] text-xs font-bold shadow-xs hover:opacity-90 transition-opacity"
+                >
+                  Go to Accessible Workspace →
+                </Link>
+              </div>
+            </div>
+          </main>
+        ) : (
+          <main className="flex-1 h-full overflow-y-auto bg-[#F8F7F4] dark:bg-[#1C1C1C] transition-colors duration-200">
+            {children}
+          </main>
+        )}
       </div>
     </div>
   );

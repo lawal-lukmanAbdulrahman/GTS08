@@ -1,1 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="No photo yet"><rect width="400" height="400" fill="#F3F4F6"/><g fill="none" stroke="#9CA3AF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"><rect x="110" y="130" width="180" height="140" rx="16"/><circle cx="200" cy="200" r="34"/><path d="M160 130l14-24h52l14 24"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="GTS Shopping Bag">
+  <defs>
+    <linearGradient id="gtsBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FBFBFA"/>
+      <stop offset="100%" stop-color="#EFEFEA"/>
+    </linearGradient>
+    <filter id="bagShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="400" height="400" fill="url(#gtsBgGrad)"/>
+  <g filter="url(#bagShadow)" transform="translate(0, -6)">
+    <!-- Shopping Bag Body -->
+    <path d="M125 155 L136 298 C137 305 143 310 150 310 L250 310 C257 310 263 305 264 298 L275 155 Z" fill="#FFFFFF" stroke="#010101" stroke-width="7" stroke-linejoin="round"/>
+    
+    <!-- Bag Fold Lines (Subtle depth) -->
+    <path d="M136 298 L160 155" stroke="#E5E7EB" stroke-width="3" stroke-dasharray="4 4"/>
+    <path d="M264 298 L240 155" stroke="#E5E7EB" stroke-width="3" stroke-dasharray="4 4"/>
+
+    <!-- Handles -->
+    <path d="M165 155 V125 C165 106 181 90 200 90 C219 90 235 106 235 125 V155" fill="none" stroke="#010101" stroke-width="7" stroke-linecap="round"/>
+    
+    <!-- GTS Gold Diamond Emblem -->
+    <polygon points="200,205 214,222 200,239 186,222" fill="#EDCF5D" stroke="#010101" stroke-width="2"/>
+    <circle cx="200" cy="222" r="3" fill="#010101"/>
+  </g>
+</svg>

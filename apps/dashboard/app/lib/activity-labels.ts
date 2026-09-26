@@ -13,6 +13,7 @@ const PERMISSION_WORDS: Record<string, string> = {
   can_handle_tickets: "handle support tickets",
   can_void_orders: "void sales",
   can_apply_discounts: "apply manual discounts",
+  can_manage_broadcasts: "manage broadcasts & popups",
 };
 
 const METHOD_WORDS: Record<string, string> = { cash: "cash", pos_terminal: "card" };

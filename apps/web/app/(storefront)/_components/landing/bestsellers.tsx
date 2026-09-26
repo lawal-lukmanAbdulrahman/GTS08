@@ -6,11 +6,44 @@ import { ProductCard } from "../ui/product-card";
 
 import { useCatalogue } from "../catalogue-context";
 
-// Strictly Household, Appliances, Electronics & Home items for Bestsellers section
+import { dbProductToItem, type ApiProduct } from "../../_lib/catalogue";
+import type { ProductItem } from "../../_data/products";
 
 export function Bestsellers() {
   const { products: catalogue } = useCatalogue();
-  const PRODUCTS = useMemo(() => catalogue.filter((p) => ["Appliances", "Electronics", "Home & Office", "Supermarket"].includes(p.category)), [catalogue]);
+  const [apiProducts, setApiProducts] = useState<ProductItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    async function fetchBestselling() {
+      try {
+        const res = await fetch("/api/v1/storefront/bestselling?limit=12");
+        if (res.ok) {
+          const json = await res.json();
+          if (mounted && Array.isArray(json.data) && json.data.length > 0) {
+            setApiProducts(json.data.map((p: ApiProduct) => dbProductToItem(p)));
+          }
+        }
+      } catch {
+        // Fallback to catalogue
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    void fetchBestselling();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const PRODUCTS = useMemo(() => {
+    if (apiProducts.length > 0) return apiProducts;
+    return [...catalogue]
+      .sort((a, b) => (b.totalSold ?? 0) - (a.totalSold ?? 0))
+      .slice(0, 12);
+  }, [apiProducts, catalogue]);
+
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -66,7 +99,7 @@ export function Bestsellers() {
           </div>
 
           <Link
-            href="/search"
+            href="/search?filter=bestselling"
             className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
           >
             <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">

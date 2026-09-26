@@ -70,10 +70,13 @@ export interface Database {
           id: string
           user_id: string
           can_process_pos: boolean
+          can_void_orders: boolean
+          can_apply_discounts: boolean
           can_manage_inventory: boolean
           can_view_all_orders: boolean
           can_manage_products: boolean
           can_handle_tickets: boolean
+          can_manage_broadcasts: boolean
           granted_by: string | null
           created_at: string
           updated_at: string
@@ -82,10 +85,13 @@ export interface Database {
           id?: string
           user_id: string
           can_process_pos?: boolean
+          can_void_orders?: boolean
+          can_apply_discounts?: boolean
           can_manage_inventory?: boolean
           can_view_all_orders?: boolean
           can_manage_products?: boolean
           can_handle_tickets?: boolean
+          can_manage_broadcasts?: boolean
           granted_by?: string | null
           created_at?: string
           updated_at?: string
@@ -94,10 +100,13 @@ export interface Database {
           id?: string
           user_id?: string
           can_process_pos?: boolean
+          can_void_orders?: boolean
+          can_apply_discounts?: boolean
           can_manage_inventory?: boolean
           can_view_all_orders?: boolean
           can_manage_products?: boolean
           can_handle_tickets?: boolean
+          can_manage_broadcasts?: boolean
           granted_by?: string | null
           created_at?: string
           updated_at?: string

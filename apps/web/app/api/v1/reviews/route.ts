@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const serviceClient = createServiceClient();
     const { data: reviews, error } = await serviceClient
       .from("reviews")
-      .select("id, product_id, user_id, rating, title, body, is_approved, created_at, user:users(full_name)")
+      .select("id, product_id, user_id, rating, title, body, is_approved, created_at, user:users!reviews_user_id_fkey(full_name)")
       .eq("product_id", productId)
       .eq("is_approved", true)
       .order("created_at", { ascending: false });

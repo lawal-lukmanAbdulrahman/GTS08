@@ -7,6 +7,7 @@ import { checkManualDiscount, computeCartTotals, startOfWATDay, type PosCartLine
 import { checkStockSufficiency } from "../_lib/stock-sufficiency";
 import { variantAvailable } from "../_lib/stock-status";
 import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
+import { withIdempotency } from "@/lib/idempotency";
 import { clientIp, logActivity } from "../../_lib/activity";
 import { serverError, dbError } from "../../_lib/http";
 import { afterResponse } from "../../_lib/email/after";
@@ -96,7 +97,7 @@ function stockFailureResponse(
   return dbError(failure, "DATABASE_ERROR", 500);
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withIdempotency(async function POST(request: NextRequest) {
   const access = await requirePosAccess(request);
   if (!access.ok) return access.response;
 
@@ -373,4 +374,4 @@ export async function POST(request: NextRequest) {
       payment_method: paymentMethod,
     },
   });
-}
+});

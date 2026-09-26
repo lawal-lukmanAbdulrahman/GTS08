@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -22,8 +22,8 @@ import {
   type RecentlyViewedProduct,
 } from "./search-history";
 
-// ─── Default Trending Chip Tags ──────────────────────────────────────────────
-const TRENDING_SEARCHES = [
+// ─── Default Trending Chip Tags (fallback before DB has enough data) ─────────
+const DEFAULT_TRENDING = [
   "slipper for ladies",
   "imperio privee",
   "tripod stands",
@@ -92,6 +92,16 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
   );
 }
 
+// ─── Debounce hook for server search ─────────────────────────────────────────
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
 interface SearchDropdownCardProps {
   isOpen: boolean;
   query: string;
@@ -110,7 +120,29 @@ export function SearchDropdownCard({ isOpen, query, onClose, onSelectTerm }: Sea
 
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [recentlyViewed, setRecentlyViewed] = useState<RecentlyViewedProduct[]>([]);
+  const [trendingSearches, setTrendingSearches] = useState<string[]>(DEFAULT_TRENDING);
+  const [serverSuggestions, setServerSuggestions] = useState<string[]>([]);
   const router = useRouter();
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Fetch trending searches from the server (collective intelligence)
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/v1/search/suggestions?limit=10");
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        if (Array.isArray(json.data) && json.data.length >= 3 && !cancelled) {
+          setTrendingSearches(json.data);
+        }
+      } catch {
+        // Keep defaults
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   useEffect(() => {
     const syncData = () => {
@@ -151,6 +183,73 @@ export function SearchDropdownCard({ isOpen, query, onClose, onSelectTerm }: Sea
     };
   }, [isOpen, onClose]);
 
+  // Debounced query for server suggestions (120ms — feels instant but avoids flooding)
+  const debouncedQuery = useDebouncedValue(query, 120);
+
+  // Fetch server-side autocomplete suggestions from past successful searches
+  useEffect(() => {
+    if (!debouncedQuery.trim() || debouncedQuery.trim().length < 2) {
+      setServerSuggestions([]);
+      return;
+    }
+    // Cancel previous in-flight request
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/v1/search/suggestions?q=${encodeURIComponent(debouncedQuery.trim())}&limit=5`,
+          { signal: controller.signal }
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        if (Array.isArray(json.data)) {
+          setServerSuggestions(json.data);
+        }
+      } catch {
+        // Aborted or network error
+      }
+    })();
+
+    return () => { controller.abort(); };
+  }, [debouncedQuery]);
+
+  // ── Autocomplete suggestions powered by the TOKENIZED search engine ───────
+  const trimmed = query.trim().toLowerCase();
+  const hasSuggestions = trimmed.length > 0;
+
+  // Client-side trie suggestions (instant, < 1ms)
+  const clientSuggestions = useMemo(() => {
+    if (!hasSuggestions) return [];
+    return engine.autocomplete(trimmed, 10);
+  }, [engine, trimmed, hasSuggestions]);
+
+  // Merge client + server suggestions, deduplicated, client first for speed
+  const mergedSuggestions = useMemo(() => {
+    if (!hasSuggestions) return [];
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    // Client suggestions first (instant)
+    for (const s of clientSuggestions) {
+      const key = s.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(s);
+      }
+    }
+    // Server suggestions second (may include collective intelligence)
+    for (const s of serverSuggestions) {
+      const key = s.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(s);
+      }
+    }
+    return merged.slice(0, 10);
+  }, [hasSuggestions, clientSuggestions, serverSuggestions]);
+
   if (!isOpen) return null;
 
   const handleChipClick = (term: string) => {
@@ -170,15 +269,6 @@ export function SearchDropdownCard({ isOpen, query, onClose, onSelectTerm }: Sea
     setRecentlyViewed([]);
   };
 
-  // ── Autocomplete suggestions powered by the search engine ─────────────────
-  const trimmed = query.trim().toLowerCase();
-  const hasSuggestions = trimmed.length > 0;
-
-  // Use the engine's autocomplete for instant prefix-trie suggestions
-  const suggestions = hasSuggestions
-    ? engine.autocomplete(trimmed, 10)
-    : [];
-
   return (
     /* ── Dropdown Card positioned directly under the navbar search bar ── */
     <div className="absolute top-full mt-2.5 left-0 right-0 z-50 w-full bg-white rounded-[16px] sm:rounded-[16px] overflow-hidden shadow-2xl border border-gray-200/90 animate-in fade-in slide-in-from-top-2 duration-200">
@@ -186,8 +276,8 @@ export function SearchDropdownCard({ isOpen, query, onClose, onSelectTerm }: Sea
       {/* ── SUGGESTIONS VIEW (when typing) ── */}
       {hasSuggestions ? (
         <div className="flex flex-col">
-          {suggestions.length > 0 ? (
-            suggestions.map((suggestion) => (
+          {mergedSuggestions.length > 0 ? (
+            mergedSuggestions.map((suggestion) => (
               <button
                 key={suggestion}
                 type="button"
@@ -315,14 +405,14 @@ export function SearchDropdownCard({ isOpen, query, onClose, onSelectTerm }: Sea
             </div>
           )}
 
-          {/* ── Row 3: Trending Searches ── */}
+          {/* ── Row 3: Trending Searches (from collective user data) ── */}
           <div className="space-y-2.5 pt-0.5">
             <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block font-sans">
               TRENDING SEARCHES
             </span>
 
             <div className="flex flex-wrap items-center gap-2">
-              {TRENDING_SEARCHES.map((term) => (
+              {trendingSearches.map((term) => (
                 <button
                   key={term}
                   type="button"

@@ -268,6 +268,31 @@ export function Header() {
 
   const chipsRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Listen for search trigger from other components (e.g. footer search bar)
+  useEffect(() => {
+    const handleOpenSearch = (e: Event) => {
+      const customEvent = e as CustomEvent<{ query?: string }>;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setIsSearchOpen(true);
+      if (typeof customEvent.detail?.query === "string" && customEvent.detail.query) {
+        setSearchQuery(customEvent.detail.query);
+      }
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+          const len = searchInputRef.current.value.length;
+          searchInputRef.current.setSelectionRange(len, len);
+        }
+      }, 60);
+    };
+
+    window.addEventListener("gts_open_search", handleOpenSearch);
+    return () => {
+      window.removeEventListener("gts_open_search", handleOpenSearch);
+    };
+  }, []);
 
   const updateScrollState = () => {
     if (chipsRef.current) {
@@ -333,7 +358,7 @@ export function Header() {
       )}
 
       {/* Row 1: Always visible — Hamburger | GTS Brand Center | About FAQs Cart */}
-      <div className="relative w-full flex items-center justify-between min-h-[38px] pb-1.5">
+      <div className="relative w-full max-w-[1240px] mx-auto flex items-center justify-between min-h-[38px] pb-1.5">
         {/* Left: Mobile Hamburger / Desktop User Account Pill */}
         <div className="flex-1 flex justify-start items-center">
           {/* Mobile Hamburger Menu Icon Button */}
@@ -455,7 +480,7 @@ export function Header() {
       )}
 
       {/* ── SECONDARY ROW: Categories + Single Search Pill + Filter Chips (Stationary) ── */}
-      <div className="w-full overflow-visible">
+      <div className="w-full max-w-[1240px] mx-auto overflow-visible">
         <div className="w-full flex items-center justify-between gap-3 pb-2">
           {/* Left Wrapper: flex-1 to balance right side width and guarantee search bar is dead-center */}
           <div className="hidden sm:flex items-center gap-2.5 flex-1 min-w-0 justify-start shrink-0">
@@ -485,6 +510,8 @@ export function Header() {
               }`}
             >
               <input
+                ref={searchInputRef}
+                id="nav-search-input"
                 type="text"
                 placeholder="Search products, brands and categories"
                 value={searchQuery}

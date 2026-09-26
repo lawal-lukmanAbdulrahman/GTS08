@@ -59,9 +59,6 @@ export function FAQ() {
               Have any <span className="font-serif italic font-bold text-[#010101]">questions?</span>
             </h2>
           </div>
-          <p className="text-xs sm:text-sm font-normal text-gray-500 max-w-xs md:text-right leading-relaxed">
-            Hear from shoppers who rely on GTS with confidence and style.
-          </p>
         </div>
 
         {/* 2-Column Cards Grid: Warm GTS Neutral background (#F9F8F5) */}
