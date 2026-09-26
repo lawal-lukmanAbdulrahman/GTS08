@@ -9,6 +9,15 @@ export function Footer() {
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
 
+  const triggerNavSearch = (initialQuery?: string) => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.dispatchEvent(
+      new CustomEvent("gts_open_search", {
+        detail: { query: initialQuery ?? searchQuery },
+      })
+    );
+  };
+
   const handleSubscribe = (e: React.FormEvent) => {
     e.preventDefault();
     if (email) {
@@ -18,9 +27,10 @@ export function Footer() {
   };
 
   return (
-    <footer className="w-full bg-white pt-4 sm:pt-6 pb-6 text-[#010101] px-3 md:px-6">
-      {/* ── Top CTA Banner Box (Matching Exact Section Margins & Width of Page Cards) ── */}
-      <div className="w-full mb-8 sm:mb-10">
+    <footer className="w-full bg-white pt-4 sm:pt-6 pb-6 text-[#010101] px-3 md:px-4">
+      <div className="max-w-[1240px] mx-auto">
+        {/* ── Top CTA Banner Box (Matching Exact Section Margins & Width of Page Cards) ── */}
+        <div className="w-full mb-8 sm:mb-10">
         <div
           className="w-full rounded-[28px] sm:rounded-[36px] overflow-hidden p-6 sm:p-10 md:p-12 relative border border-gray-200/80 shadow-2xs flex items-center justify-center min-h-[220px] sm:min-h-[260px]"
           style={{ background: "radial-gradient(ellipse at center, #ECEAE6 0%, #DDDAD4 100%)" }}
@@ -51,20 +61,35 @@ export function Footer() {
 
             {/* White Search Input Pill */}
             <div className="pt-2 max-w-md mx-auto">
-              <div className="bg-white rounded-full px-5 py-2.5 sm:py-3 shadow-xs flex items-center justify-between border border-gray-200/80 transition-all focus-within:ring-2 focus-within:ring-[#010101]">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  triggerNavSearch(searchQuery);
+                }}
+                onClick={() => triggerNavSearch(searchQuery)}
+                className="bg-white rounded-full px-5 py-2.5 sm:py-3 shadow-xs flex items-center justify-between border border-gray-200/80 transition-all cursor-text hover:border-gray-400 group"
+              >
                 <input
                   type="text"
                   placeholder="Search here...."
                   value={searchQuery}
+                  onFocus={(e) => {
+                    e.target.blur();
+                    triggerNavSearch(searchQuery);
+                  }}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-transparent text-xs sm:text-sm text-[#010101] placeholder-gray-400 outline-none w-full font-normal"
+                  className="bg-transparent text-xs sm:text-sm text-[#010101] placeholder-gray-400 outline-none w-full font-normal cursor-pointer"
                 />
-                <button aria-label="Search" className="text-[#010101] hover:opacity-75 transition-opacity ml-2 shrink-0">
+                <button
+                  type="submit"
+                  aria-label="Search"
+                  className="text-[#010101] hover:opacity-75 transition-opacity ml-2 shrink-0 cursor-pointer"
+                >
                   <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[#010101]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </button>
-              </div>
+              </form>
             </div>
           </div>
         </div>
@@ -204,10 +229,11 @@ export function Footer() {
           </div>
         </div>
       </div>
+      </div>
 
-      {/* ── Edge-to-Edge Full Width Bottom Bar ── */}
-      <div className="-mx-3 md:-mx-4 w-[calc(100%+24px)] md:w-[calc(100%+32px)] border-t border-gray-200/80 pt-5 pb-3">
-        <div className="w-full px-3 md:px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500 font-medium">
+      {/* ── Full Width Bottom Bar with Centered Grid Content ── */}
+      <div className="-mx-3 md:-mx-4 border-t border-gray-200/80 pt-5 pb-3">
+        <div className="max-w-[1240px] mx-auto px-3 md:px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500 font-medium">
           <p>© {new Date().getFullYear()} GTS. All rights reserved.</p>
           <div className="flex items-center gap-6">
             <Link href="/privacy" className="hover:text-[#010101] transition-colors">

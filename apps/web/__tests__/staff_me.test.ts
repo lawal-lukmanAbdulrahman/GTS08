@@ -65,6 +65,7 @@ const STAFF = {
     can_handle_tickets: false,
     can_void_orders: false,
     can_apply_discounts: true,
+    can_manage_broadcasts: false,
   },
 };
 

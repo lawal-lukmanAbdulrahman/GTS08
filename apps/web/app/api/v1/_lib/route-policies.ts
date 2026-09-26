@@ -30,6 +30,9 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "analytics/inventory/alerts": { GET: "admin" },
   "analytics/customers/new": { GET: "admin" },
   "analytics/orders/average-value": { GET: "admin" },
+  "analytics/event": { POST: "public" }, // visitor engagement event recording; rate limited
+  "analytics/search": { POST: "public" }, // user search query recording; rate limited
+  "analytics/view": { POST: "public" }, // product view duration tracking; rate limited
 
   // ── auth
   "auth/delete-account": { POST: "session" },
@@ -65,7 +68,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "size-guides/[categorySlug]": { GET: "public", PUT: "permission:can_manage_products" },
 
   // ── storefront content
-  "broadcast": { GET: "public", DELETE: "admin", POST: "admin" }, // GET: the banner the storefront shows
+  "broadcast": { GET: "public", DELETE: "permission:can_manage_broadcasts", POST: "permission:can_manage_broadcasts" }, // GET: the banner the storefront shows
   "broadcast/analytics": { POST: "public" }, // visitor impression events; rate limited
   "content-slots": { GET: "public" }, // live slots for the homepage
   "content-slots/[key]": { GET: "public", PUT: "admin" },
@@ -73,6 +76,10 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "settings/data-mode": { GET: "admin", PUT: "super_admin" },
   "settings/email": { GET: "admin", POST: "admin" }, // status of the email setup; POST sends a test to the caller only
   "storefront/sections": { GET: "public", PUT: "admin" },
+  "storefront/hero": { GET: "public", PUT: "admin" },
+  "storefront/bestselling": { GET: "public" },
+  "storefront/trending": { GET: "public" },
+  "storefront/for-you": { GET: "public" },
 
   // ── cart, checkout, promos, wishlist
   "cart/[sessionId]": { GET: "public", PUT: "public", DELETE: "public" }, // the session id is a random UUID and the only key to the cart

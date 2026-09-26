@@ -94,5 +94,12 @@ describe("TodaysOrdersPanel (spec Part 6)", () => {
       render(<TodaysOrdersPanel orders={ORDERS} canVoid onVoid={vi.fn()} onReprint={vi.fn()} reprintError="Could not load the receipt." onClose={vi.fn()} />);
       expect(screen.getByRole("alert")).toHaveTextContent(/could not load the receipt/i);
     });
+
+    it("shows a centered spinner loader while loading instead of ghosting the user", () => {
+      render(<TodaysOrdersPanel orders={[]} loading={true} canVoid onVoid={vi.fn()} onReprint={vi.fn()} onClose={vi.fn()} />);
+      expect(screen.getByText(/loading today's orders/i)).toBeInTheDocument();
+      expect(screen.queryByText(/no orders yet today/i)).not.toBeInTheDocument();
+    });
   });
 });
+

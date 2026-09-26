@@ -5,10 +5,12 @@ import { getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../_lib/staff-access";
 import { serverError, dbError } from "../_lib/http";
+import { invalidateStorefrontCaches } from "../_lib/storefront-cache";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search") || searchParams.get("q");
     const categorySlug = searchParams.get("category");
     const size = searchParams.get("size");
     const color = searchParams.get("color");
@@ -75,6 +77,11 @@ export async function GET(request: NextRequest) {
       if (catData) {
         query = query.eq("category_id", catData.id);
       }
+    }
+
+    // Filter by Search Query
+    if (search) {
+      query = query.ilike("name", `%${search}%`);
     }
 
     // Filter by Price
@@ -428,6 +435,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       }
     }
 
+    invalidateStorefrontCaches();
     return NextResponse.json({ data: product }, { status: 201 });
   } catch (err: any) {
     return serverError(err);
@@ -674,6 +682,7 @@ export const PUT = withIdempotency(async function PUT(request: NextRequest) {
       }
     }
 
+    invalidateStorefrontCaches();
     return NextResponse.json({ data: updatedProduct });
   } catch (err: any) {
     return serverError(err);

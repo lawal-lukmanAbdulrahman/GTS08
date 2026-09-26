@@ -48,6 +48,7 @@ export interface PermissionsView {
   can_handle_tickets: boolean;
   can_void_orders: boolean;
   can_apply_discounts: boolean;
+  can_manage_broadcasts: boolean;
 }
 
 export interface StaffProfileView {

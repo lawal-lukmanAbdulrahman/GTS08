@@ -734,70 +734,6 @@ export default function AdminBroadcastPage() {
             </div>
           )}
 
-          {/* 3D Isometric Digital Screen Watermark (Clean Monotone Gray + Dull Gold) */}
-          <div className="absolute -right-3 -bottom-5 w-32 h-25 pointer-events-none opacity-80 group-hover:scale-105 transition-all duration-300">
-            <svg viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <defs>
-                <style>{`
-                  .wm-bc-top-s1 { stop-color: #E5E7EB; }
-                  .wm-bc-top-s2 { stop-color: #D1D5DB; }
-                  .wm-bc-left-s1 { stop-color: #9CA3AF; }
-                  .wm-bc-left-s2 { stop-color: #6B7280; }
-                  .wm-bc-right-s1 { stop-color: #6B7280; }
-                  .wm-bc-right-s2 { stop-color: #4B5563; }
-                  .wm-bc-stroke { stroke: rgba(0, 0, 0, 0.16); }
-                  .wm-bc-line { stroke: rgba(51, 65, 85, 0.5); }
-                  .dark .wm-bc-top-s1 { stop-color: #3A3A3A; }
-                  .dark .wm-bc-top-s2 { stop-color: #2D2D2D; }
-                  .dark .wm-bc-left-s1 { stop-color: #242424; }
-                  .dark .wm-bc-left-s2 { stop-color: #1A1A1A; }
-                  .dark .wm-bc-right-s1 { stop-color: #1A1A1A; }
-                  .dark .wm-bc-right-s2 { stop-color: #121212; }
-                  .dark .wm-bc-stroke { stroke: rgba(255, 255, 255, 0.18); }
-                  .dark .wm-bc-line { stroke: rgba(255, 255, 255, 0.35); }
-                `}</style>
-                <linearGradient id="bcFadeMask" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="white" stopOpacity="0.2" />
-                  <stop offset="50%" stopColor="white" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="white" stopOpacity="1" />
-                </linearGradient>
-                <mask id="fadeTopLeftBc">
-                  <rect x="0" y="0" width="130" height="100" fill="url(#bcFadeMask)" />
-                </mask>
-                <linearGradient id="bcTopGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" className="wm-bc-top-s1" />
-                  <stop offset="100%" className="wm-bc-top-s2" />
-                </linearGradient>
-                <linearGradient id="bcLeftGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" className="wm-bc-left-s1" />
-                  <stop offset="100%" className="wm-bc-left-s2" />
-                </linearGradient>
-                <linearGradient id="bcRightGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" className="wm-bc-right-s1" />
-                  <stop offset="100%" className="wm-bc-right-s2" />
-                </linearGradient>
-              </defs>
-
-              <g mask="url(#fadeTopLeftBc)">
-                {/* Base Plinth */}
-                <polygon points="26,62 60,46 94,62 60,78" fill="url(#bcTopGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-                <polygon points="26,62 60,78 60,84 26,68" fill="url(#bcLeftGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-                <polygon points="60,78 94,62 94,68 60,84" fill="url(#bcRightGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-
-                {/* Vertical Screen Display */}
-                <polygon points="38,28 72,14 72,58 38,72" fill="url(#bcLeftGrad)" className="wm-bc-stroke" strokeWidth="1.4" />
-                <polygon points="38,28 42,26 76,12 72,14" fill="url(#bcTopGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-                <polygon points="72,14 76,12 76,56 72,58" fill="url(#bcRightGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-
-                {/* Clean Screen Wireframe Content Lines */}
-                <line x1="45" y1="36" x2="62" y2="29" stroke="rgba(255,255,255,0.3)" strokeWidth="2" strokeLinecap="round" />
-                <line x1="45" y1="42" x2="66" y2="33" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" strokeLinecap="round" />
-
-                {/* Mini Dull Gold CTA Pill */}
-                <polygon points="45,52 56,47 56,52 45,57" fill="#C5A845" opacity="0.45" />
-              </g>
-            </svg>
-          </div>
         </div>
 
         {/* Card 2: Total Impressions (Views) */}
@@ -827,34 +763,6 @@ export default function AdminBroadcastPage() {
             </div>
           )}
 
-          {/* 3D Isometric Ocular Disc Watermark (Clean Monotone Gray + Dull Gold) */}
-          <div className="absolute -right-3 -bottom-5 w-32 h-25 pointer-events-none opacity-80 group-hover:scale-105 transition-all duration-300">
-            <svg viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <defs>
-                <mask id="fadeTopLeftBc2">
-                  <rect x="0" y="0" width="130" height="100" fill="url(#bcFadeMask)" />
-                </mask>
-              </defs>
-
-              <g mask="url(#fadeTopLeftBc2)">
-                {/* Stepped Base Disc */}
-                <polygon points="24,54 65,34 106,54 65,74" fill="url(#bcTopGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-                <polygon points="24,54 65,74 65,80 24,60" fill="url(#bcLeftGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-                <polygon points="65,74 106,54 106,60 65,80" fill="url(#bcRightGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-
-                {/* Upper Recessed Disc */}
-                <polygon points="36,54 65,40 94,54 65,68" fill="url(#bcLeftGrad)" className="wm-bc-stroke" strokeWidth="1" />
-
-                {/* Minimal Eye Aperture Outline */}
-                <path d="M 46 54 C 53 45, 77 45, 84 54 C 77 63, 53 63, 46 54 Z" fill="url(#bcRightGrad)" stroke="rgba(255,255,255,0.25)" strokeWidth="1.2" />
-                <ellipse cx="65" cy="54" rx="7" ry="5" fill="#141414" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="1" />
-                <circle cx="67" cy="52" r="1.2" fill="#FFFFFF" opacity="0.8" />
-
-                {/* Subtle Dull Gold Concentric Ring Accent */}
-                <polygon points="32,54 65,38 98,54 65,70" fill="none" stroke="rgba(197, 168, 69, 0.35)" strokeWidth="1.2" strokeDasharray="4 3" />
-              </g>
-            </svg>
-          </div>
         </div>
 
         {/* Card 3: Avg. Attention Span (Dwell Time) */}
@@ -884,43 +792,6 @@ export default function AdminBroadcastPage() {
             </div>
           )}
 
-          {/* 3D Isometric Chronometer Cylinder Watermark (Clean Monotone Gray + Dull Gold) */}
-          <div className="absolute -right-3 -bottom-5 w-32 h-25 pointer-events-none opacity-80 group-hover:scale-105 transition-all duration-300">
-            <svg viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <defs>
-                <mask id="fadeTopLeftBc3">
-                  <rect x="0" y="0" width="130" height="100" fill="url(#bcFadeMask)" />
-                </mask>
-              </defs>
-
-              <g mask="url(#fadeTopLeftBc3)">
-                {/* Cylinder Body */}
-                <polygon points="28,44 65,26 102,44 65,62" fill="url(#bcTopGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-                <polygon points="28,44 65,62 65,76 28,58" fill="url(#bcLeftGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-                <polygon points="65,62 102,44 102,58 65,76" fill="url(#bcRightGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-
-                {/* Top Push-Button */}
-                <polygon points="60,18 65,15 70,18 65,21" fill="url(#bcTopGrad)" className="wm-bc-stroke" strokeWidth="1" />
-                <polygon points="60,18 65,21 65,24 60,21" fill="url(#bcLeftGrad)" />
-                <polygon points="65,21 70,18 70,21 65,24" fill="url(#bcRightGrad)" />
-
-                {/* Dial Rim & Ticks */}
-                <polygon points="36,44 65,30 94,44 65,58" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
-                <line x1="65" y1="30" x2="65" y2="33" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" />
-                <line x1="94" y1="44" x2="91" y2="44" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" />
-                <line x1="65" y1="58" x2="65" y2="55" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" />
-                <line x1="36" y1="44" x2="39" y2="44" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" />
-
-                {/* Faint Dull Gold Elapsed Sector */}
-                <path d="M 65 44 L 65 30 A 29 14 0 0 1 88 48 Z" fill="rgba(197, 168, 69, 0.08)" stroke="rgba(197, 168, 69, 0.3)" strokeWidth="1" />
-
-                {/* Dull Gold Hands */}
-                <circle cx="65" cy="44" r="2" fill="#C5A845" opacity="0.75" />
-                <line x1="65" y1="44" x2="56" y2="41" stroke="#C5A845" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
-                <line x1="65" y1="44" x2="84" y2="47" stroke="#C5A845" strokeWidth="1.5" strokeLinecap="round" opacity="0.75" />
-              </g>
-            </svg>
-          </div>
         </div>
 
         {/* Card 4: Action Clicks & CTR */}
@@ -949,38 +820,6 @@ export default function AdminBroadcastPage() {
             </div>
           )}
 
-          {/* 3D Isometric Keycap Switch Watermark (Clean Monotone Gray + Dull Gold) */}
-          <div className="absolute -right-3 -bottom-5 w-32 h-25 pointer-events-none opacity-80 group-hover:scale-105 transition-all duration-300">
-            <svg viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <defs>
-                <mask id="fadeTopLeftBc4">
-                  <rect x="0" y="0" width="130" height="100" fill="url(#bcFadeMask)" />
-                </mask>
-              </defs>
-
-              <g mask="url(#fadeTopLeftBc4)">
-                {/* Switch Base Plinth */}
-                <polygon points="24,66 62,48 100,66 62,84" fill="url(#bcTopGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-                <polygon points="24,66 62,84 62,90 24,72" fill="url(#bcLeftGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-                <polygon points="62,84 100,66 100,72 62,90" fill="url(#bcRightGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-
-                {/* Keycap Button */}
-                <polygon points="34,54 62,40 90,54 62,68" fill="url(#bcTopGrad)" className="wm-bc-stroke" strokeWidth="1.4" />
-                <polygon points="34,54 62,68 62,74 34,60" fill="url(#bcLeftGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-                <polygon points="62,68 90,54 90,60 62,74" fill="url(#bcRightGrad)" className="wm-bc-stroke" strokeWidth="1.2" />
-
-                {/* Subtle Dull Gold Chevron Accent */}
-                <polyline points="57,52 62,55 67,52" stroke="rgba(197, 168, 69, 0.45)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-
-                {/* Clean 3D Isometric Cursor Arrow */}
-                <polygon points="68,22 80,34 74,36 80,46 76,48 70,38 64,42" fill="url(#bcTopGrad)" stroke="rgba(255,255,255,0.25)" strokeWidth="1.2" />
-                <polygon points="68,22 64,42 62,41 66,21" fill="url(#bcLeftGrad)" />
-
-                {/* Single Faint Dull Gold Base Seam */}
-                <polygon points="26,67 62,49 98,67 62,85" fill="none" stroke="rgba(197, 168, 69, 0.25)" strokeWidth="1" strokeDasharray="3 3" />
-              </g>
-            </svg>
-          </div>
         </div>
       </div>
 

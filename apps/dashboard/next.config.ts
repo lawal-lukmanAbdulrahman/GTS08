@@ -24,12 +24,16 @@ const nextConfig: NextConfig = {
     ],
   },
   async rewrites() {
+    const apiOrigin = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000")
+      .replace(/\/+$/, "")
+      .replace(/\/api\/v1\/?$/, "")
+      .replace(/\/api\/?$/, "");
     return [
       {
         // Proxy API calls to the web app in local development.
         // In production, configure this at the infrastructure level (e.g. reverse proxy).
         source: "/api/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/api/:path*`,
+        destination: `${apiOrigin}/api/:path*`,
       },
     ];
   },

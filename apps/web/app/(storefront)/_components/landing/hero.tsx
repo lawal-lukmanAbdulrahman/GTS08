@@ -18,11 +18,11 @@ type SlideRole = "far-left" | "left" | "center" | "right" | "far-right";
 const POSITION: Record<SlideRole, {
   x: string; scale: number; opacity: number; zIndex: number;
 }> = {
-  "far-left":  { x: "-160%", scale: 0.40, opacity: 0,    zIndex: 0  },
-  "left":      { x: "-72%",  scale: 0.58, opacity: 0.82, zIndex: 10 },
-  "center":    { x: "0%",    scale: 1.0,  opacity: 1,    zIndex: 20 },
-  "right":     { x: "72%",   scale: 0.58, opacity: 0.82, zIndex: 10 },
-  "far-right": { x: "160%",  scale: 0.40, opacity: 0,    zIndex: 0  },
+  "far-left":  { x: "-140%", scale: 0.35, opacity: 0,    zIndex: 0  },
+  "left":      { x: "-64%",  scale: 0.52, opacity: 0.78, zIndex: 10 },
+  "center":    { x: "0%",    scale: 0.94, opacity: 1,    zIndex: 20 },
+  "right":     { x: "64%",   scale: 0.52, opacity: 0.78, zIndex: 10 },
+  "far-right": { x: "140%",  scale: 0.35, opacity: 0,    zIndex: 0  },
 };
 
 interface ColorVariant {
@@ -272,10 +272,9 @@ const HERO_PRODUCTS: HeroProduct[] = [
   },
 ];
 
-const N = HERO_PRODUCTS.length; // 4
-
 // ─── Helper: true modulo (always non-negative, unlike JS's `%`) ──────────────
 function mod(n: number, m: number) {
+  if (m <= 0) return 0;
   return ((n % m) + m) % m;
 }
 
@@ -361,13 +360,123 @@ export function Hero() {
    * A slide can only ever reverse direction if the *user* reverses
    * direction, which is correct, expected behavior.
    */
-  const [centerStep, setCenterStep] = useState(2); // HERO_PRODUCTS[2] = Google Pixel 10 Pro
-
-
+  const [productsList, setProductsList] = useState<HeroProduct[]>(HERO_PRODUCTS);
+  const [centerStep, setCenterStep] = useState(2);
   const [isPaused, setIsPaused] = useState(false);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>(
     Object.fromEntries(HERO_PRODUCTS.map((p) => [p.id, 0]))
   );
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadHeroFromDb() {
+      try {
+        const res = await fetch("/api/v1/storefront/hero");
+        if (!res.ok) return;
+        const json = await res.json();
+        if (mounted && Array.isArray(json.data) && json.data.length > 0) {
+          const PALETTES = [
+            {
+              radialGradient: "radial-gradient(ellipse 90% 80% at 50% 52%, #2A52C4 0%, #1A3678 20%, #0E2050 42%, #070F2C 62%, #030818 80%, #010510 100%)",
+              glowColor: "rgba(30, 58, 138, 0.65)",
+              edgeColor: "#010510",
+            },
+            {
+              radialGradient: "radial-gradient(ellipse 90% 80% at 50% 52%, #B45309 0%, #78350F 20%, #452006 42%, #221003 62%, #0E0802 80%, #060402 100%)",
+              glowColor: "rgba(120, 53, 15, 0.65)",
+              edgeColor: "#060402",
+            },
+            {
+              radialGradient: "radial-gradient(ellipse 90% 80% at 50% 52%, #166534 0%, #0F4024 20%, #082816 42%, #041408 62%, #020A04 80%, #010502 100%)",
+              glowColor: "rgba(20, 83, 45, 0.65)",
+              edgeColor: "#010502",
+            },
+            {
+              radialGradient: "radial-gradient(ellipse 90% 80% at 50% 52%, #4C1D95 0%, #3B0764 20%, #2E0854 42%, #1A0530 62%, #0E021A 80%, #07010D 100%)",
+              glowColor: "rgba(126, 34, 206, 0.65)",
+              edgeColor: "#07010D",
+            },
+          ];
+
+          const mapped: HeroProduct[] = json.data.map((item: any, idx: number) => {
+            const p = item.product;
+            const pal = PALETTES[idx % PALETTES.length]!;
+            const imgRaw = p?.images?.[0]?.cloudinary_public_id || "/products/hero/air_jordan_retro_1_blue.png";
+            const imageUrl =
+              imgRaw.startsWith("/") || imgRaw.startsWith("http")
+                ? imgRaw
+                : `https://res.cloudinary.com/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "dqj3zbf5e"}/image/upload/${imgRaw}`;
+
+            const variants: ColorVariant[] =
+              p?.variants && p.variants.length > 0
+                ? p.variants.map((v: any, vi: number) => {
+                    const vPal = PALETTES[(idx + vi) % PALETTES.length]!;
+                    return {
+                      id: v.id || `${p.id}-${vi}`,
+                      colorName: v.color || "Default",
+                      colorHex: v.color_hex || "#333333",
+                      image: imageUrl,
+                      radialGradient: vPal.radialGradient,
+                      glowColor: vPal.glowColor,
+                      edgeColor: vPal.edgeColor,
+                      hasTransparentBg: p.has_transparent_bg,
+                    };
+                  })
+                : [
+                    {
+                      id: `${p.id}-default`,
+                      colorName: "Original",
+                      colorHex: "#333333",
+                      image: imageUrl,
+                      radialGradient: pal.radialGradient,
+                      glowColor: pal.glowColor,
+                      edgeColor: pal.edgeColor,
+                      hasTransparentBg: p.has_transparent_bg,
+                    },
+                  ];
+
+            const words = (p.name || "").split(" ");
+            const headline =
+              words.length > 2
+                ? `${words.slice(0, 2).join(" ")}\n${words.slice(2).join(" ")}`
+                : p.name || "Special Item";
+
+            const discount =
+              p.compare_at_price && p.compare_at_price > p.base_price
+                ? `${Math.round(((p.compare_at_price - p.base_price) / p.compare_at_price) * 100)}% OFF`
+                : undefined;
+
+            return {
+              id: p.id,
+              slug: p.slug,
+              headline,
+              tagline: p.short_description || p.brand || "Flagship Selection",
+              price: `₦${(p.base_price / 100).toLocaleString("en-NG")}`,
+              originalPrice: p.compare_at_price
+                ? `₦${(p.compare_at_price / 100).toLocaleString("en-NG")}`
+                : "",
+              badge: discount,
+              rating: Number(p.average_rating || 4.9),
+              reviews: `${p.review_count || 120}`,
+              variants,
+            };
+          });
+
+          if (mapped.length > 0) {
+            setProductsList(mapped);
+          }
+        }
+      } catch {
+        // silent fallback
+      }
+    }
+    void loadHeroFromDb();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const N = productsList.length || 1;
 
   // Derived: which product index is currently centered (for text/gradients)
   const currentIndex = mod(centerStep, N);
@@ -385,46 +494,59 @@ export function Hero() {
       return;
     }
     intervalRef.current = setInterval(handleNext, 4000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [isPaused, handleNext]);
 
-  const activeProduct      = HERO_PRODUCTS[currentIndex] ?? HERO_PRODUCTS[0]!;
-  const activeVariants     = getHeroEligibleVariants(activeProduct);
-  const activeVariantIndex = Math.min(selectedVariants[activeProduct.id] ?? 0, Math.max(0, activeVariants.length - 1));
-  const activeVariant      = activeVariants[activeVariantIndex] ?? activeProduct.variants[0]!;
+  const activeProduct = productsList[currentIndex] ?? productsList[0]!;
+  const activeVariants = getHeroEligibleVariants(activeProduct);
+  const activeVariantIndex = Math.min(
+    selectedVariants[activeProduct.id] ?? 0,
+    Math.max(0, activeVariants.length - 1)
+  );
+  const activeVariant = activeVariants[activeVariantIndex] ?? activeProduct.variants[0]!;
 
   return (
     <div
-      className="w-full p-3 md:p-4 pt-1 md:pt-2 bg-white flex flex-col box-border"
+      className="w-full px-3 md:px-4 pt-1 md:pt-2 bg-white flex flex-col box-border"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
-      <section className="relative w-full h-[75vh] sm:h-[calc(100vh-140px)] min-h-[380px] sm:min-h-[520px] max-h-[780px] overflow-hidden rounded-[18px] border border-white/10 shadow-xl">
-
+      <div className="w-full max-w-[1240px] mx-auto">
+        <section className="relative w-full h-[52vh] sm:h-[430px] md:h-[460px] lg:h-[490px] min-h-[340px] max-h-[510px] overflow-hidden rounded-[18px] border border-white/10 shadow-xl">
         {/* ── Background Gradient Layers ── */}
-        {HERO_PRODUCTS.map((product, pi) => {
+        {productsList.map((product, pi) => {
           const eligible = getHeroEligibleVariants(product);
           return eligible.map((variant, vi) => {
-            const isActive = pi === currentIndex && vi === Math.min(selectedVariants[product.id] ?? 0, Math.max(0, eligible.length - 1));
+            const isActive =
+              pi === currentIndex &&
+              vi === Math.min(selectedVariants[product.id] ?? 0, Math.max(0, eligible.length - 1));
             return (
               <div
                 key={variant.id}
                 className="absolute inset-0 z-0 transition-opacity duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)]"
-                style={{ background: variant.radialGradient, opacity: isActive ? 1 : 0, pointerEvents: "none" }}
+                style={{
+                  background: variant.radialGradient,
+                  opacity: isActive ? 1 : 0,
+                  pointerEvents: "none",
+                }}
               />
             );
           });
         })}
 
         {/* ── Ambient Glow ── */}
-        {HERO_PRODUCTS.map((product, pi) => {
+        {productsList.map((product, pi) => {
           const eligible = getHeroEligibleVariants(product);
           return eligible.map((variant, vi) => {
-            const isActive = pi === currentIndex && vi === Math.min(selectedVariants[product.id] ?? 0, Math.max(0, eligible.length - 1));
+            const isActive =
+              pi === currentIndex &&
+              vi === Math.min(selectedVariants[product.id] ?? 0, Math.max(0, eligible.length - 1));
             return (
               <div
                 key={`glow-${variant.id}`}
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] sm:w-[540px] sm:h-[540px] rounded-full z-0 blur-3xl pointer-events-none transition-opacity duration-1000"
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[280px] h-[280px] sm:w-[400px] sm:h-[400px] rounded-full z-0 blur-3xl pointer-events-none transition-opacity duration-1000"
                 style={{ background: variant.glowColor, opacity: isActive ? 0.7 : 0 }}
               />
             );
@@ -433,11 +555,11 @@ export function Hero() {
 
         {/* ── Edge Fades (match bg edge color) ── */}
         <div
-          className="absolute left-0 top-0 bottom-0 w-[28%] z-30 pointer-events-none transition-[background] duration-700"
+          className="absolute left-0 top-0 bottom-0 w-[22%] z-30 pointer-events-none transition-[background] duration-700"
           style={{ background: `linear-gradient(to right, ${activeVariant.edgeColor} 0%, transparent 100%)` }}
         />
         <div
-          className="absolute right-0 top-0 bottom-0 w-[28%] z-30 pointer-events-none transition-[background] duration-700"
+          className="absolute right-0 top-0 bottom-0 w-[22%] z-30 pointer-events-none transition-[background] duration-700"
           style={{ background: `linear-gradient(to left, ${activeVariant.edgeColor} 0%, transparent 100%)` }}
         />
 
@@ -450,8 +572,8 @@ export function Hero() {
               animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
               exit={{ opacity: 0, filter: "blur(8px)", y: -6 }}
               transition={TEXT_SPRING}
-              className="absolute top-0 right-0 z-40 bg-[#EDCF5D] text-[#010101] text-sm sm:text-base font-black px-4 sm:px-6 py-2 sm:py-2.5 tracking-wider shadow-md"
-              style={{ borderRadius: "0 0 0 18px" }}
+              className="absolute top-0 right-0 z-40 bg-[#EDCF5D] text-[#010101] text-xs sm:text-sm font-black px-3.5 sm:px-5 py-1.5 sm:py-2 tracking-wider shadow-md"
+              style={{ borderRadius: "0 0 0 14px" }}
             >
               {activeProduct.badge}
             </motion.span>
@@ -463,7 +585,7 @@ export function Hero() {
           {RENDER_OFFSETS.map((offset) => {
             const virtualStep = centerStep + offset;
             const pi          = mod(virtualStep, N);
-            const product     = HERO_PRODUCTS[pi]!;
+            const product     = productsList[pi] ?? productsList[0]!;
             const role        = OFFSET_ROLE[offset];
             const pos         = POSITION[role!];
             const isCenter    = role === "center";
@@ -484,7 +606,7 @@ export function Hero() {
                   zIndex:  pos.zIndex,
                 }}
                 transition={SPRING}
-                className="absolute w-[68vw] sm:w-[42vw] md:w-[38vw] lg:w-[34vw] max-w-[440px] aspect-square"
+                className="absolute w-[58vw] sm:w-[36vw] md:w-[32vw] lg:w-[28vw] max-w-[320px] sm:max-w-[350px] md:max-w-[370px] aspect-square"
                 style={{ cursor: isCenter ? "pointer" : isSide ? "pointer" : "default" }}
                 onClick={() => {
                   if (isCenter) router.push(`/product/${product.slug}`);
@@ -502,7 +624,7 @@ export function Hero() {
                     fill
                     priority={isCenter}
                     className="object-contain object-center"
-                    sizes="(max-width: 640px) 68vw, (max-width: 1024px) 42vw, 420px"
+                    sizes="(max-width: 640px) 58vw, (max-width: 1024px) 36vw, 370px"
                   />
                 </div>
               </motion.div>
@@ -533,7 +655,7 @@ export function Hero() {
         </button>
 
         {/* ── Title + Tagline (blur-fade) ── */}
-        <div className="absolute top-4 sm:top-7 left-4 sm:left-8 z-40 max-w-[70%] sm:max-w-xs md:max-w-sm pointer-events-none">
+        <div className="absolute top-4 sm:top-6 left-4 sm:left-7 z-40 max-w-[65%] sm:max-w-[260px] md:max-w-[300px] pointer-events-none">
           <AnimatePresence mode="wait">
             <motion.div
               key={`title-${currentIndex}`}
@@ -542,10 +664,10 @@ export function Hero() {
               exit={{ opacity: 0, filter: "blur(12px)", y: -8 }}
               transition={TEXT_SPRING}
             >
-              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-white leading-[1.08] tracking-tight font-sans drop-shadow-lg whitespace-pre-line">
+              <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-[38px] font-extrabold text-white leading-[1.1] tracking-tight font-sans drop-shadow-lg whitespace-pre-line">
                 {activeProduct.headline}
               </h1>
-              <p className="mt-2 sm:mt-3 text-xs sm:text-sm text-white/80 font-light leading-relaxed">
+              <p className="mt-1.5 sm:mt-2 text-xs sm:text-[13px] text-white/80 font-light leading-snug line-clamp-2">
                 {activeProduct.tagline}
               </p>
             </motion.div>
@@ -553,7 +675,7 @@ export function Hero() {
         </div>
 
         {/* ── Color Swatches (hidden on mobile) ── */}
-        <div className="absolute bottom-5 sm:bottom-8 left-5 sm:left-8 z-40 hidden sm:flex items-center gap-2 sm:gap-3">
+        <div className="absolute bottom-4 sm:bottom-6 left-4 sm:left-7 z-40 hidden sm:flex items-center gap-2 sm:gap-2.5">
           <AnimatePresence mode="wait">
             <motion.div
               key={`swatches-${currentIndex}`}
@@ -561,7 +683,7 @@ export function Hero() {
               animate={{ opacity: 1, filter: "blur(0px)" }}
               exit={{ opacity: 0, filter: "blur(8px)" }}
               transition={{ ...TEXT_SPRING, delay: 0.05 }}
-              className="flex items-center gap-2 sm:gap-3"
+              className="flex items-center gap-2 sm:gap-2.5"
             >
               {activeVariants.map((variant, vi) => {
                 const isSelected = vi === activeVariantIndex;
@@ -572,7 +694,7 @@ export function Hero() {
                       setSelectedVariants((prev) => ({ ...prev, [activeProduct.id]: vi }))
                     }
                     aria-label={`Select ${variant.colorName}`}
-                    className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full transition-all duration-300 shrink-0 ${
+                    className={`w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-full transition-all duration-300 shrink-0 ${
                       isSelected
                         ? "scale-110 ring-2 ring-white ring-offset-2 ring-offset-black/60 shadow-lg"
                         : "opacity-70 hover:opacity-100 hover:scale-105"
@@ -587,7 +709,7 @@ export function Hero() {
 
         {/* ── Price + Rating + CTA ── */}
         <div
-          className="absolute bottom-5 sm:bottom-8 left-3 sm:left-auto right-3 sm:right-8 z-40 flex flex-row sm:flex-col items-center justify-between sm:justify-end sm:items-end gap-2 sm:gap-2"
+          className="absolute bottom-4 sm:bottom-6 left-3 sm:left-auto right-3 sm:right-6 md:right-7 z-40 flex flex-row sm:flex-col items-center justify-between sm:justify-end sm:items-end gap-2 sm:gap-2"
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
           onFocus={() => setIsPaused(true)}
@@ -600,17 +722,17 @@ export function Hero() {
               animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
               exit={{ opacity: 0, filter: "blur(10px)", y: -8 }}
               transition={{ ...TEXT_SPRING, delay: 0.08 }}
-              className="flex flex-col items-start sm:items-end gap-0.5 sm:gap-1.5 text-left sm:text-right"
+              className="flex flex-col items-start sm:items-end gap-0.5 sm:gap-1 text-left sm:text-right"
             >
               <div className="flex items-baseline gap-1.5 sm:gap-2">
-                <span className="text-2xl sm:text-4xl md:text-5xl font-extrabold text-[#EDCF5D] tracking-tight font-sans drop-shadow-lg">
+                <span className="text-2xl sm:text-3xl md:text-[38px] font-extrabold text-[#EDCF5D] tracking-tight font-sans drop-shadow-lg">
                   {formatCompact(activeProduct.price)}
                 </span>
-                <span className="text-xs sm:text-base text-white/50 line-through">
+                <span className="text-xs sm:text-sm text-white/50 line-through">
                   {formatCompact(activeProduct.originalPrice)}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-white/90 font-medium whitespace-nowrap">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-white/90 font-medium whitespace-nowrap">
                 <FiveStarRating rating={activeProduct.rating} />
                 <span className="text-white/60">({activeProduct.reviews})</span>
               </div>
@@ -622,8 +744,8 @@ export function Hero() {
         </div>
 
         {/* ── Dot Indicators — always centered, all breakpoints ── */}
-        <div className="absolute bottom-2 sm:bottom-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 pt-4">
-          {HERO_PRODUCTS.map((_, pi) => (
+        <div className="absolute bottom-2 sm:bottom-2.5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 pt-4">
+          {productsList.map((_, pi) => (
             <button
               key={pi}
               onClick={() => {
@@ -634,12 +756,13 @@ export function Hero() {
               }}
               aria-label={`Go to slide ${pi + 1}`}
               className={`h-1.5 rounded-full transition-all duration-500 ${
-                pi === currentIndex ? "w-6 bg-white" : "w-1.5 bg-white/40 hover:bg-white/70"
+                pi === currentIndex ? "w-5 bg-white" : "w-1.5 bg-white/40 hover:bg-white/70"
               }`}
             />
           ))}
         </div>
       </section>
+      </div>
     </div>
   );
 }

@@ -881,6 +881,10 @@ export default function CheckoutPage() {
   // ── Handle Place Order ──
   const handleConfirmOrder = async () => {
     if (cartItems.length === 0) return;
+    if (!canPlaceOrder) {
+      setSubmitError("Some items in your cart are no longer available in the requested quantity. Please update your cart.");
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -1441,11 +1445,29 @@ export default function CheckoutPage() {
                             Your items are held while you pay. You will be taken to Paystack to complete payment securely.
                           </p>
 
+                          {(submitError || quoteError || (quote && !quote.all_available)) && (
+                            <div role="alert" className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-xs font-semibold text-red-700 flex items-start gap-2">
+                              <svg className="w-4 h-4 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <div>
+                                <span>{submitError || quoteError || "Some items in your cart are no longer in stock in the quantity you chose."}</span>
+                                <Link href="/cart" className="underline font-bold text-red-800 ml-1.5 hover:text-black">
+                                  Update cart →
+                                </Link>
+                              </div>
+                            </div>
+                          )}
+
                           <button
                             type="button"
                             disabled={isSubmitting || !canPlaceOrder}
                             onClick={handleConfirmOrder}
-                            className="w-full bg-[#EDCF5D] hover:bg-[#010101] text-[#010101] hover:text-white font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-95 disabled:opacity-50 cursor-pointer"
+                            className={`w-full font-bold text-sm py-4 rounded-full flex items-center justify-center gap-2 transition-all duration-300 ${
+                              !canPlaceOrder
+                                ? "bg-gray-200 text-gray-400 cursor-not-allowed opacity-70"
+                                : "bg-[#EDCF5D] hover:bg-[#010101] text-[#010101] hover:text-white shadow-md active:scale-95 cursor-pointer"
+                            }`}
                           >
                             {isSubmitting ? (
                               <div className="flex items-center gap-2">

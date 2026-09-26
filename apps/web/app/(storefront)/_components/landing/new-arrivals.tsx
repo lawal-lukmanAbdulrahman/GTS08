@@ -19,8 +19,17 @@ function SparkleStar() {
 
 export function NewArrivals() {
   const { products: catalogue } = useCatalogue();
-  // Fashion items for the New Arrivals section
-  const PRODUCTS = useMemo(() => catalogue.filter((p) => p.category === "Fashion").slice(0, 6), [catalogue]);
+  const PRODUCTS = useMemo(
+    () =>
+      [...catalogue]
+        .sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateB - dateA;
+        })
+        .slice(0, 9),
+    [catalogue]
+  );
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const toggleWishlist = (id: string) =>
     setWishlisted((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -76,7 +85,7 @@ export function NewArrivals() {
               <span className="font-serif italic font-bold text-[#010101]">New Arrivals</span>
             </h2>
             <Link
-              href="/search"
+              href="/search?filter=new-arrivals"
               className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
             >
               <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">See more</span>
@@ -115,7 +124,7 @@ export function NewArrivals() {
             <div className="hidden lg:flex relative group/banner flex-col justify-end p-6 sm:p-8 border-l border-gray-100 overflow-hidden">
               <Image
                 src="/banner_img.jpg"
-                alt="Enjoy 50% Off Promo"
+                alt="Enjoy 15% Off Promo"
                 fill
                 className="object-cover object-center group-hover/banner:scale-105 transition-transform duration-700"
                 sizes="380px"
@@ -123,7 +132,7 @@ export function NewArrivals() {
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent z-10 pointer-events-none" />
               <div className="relative z-20 text-center flex flex-col items-center">
                 <h3 className="text-xl sm:text-2xl md:text-3xl font-serif leading-tight mb-2 tracking-tight text-white">
-                  Enjoy 50% Off Your First{" "}
+                  Enjoy 15% Off Your First{" "}
                   <span className="font-serif italic font-bold">GTS Order</span>
                 </h3>
                 <p className="text-xs text-gray-200/90 font-light leading-relaxed mb-4 max-w-[220px]">

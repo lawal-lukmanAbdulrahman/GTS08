@@ -12,6 +12,7 @@ const PERMS: PermissionsView = {
   can_handle_tickets: false,
   can_void_orders: false,
   can_apply_discounts: false,
+  can_manage_broadcasts: false,
 };
 
 function setup(over: Partial<React.ComponentProps<typeof PermissionEditor>> = {}) {
@@ -31,10 +32,11 @@ function setup(over: Partial<React.ComponentProps<typeof PermissionEditor>> = {}
 describe("PermissionEditor", () => {
   it("has a switch for every grant, reflecting what's currently allowed", () => {
     setup();
-    expect(screen.getAllByRole("checkbox")).toHaveLength(7);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(8);
     expect(screen.getByRole("checkbox", { name: /use the point of sale/i })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: /void/i })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: /discount/i })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /manage broadcasts/i })).not.toBeChecked();
   });
 
   it("keeps Save off until something changes", () => {

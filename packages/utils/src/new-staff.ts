@@ -15,6 +15,7 @@ export const PERMISSION_GRANTS = [
   "can_view_all_orders",
   "can_manage_products",
   "can_handle_tickets",
+  "can_manage_broadcasts",
 ] as const;
 export type PermissionGrant = (typeof PERMISSION_GRANTS)[number];
 

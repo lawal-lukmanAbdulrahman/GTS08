@@ -22,6 +22,7 @@ interface TodaysOrder {
 
 interface TodaysOrdersPanelProps {
   orders: TodaysOrder[];
+  loading?: boolean;
   /** Whether this staff member holds the void permission (default: yes). */
   canVoid?: boolean;
   onVoid: (orderId: string, reason: string) => void;
@@ -36,7 +37,15 @@ const STATUS_LABEL: Record<TodaysOrder["status"], string> = {
 };
 
 /** gts_03_cashier_spec.md Part 6. */
-export default function TodaysOrdersPanel({ orders, canVoid = true, onVoid, onReprint, reprintError, onClose }: TodaysOrdersPanelProps) {
+export default function TodaysOrdersPanel({
+  orders,
+  loading = false,
+  canVoid = true,
+  onVoid,
+  onReprint,
+  reprintError,
+  onClose,
+}: TodaysOrdersPanelProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [voidingId, setVoidingId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -57,9 +66,35 @@ export default function TodaysOrdersPanel({ orders, canVoid = true, onVoid, onRe
           </p>
         )}
 
-        {orders.length === 0 && (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-28 space-y-3">
+            <svg
+              className="w-8 h-8 animate-spin text-[#010101] dark:text-[#EDCF5D]"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+              />
+            </svg>
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+              Loading today&apos;s orders...
+            </p>
+          </div>
+        ) : orders.length === 0 ? (
           <p className="text-base text-gray-500 text-center pt-10">No orders yet today.</p>
-        )}
+        ) : null}
 
         {orders.map((order) => (
           <div key={order.id} className="rounded-[8px] border border-gray-200 dark:border-[#262626] p-3">

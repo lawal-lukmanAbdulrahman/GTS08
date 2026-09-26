@@ -130,6 +130,9 @@ function LoginForm() {
       document.cookie = `gts_user_role=${user.role}; path=/; max-age=604800; SameSite=Lax`;
       localStorage.setItem("gts_user", JSON.stringify(user));
       localStorage.setItem("gts_token", session.access_token);
+      if (json.data.permissions) {
+        localStorage.setItem("gts_permissions", JSON.stringify(json.data.permissions));
+      }
 
       // Role-based routing
       if (user.role === "admin") {
@@ -137,9 +140,9 @@ function LoginForm() {
       } else if (user.role === "cashier") {
         router.push("/pos");
       } else if (user.role === "inventory_staff") {
-        router.push("/inventory");
+        router.push("/admin/inventory");
       } else {
-        router.push("/pending");
+        router.push("/pos");
       }
     } catch {
       // Clean, professional network failure handling without emojis

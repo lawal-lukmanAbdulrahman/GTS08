@@ -11,13 +11,24 @@ export interface CartItem {
   size: string;
   color: string;
   quantity: number;
+  variantId?: string;
+  maxAvailable?: number;
 }
 
 interface CartContextType {
   cartItems: CartItem[];
-  addToCart: (product: ProductItem, size?: string, color?: string, quantity?: number) => void;
+  addToCart: (
+    product: ProductItem,
+    size?: string,
+    color?: string,
+    quantity?: number,
+    variantId?: string,
+    maxAvailable?: number
+  ) => { ok: boolean; message?: string };
   removeFromCart: (index: number) => void;
   updateQuantity: (index: number, delta: number) => void;
+  setQuantity: (index: number, quantity: number) => void;
+  syncCartLimits: (limits: Array<{ product_slug: string; size?: string | null; color?: string | null; available: number }>) => void;
   clearCart: () => void;
   totalItemCount: number;
 }
@@ -106,10 +117,35 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     product: ProductItem,
     size?: string,
     color?: string,
-    quantity: number = 1
-  ) => {
+    quantity: number = 1,
+    variantId?: string,
+    maxAvailable?: number
+  ): { ok: boolean; message?: string } => {
     const defaultSize = size || (product.sizes && product.sizes[0]) || "Standard";
     const defaultColor = color || (product.images && product.images[0]?.label) || "Default";
+
+    // Resolve max available stock
+    let resolvedMax = maxAvailable;
+    if (resolvedMax === undefined && product.variants && product.variants.length > 0) {
+      const match = product.variants.find(
+        (v) => (variantId && v.id === variantId) ||
+               (v.size?.toLowerCase() === defaultSize.toLowerCase() && v.color?.toLowerCase() === defaultColor.toLowerCase())
+      ) || product.variants[0];
+      if (match) {
+        resolvedMax = match.available;
+      }
+    }
+    if (resolvedMax === undefined && typeof product.availableStock === "number") {
+      resolvedMax = product.availableStock;
+    }
+    const capLimit = resolvedMax !== undefined ? Math.max(0, resolvedMax) : 999;
+
+    if (capLimit <= 0) {
+      return { ok: false, message: "This item is currently out of stock." };
+    }
+
+    let resultOk = true;
+    let resultMsg: string | undefined = undefined;
 
     setCartItems((prev) => {
       const existingIndex = prev.findIndex(
@@ -122,11 +158,27 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       if (existingIndex > -1) {
         const updated = [...prev];
         const existingItem = updated[existingIndex]!;
+        const desiredQty = existingItem.quantity + quantity;
+        const finalQty = Math.min(capLimit, desiredQty);
+
+        if (desiredQty > capLimit) {
+          resultOk = false;
+          resultMsg = `Maximum available stock of ${capLimit} reached.`;
+        }
+
         updated[existingIndex] = {
           ...existingItem,
-          quantity: existingItem.quantity + quantity,
+          quantity: finalQty,
+          maxAvailable: capLimit,
+          variantId: variantId || existingItem.variantId,
         };
         return updated;
+      }
+
+      const initialQty = Math.min(capLimit, quantity);
+      if (quantity > capLimit) {
+        resultOk = false;
+        resultMsg = `Only ${capLimit} available in stock. Added ${initialQty} to your cart.`;
       }
 
       return [
@@ -135,10 +187,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           product,
           size: defaultSize,
           color: defaultColor,
-          quantity,
+          quantity: initialQty,
+          maxAvailable: capLimit,
+          variantId,
         },
       ];
     });
+
+    return { ok: resultOk, message: resultMsg };
   };
 
   const removeFromCart = (index: number) => {
@@ -149,8 +205,45 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setCartItems((prev) =>
       prev.map((item, i) => {
         if (i === index) {
-          const newQty = Math.max(1, item.quantity + delta);
+          const maxStock = item.maxAvailable ?? item.product.availableStock ?? 999;
+          const target = item.quantity + delta;
+          const newQty = Math.max(1, Math.min(maxStock, target));
           return { ...item, quantity: newQty };
+        }
+        return item;
+      })
+    );
+  };
+
+  const setQuantity = (index: number, quantity: number) => {
+    setCartItems((prev) =>
+      prev.map((item, i) => {
+        if (i === index) {
+          const maxStock = item.maxAvailable ?? item.product.availableStock ?? 999;
+          const newQty = Math.max(1, Math.min(maxStock, quantity));
+          return { ...item, quantity: newQty };
+        }
+        return item;
+      })
+    );
+  };
+
+  const syncCartLimits = (
+    limits: Array<{ product_slug: string; size?: string | null; color?: string | null; available: number }>
+  ) => {
+    setCartItems((prev) =>
+      prev.map((item) => {
+        const match = limits.find(
+          (l) =>
+            l.product_slug === item.product.id &&
+            (l.size ?? "").toLowerCase() === (item.size ?? "").toLowerCase() &&
+            (l.color ?? "").toLowerCase() === (item.color ?? "").toLowerCase()
+        );
+        if (match) {
+          return {
+            ...item,
+            maxAvailable: match.available,
+          };
         }
         return item;
       })
@@ -170,6 +263,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         addToCart,
         removeFromCart,
         updateQuantity,
+        setQuantity,
+        syncCartLimits,
         clearCart,
         totalItemCount,
       }}

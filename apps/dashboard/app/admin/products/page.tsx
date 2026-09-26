@@ -654,84 +654,6 @@ export default function AdminProductsPage() {
             </div>
           )}
 
-          {/* 3D Isometric Stacked Crates / Inventory Watermark */}
-          <div className="absolute -right-3 -bottom-5 w-32 h-25 pointer-events-none opacity-85 group-hover:scale-105 transition-all duration-300">
-            <svg viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <defs>
-                <style>{`
-                  .wm-crate-top-s1 { stop-color: #E5E7EB; }
-                  .wm-crate-top-s2 { stop-color: #D1D5DB; }
-                  .wm-crate-left-s1 { stop-color: #9CA3AF; }
-                  .wm-crate-left-s2 { stop-color: #6B7280; }
-                  .wm-crate-right-s1 { stop-color: #6B7280; }
-                  .wm-crate-right-s2 { stop-color: #4B5563; }
-                  .wm-crate-stroke { stroke: rgba(0, 0, 0, 0.16); }
-                  .wm-crate-line { stroke: rgba(51, 65, 85, 0.5); }
-                  .dark .wm-crate-top-s1 { stop-color: #3A3A3A; }
-                  .dark .wm-crate-top-s2 { stop-color: #2D2D2D; }
-                  .dark .wm-crate-left-s1 { stop-color: #242424; }
-                  .dark .wm-crate-left-s2 { stop-color: #1A1A1A; }
-                  .dark .wm-crate-right-s1 { stop-color: #1A1A1A; }
-                  .dark .wm-crate-right-s2 { stop-color: #121212; }
-                  .dark .wm-crate-stroke { stroke: rgba(255, 255, 255, 0.18); }
-                  .dark .wm-crate-line { stroke: rgba(255, 255, 255, 0.4); }
-                `}</style>
-                <linearGradient id="crateFadeMask" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="white" stopOpacity="0.2" />
-                  <stop offset="50%" stopColor="white" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="white" stopOpacity="1" />
-                </linearGradient>
-
-                <mask id="fadeTopLeftCrate">
-                  <rect x="0" y="0" width="130" height="100" fill="url(#crateFadeMask)" />
-                </mask>
-
-                <linearGradient id="crateTopGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" className="wm-crate-top-s1" />
-                  <stop offset="100%" className="wm-crate-top-s2" />
-                </linearGradient>
-                <linearGradient id="crateLeftGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" className="wm-crate-left-s1" />
-                  <stop offset="100%" className="wm-crate-left-s2" />
-                </linearGradient>
-                <linearGradient id="crateRightGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" className="wm-crate-right-s1" />
-                  <stop offset="100%" className="wm-crate-right-s2" />
-                </linearGradient>
-              </defs>
-
-              <g mask="url(#fadeTopLeftCrate)">
-                {/* 3D Box 2 (Back Right Stacked) */}
-                <g transform="translate(25, -12)">
-                  <polygon points="45,28 75,15 105,28 75,41" fill="url(#crateTopGrad)" className="wm-crate-stroke" strokeWidth="1.2" />
-                  <polygon points="45,28 75,41 75,72 45,59" fill="url(#crateLeftGrad)" className="wm-crate-stroke" strokeWidth="1.2" />
-                  <polygon points="75,41 105,28 105,59 75,72" fill="url(#crateRightGrad)" className="wm-crate-stroke" strokeWidth="1.2" />
-                </g>
-
-                {/* 3D Box 1 (Front Main Isometric Crate) */}
-                <g transform="translate(0, 4)">
-                  {/* Top Face */}
-                  <polygon points="20,38 56,22 92,38 56,54" fill="url(#crateTopGrad)" className="wm-crate-stroke" strokeWidth="1.6" />
-                  {/* Top Tape Seam */}
-                  <line x1="38" y1="30" x2="74" y2="46" className="wm-crate-line" strokeWidth="2.5" strokeLinecap="round" />
-
-                  {/* Left Face */}
-                  <polygon points="20,38 56,54 56,92 20,76" fill="url(#crateLeftGrad)" className="wm-crate-stroke" strokeWidth="1.6" />
-                  {/* Left Cross Ribs */}
-                  <line x1="20" y1="57" x2="56" y2="73" className="wm-crate-line" strokeWidth="1.5" />
-                  <line x1="38" y1="46" x2="38" y2="84" className="wm-crate-line" strokeWidth="1.5" />
-
-                  {/* Right Face */}
-                  <polygon points="56,54 92,38 92,76 56,92" fill="url(#crateRightGrad)" className="wm-crate-stroke" strokeWidth="1.6" />
-                  {/* Right Cross Ribs */}
-                  <line x1="56" y1="73" x2="92" y2="57" className="wm-crate-line" strokeWidth="1.5" />
-                  <line x1="74" y1="46" x2="74" y2="84" className="wm-crate-line" strokeWidth="1.5" />
-                  {/* Shipping Label Tag sticker on right face */}
-                  <polygon points="64,54 82,46 82,58 64,66" fill="url(#crateTopGrad)" opacity="0.8" className="wm-crate-stroke" strokeWidth="1" />
-                </g>
-              </g>
-            </svg>
-          </div>
         </div>
 
         {/* Card 2: Total Revenue Value */}
@@ -764,82 +686,6 @@ export default function AdminProductsPage() {
             </div>
           )}
 
-          {/* Stacked Cash Banknotes Watermark */}
-          <div className="absolute -right-3 -bottom-5 w-32 h-25 pointer-events-none opacity-85 group-hover:scale-105 transition-all duration-300">
-            <svg viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <defs>
-                <style>{`
-                  .wm-cash-g1-s1 { stop-color: #D1D5DB; }
-                  .wm-cash-g1-s2 { stop-color: #9CA3AF; }
-                  .wm-cash-g2-s1 { stop-color: #CBD5E1; }
-                  .wm-cash-g2-s2 { stop-color: #64748B; }
-                  .wm-cash-g3-s1 { stop-color: #94A3B8; }
-                  .wm-cash-g3-s2 { stop-color: #475569; }
-                  .wm-cash-stroke1 { stroke: rgba(0, 0, 0, 0.12); }
-                  .wm-cash-stroke2 { stroke: rgba(0, 0, 0, 0.16); }
-                  .wm-cash-naira { fill: #334155; }
-                  .wm-cash-line { stroke: rgba(51, 65, 85, 0.6); }
-                  .dark .wm-cash-g1-s1 { stop-color: #303030; }
-                  .dark .wm-cash-g1-s2 { stop-color: #1B1B1B; }
-                  .dark .wm-cash-g2-s1 { stop-color: #252525; }
-                  .dark .wm-cash-g2-s2 { stop-color: #161616; }
-                  .dark .wm-cash-g3-s1 { stop-color: #1C1C1C; }
-                  .dark .wm-cash-g3-s2 { stop-color: #121212; }
-                  .dark .wm-cash-stroke1 { stroke: rgba(255, 255, 255, 0.14); }
-                  .dark .wm-cash-stroke2 { stroke: rgba(255, 255, 255, 0.18); }
-                  .dark .wm-cash-naira { fill: #FFFFFF; }
-                  .dark .wm-cash-line { stroke: rgba(255, 255, 255, 0.6); }
-                `}</style>
-                <linearGradient id="cashFadeMask" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="white" stopOpacity="0.2" />
-                  <stop offset="50%" stopColor="white" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="white" stopOpacity="1" />
-                </linearGradient>
-
-                <mask id="fadeTopLeftCash">
-                  <rect x="0" y="0" width="130" height="100" fill="url(#cashFadeMask)" />
-                </mask>
-
-                <linearGradient id="cashNoteGradFront" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" className="wm-cash-g1-s1" />
-                  <stop offset="100%" className="wm-cash-g1-s2" />
-                </linearGradient>
-                <linearGradient id="cashNoteGradMid" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" className="wm-cash-g2-s1" />
-                  <stop offset="100%" className="wm-cash-g2-s2" />
-                </linearGradient>
-                <linearGradient id="cashNoteGradBack" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" className="wm-cash-g3-s1" stopOpacity="0.8" />
-                  <stop offset="100%" className="wm-cash-g3-s2" stopOpacity="0.5" />
-                </linearGradient>
-              </defs>
-
-              <g mask="url(#fadeTopLeftCash)">
-                {/* Note 3 (Back Right) */}
-                <g transform="rotate(12 90 68)">
-                  <rect x="42" y="26" width="74" height="42" rx="6" fill="url(#cashNoteGradBack)" className="wm-cash-stroke1" strokeWidth="1.2" />
-                  <circle cx="79" cy="47" r="7" className="wm-cash-stroke1" strokeWidth="1.2" />
-                </g>
-
-                {/* Note 2 (Middle) */}
-                <g transform="rotate(-2 70 58)">
-                  <rect x="30" y="24" width="74" height="42" rx="6" fill="url(#cashNoteGradMid)" className="wm-cash-stroke1" strokeWidth="1.4" />
-                  <rect x="36" y="30" width="62" height="30" rx="4" className="wm-cash-stroke1" strokeWidth="1.2" />
-                  <circle cx="67" cy="45" r="8" className="wm-cash-stroke2" strokeWidth="1.4" />
-                </g>
-
-                {/* Note 1 (Front Left - Naira Seal & Lines) */}
-                <g transform="rotate(-15 48 54)">
-                  <rect x="14" y="22" width="74" height="42" rx="6" fill="url(#cashNoteGradFront)" className="wm-cash-stroke2" strokeWidth="1.6" />
-                  <rect x="20" y="28" width="62" height="30" rx="4" className="wm-cash-stroke2" strokeWidth="1.4" />
-                  <circle cx="51" cy="43" r="8.5" className="wm-cash-stroke2" strokeWidth="1.6" />
-                  <text x="51" y="46" textAnchor="middle" className="wm-cash-naira" fontSize="10" fontWeight="bold" fontFamily="sans-serif">₦</text>
-                  <line x1="24" y1="32" x2="32" y2="32" className="wm-cash-line" strokeWidth="2" strokeLinecap="round" />
-                  <line x1="70" y1="54" x2="78" y2="54" className="wm-cash-line" strokeWidth="2" strokeLinecap="round" />
-                </g>
-              </g>
-            </svg>
-          </div>
         </div>
 
         {/* Card 3: Low Stock Warnings */}
@@ -883,47 +729,6 @@ export default function AdminProductsPage() {
             </div>
           )}
 
-          {/* 3D Isometric Depleted Pallet with Amber Low-Stock Gauge Watermark */}
-          <div className="absolute -right-3 -bottom-5 w-32 h-25 pointer-events-none opacity-85 group-hover:scale-105 transition-all duration-300">
-            <svg viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <defs>
-                <linearGradient id="lowStockFadeMaskProd" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="white" stopOpacity="0.2" />
-                  <stop offset="50%" stopColor="white" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="white" stopOpacity="1" />
-                </linearGradient>
-                <mask id="fadeLowStockMaskProd">
-                  <rect x="0" y="0" width="130" height="100" fill="url(#lowStockFadeMaskProd)" />
-                </mask>
-              </defs>
-
-              <g mask="url(#fadeLowStockMaskProd)" transform="translate(10, 8)">
-                {/* Wooden Pallet Base */}
-                <polygon points="20,58 56,42 92,58 56,74" fill="url(#crateTopGrad)" className="wm-crate-stroke" strokeWidth="1.2" />
-                <polygon points="20,58 56,74 56,80 20,64" fill="url(#crateLeftGrad)" className="wm-crate-stroke" strokeWidth="1.2" />
-                <polygon points="56,74 92,58 92,64 56,80" fill="url(#crateRightGrad)" className="wm-crate-stroke" strokeWidth="1.2" />
-                <line x1="32" y1="52" x2="68" y2="68" className="wm-crate-line" strokeWidth="1.2" />
-                <line x1="44" y1="47" x2="80" y2="63" className="wm-crate-line" strokeWidth="1.2" />
-
-                {/* Single Remaining Low-Stock Crate Sitting on Pallet */}
-                <g transform="translate(0, -14)">
-                  <polygon points="32,46 56,36 80,46 56,56" fill="url(#crateTopGrad)" className="wm-crate-stroke" strokeWidth="1.4" />
-                  <polygon points="32,46 56,56 56,72 32,62" fill="url(#crateLeftGrad)" className="wm-crate-stroke" strokeWidth="1.4" />
-                  <polygon points="56,56 80,46 80,62 56,72" fill="url(#crateRightGrad)" className="wm-crate-stroke" strokeWidth="1.4" />
-                  <line x1="44" y1="41" x2="68" y2="51" className="wm-crate-line" strokeWidth="1.5" strokeLinecap="round" />
-                </g>
-
-                {/* Ghost Outline of Missing Depleted Crates (Dashed Low Stock Indicator) */}
-                <g transform="translate(0, -38)">
-                  <polygon points="32,46 56,36 80,46 56,56" fill="none" stroke="rgba(245, 158, 11, 0.45)" strokeWidth="1.2" strokeDasharray="3 3" />
-                  <polygon points="32,46 56,56 56,70 32,60" fill="none" stroke="rgba(245, 158, 11, 0.35)" strokeWidth="1.2" strokeDasharray="3 3" />
-                  <polygon points="56,56 80,46 80,60 56,70" fill="none" stroke="rgba(245, 158, 11, 0.35)" strokeWidth="1.2" strokeDasharray="3 3" />
-                  {/* Amber Alert Threshold Mark */}
-                  <line x1="26" y1="62" x2="86" y2="62" stroke="#F59E0B" strokeWidth="2" strokeDasharray="4 2" strokeLinecap="round" opacity="0.85" />
-                </g>
-              </g>
-            </svg>
-          </div>
         </div>
 
         {/* Card 4: Out of Stock / Critical */}
@@ -967,44 +772,6 @@ export default function AdminProductsPage() {
             </div>
           )}
 
-          {/* 3D Isometric Empty Pallet with Zero Units Perimeter Watermark */}
-          <div className="absolute -right-3 -bottom-5 w-32 h-25 pointer-events-none opacity-85 group-hover:scale-105 transition-all duration-300">
-            <svg viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <defs>
-                <linearGradient id="outOfStockFadeMaskProd" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="white" stopOpacity="0.2" />
-                  <stop offset="50%" stopColor="white" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="white" stopOpacity="1" />
-                </linearGradient>
-                <mask id="fadeOutOfStockMaskProd">
-                  <rect x="0" y="0" width="130" height="100" fill="url(#outOfStockFadeMaskProd)" />
-                </mask>
-              </defs>
-
-              <g mask="url(#fadeOutOfStockMaskProd)" transform="translate(10, 8)">
-                {/* Empty Wooden Warehouse Pallet */}
-                <polygon points="20,54 56,38 92,54 56,70" fill="url(#crateTopGrad)" className="wm-crate-stroke" strokeWidth="1.4" />
-                <polygon points="20,54 56,70 56,78 20,62" fill="url(#crateLeftGrad)" className="wm-crate-stroke" strokeWidth="1.4" />
-                <polygon points="56,70 92,54 92,62 56,78" fill="url(#crateRightGrad)" className="wm-crate-stroke" strokeWidth="1.4" />
-                
-                {/* Pallet Top Deck Slats (Empty Deck) */}
-                <line x1="28" y1="50" x2="64" y2="66" className="wm-crate-line" strokeWidth="1.4" />
-                <line x1="38" y1="46" x2="74" y2="62" className="wm-crate-line" strokeWidth="1.4" />
-                <line x1="48" y1="41" x2="84" y2="57" className="wm-crate-line" strokeWidth="1.4" />
-
-                {/* Completely Empty Ghost Crate Perimeter (0 Stock) */}
-                <g transform="translate(0, -22)">
-                  <polygon points="28,44 56,32 84,44 56,56" fill="none" stroke="rgba(244, 63, 94, 0.45)" strokeWidth="1.4" strokeDasharray="4 3" />
-                  <polygon points="28,44 56,56 56,74 28,62" fill="none" stroke="rgba(244, 63, 94, 0.35)" strokeWidth="1.4" strokeDasharray="4 3" />
-                  <polygon points="56,56 84,44 84,62 56,74" fill="none" stroke="rgba(244, 63, 94, 0.35)" strokeWidth="1.4" strokeDasharray="4 3" />
-                  
-                  {/* Empty Perimeter Diagonal Cross */}
-                  <line x1="28" y1="44" x2="84" y2="44" stroke="rgba(244, 63, 94, 0.6)" strokeWidth="1.2" strokeDasharray="2 2" />
-                  <line x1="56" y1="32" x2="56" y2="56" stroke="rgba(244, 63, 94, 0.6)" strokeWidth="1.2" strokeDasharray="2 2" />
-                </g>
-              </g>
-            </svg>
-          </div>
         </div>
       </div>
 
