@@ -49,20 +49,12 @@ describe("write and staff-only routes are gated by the right grant", () => {
     ["GET /products/drafts", () => listDrafts(req()), "can_manage_products"],
     ["PUT /orders/[id]/status", () => setOrderStatus(req("PUT", undefined, { status: "processing" }), { params: Promise.resolve({ id: "11111111-1111-4111-8111-111111111111" }) }), "can_view_all_orders"],
     ["GET /inquiries?all=true", () => listInquiries(req("GET", "http://localhost:3000/api/v1/inquiries?all=true")), "can_handle_tickets"],
+    ["POST /broadcast", () => createBroadcast(req("POST", undefined, { title: "x" })), "can_manage_broadcasts"],
+    ["DELETE /broadcast", () => deleteBroadcast(req("DELETE", "http://localhost:3000/api/v1/broadcast?id=1")), "can_manage_broadcasts"],
   ])("%s needs %s and touches nothing without it", async (_n, call, grant) => {
     const res = await (call as () => Promise<Response>)();
     expect(res.status).toBe(403);
     expect(mockPermission).toHaveBeenCalledWith(expect.anything(), grant);
-    expect(db.touched).toHaveLength(0);
-  });
-
-  it.each([
-    ["POST /broadcast", () => createBroadcast(req("POST", undefined, { title: "x" }))],
-    ["DELETE /broadcast", () => deleteBroadcast(req("DELETE", "http://localhost:3000/api/v1/broadcast?id=1"))],
-  ])("%s is admin-only", async (_n, call) => {
-    const res = await (call as () => Promise<Response>)();
-    expect(res.status).toBe(403);
-    expect(mockAdmin).toHaveBeenCalled();
     expect(db.touched).toHaveLength(0);
   });
 
@@ -72,7 +64,7 @@ describe("write and staff-only routes are gated by the right grant", () => {
 
     it("an anonymous broadcast write is still refused when NODE_ENV is 'development'", async () => {
       (process.env as Record<string, string | undefined>).NODE_ENV = "development";
-      mockAdmin.mockResolvedValue(deny(401));
+      mockPermission.mockResolvedValue(deny(401));
       const res = await createBroadcast(req("POST", undefined, { title: "x" }));
       expect(res.status).toBe(401);
     });

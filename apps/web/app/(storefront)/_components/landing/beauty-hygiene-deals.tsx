@@ -5,7 +5,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { ProductCard } from "../ui/product-card";
 import { useCatalogue } from "../catalogue-context";
 
-export function BeautyHygieneDeals() {
+export function BeautyHygieneDeals({ categorySlug }: { categorySlug?: string } = {}) {
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -13,7 +13,22 @@ export function BeautyHygieneDeals() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Beauty and hygiene products come from the shared catalogue (the database).
-  const sourceProducts = useMemo(() => catalogue.filter((p) => p.category === "Health & Beauty" || p.tags.some((t) => ["beauty", "hygiene", "beauty hygiene deals"].includes(t.toLowerCase()))), [catalogue]);
+  const sourceProducts = useMemo(() => {
+    return catalogue.filter((p) => {
+      if (categorySlug) {
+        const catNorm = categorySlug.toLowerCase().replace(/[-_]/g, " ");
+        return (
+          p.category.toLowerCase().includes(catNorm) ||
+          p.subCategory.toLowerCase().includes(catNorm)
+        );
+      }
+      return (
+        p.category === "Health & Beauty" ||
+        p.category === "Beauty" ||
+        p.tags.some((t) => ["beauty", "hygiene", "beauty hygiene deals"].includes(t.toLowerCase()))
+      );
+    });
+  }, [catalogue, categorySlug]);
 
   const updateScrollState = () => {
     if (scrollContainerRef.current) {
@@ -65,7 +80,7 @@ export function BeautyHygieneDeals() {
           </div>
 
           <Link
-            href="/search?category=Health%20%26%20Beauty"
+            href={`/search?category=${encodeURIComponent(categorySlug || "Health & Beauty")}`}
             className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
           >
             <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">

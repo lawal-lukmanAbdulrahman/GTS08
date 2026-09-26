@@ -17,6 +17,8 @@ export interface ApiProduct {
   review_count: number | null;
   tags: string[] | null;
   badges?: string[];
+  total_sold?: number | null;
+  created_at?: string | null;
   /** A product's own category, which may be narrow ("Air Fryers"); `parent` is the top-level group ("Appliances"). */
   category: { name: string; slug: string; parent?: { name: string; slug: string } | null } | null;
   primary_image: { cloudinary_id: string } | null;
@@ -44,8 +46,8 @@ export function imageUrl(ref: string | null | undefined): string {
   if (v.startsWith("/") && !v.startsWith("//")) return v;
   if (/^https:\/\//i.test(v)) return v;
   if (/^[A-Za-z0-9_./-]+$/.test(v) && !v.includes("..")) {
-    const cloud = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-    if (cloud) return `https://res.cloudinary.com/${cloud}/image/upload/${v}`;
+    const cloud = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "gts";
+    return `https://res.cloudinary.com/${cloud}/image/upload/${v}`;
   }
   return PLACEHOLDER_IMAGE;
 }
@@ -53,7 +55,13 @@ export function imageUrl(ref: string | null | undefined): string {
 /** A product from the API as the storefront's own product record. The slug is the id, so links and carts keep working. */
 export function dbProductToItem(p: ApiProduct): ProductItem {
   const variants = (p.variants ?? []).filter((v) => v.is_active !== false);
-  const primary = p.primary_image?.cloudinary_id ?? p.images?.find((i) => i.is_primary)?.cloudinary_id ?? p.images?.[0]?.cloudinary_id;
+  const primary =
+    p.primary_image?.cloudinary_id ||
+    (p.primary_image as any)?.cloudinary_public_id ||
+    p.images?.find((i) => i.is_primary)?.cloudinary_id ||
+    (p.images?.find((i: any) => i.is_primary) as any)?.cloudinary_public_id ||
+    p.images?.[0]?.cloudinary_id ||
+    (p.images?.[0] as any)?.cloudinary_public_id;
   const cardImage = imageUrl(primary);
 
   const sizes = [...new Set(variants.map((v) => v.size).filter((s): s is string => !!s))];
@@ -82,6 +90,27 @@ export function dbProductToItem(p: ApiProduct): ProductItem {
   const rating = Number(p.average_rating ?? 0);
   const count = Number(p.review_count ?? 0);
 
+  const mappedVariants = variants.map((v: any) => {
+    const inv = Array.isArray(v.inventory) ? v.inventory[0] : v.inventory;
+    const qty = Number(inv?.quantity ?? v.quantity ?? 0);
+    const reserved = Number(inv?.reserved_quantity ?? 0);
+    const available = Math.max(0, qty - reserved);
+    return {
+      id: v.id,
+      size: v.size || "Standard",
+      color: v.color || "Default",
+      colorHex: v.color_hex,
+      sku: v.sku,
+      quantity: qty,
+      available,
+      inStock: available > 0,
+    };
+  });
+
+  const totalAvailable = mappedVariants.length > 0
+    ? mappedVariants.reduce((sum, v) => sum + v.available, 0)
+    : 0;
+
   return {
     id: p.slug,
     brand: p.brand || "GTS",
@@ -104,5 +133,13 @@ export function dbProductToItem(p: ApiProduct): ProductItem {
     tags: p.tags ?? [],
     hasTransparentBg: Boolean(p.has_transparent_bg),
     descriptionImages: (p.description_image_urls ?? []).map(imageUrl),
+    totalSold: Number(p.total_sold ?? 0),
+    createdAt: p.created_at ?? "",
+    rawCompareAtPrice: p.compare_at_price,
+    rawBasePrice: p.base_price,
+    discountPercent: p.compare_at_price && p.compare_at_price > p.base_price ? Math.round(((p.compare_at_price - p.base_price) / p.compare_at_price) * 100) : 0,
+    variants: mappedVariants,
+    availableStock: totalAvailable,
+    inStock: totalAvailable > 0,
   };
 }

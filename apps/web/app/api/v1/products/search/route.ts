@@ -4,6 +4,13 @@ import { createServiceClient } from "@gts/database";
 import { filterText } from "../../_lib/filter";
 import { serverError, dbError } from "../../_lib/http";
 
+/**
+ * GET /api/v1/products/search?q=...&page=1&limit=24
+ *
+ * Legacy product search endpoint. Now uses FTS + trigram fuzzy (same engine
+ * as the unified /api/v1/search). Falls back to ilike if fts column
+ * doesn't exist yet (pre-migration).
+ */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -21,32 +28,57 @@ export async function GET(request: NextRequest) {
 
     const serviceClient = createServiceClient();
 
-    // Use Supabase textSearch / ilike for full text matching
-    const { data: products, count, error } = await serviceClient
-      .from("products")
-      .select(
-        `
-        id,
-        name,
-        slug,
-        base_price,
-        compare_at_price,
-        status,
-        is_featured,
-        total_sold,
-        average_rating,
-        review_count,
-        category:categories(name, slug),
-        images:product_images(cloudinary_public_id, alt_text, is_primary)
-      `,
-        { count: "exact" }
-      )
-      .eq("status", "active")
-      .or(`name.ilike.%${q}%,description.ilike.%${q}%,short_description.ilike.%${q}%,material.ilike.%${q}%`)
-      .range(offset, offset + limit - 1);
+    // ── Phase 1: Try FTS prefix search ────────────────────────────────────
+    const words = q.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
+    const prefixQuery = words.map((w) => `${w}:*`).join(" & ");
 
-    if (error) {
-      return dbError(error, "DATABASE_ERROR", 500);
+    let products: any[] | null = null;
+    let count: number | null = null;
+    let error: any = null;
+
+    if (prefixQuery) {
+      try {
+        const ftsResult = await serviceClient
+          .from("products")
+          .select(
+            `id, name, slug, base_price, compare_at_price, status, is_featured, total_sold, average_rating, review_count,
+             category:categories(name, slug),
+             images:product_images(cloudinary_public_id, alt_text, is_primary)`,
+            { count: "exact" }
+          )
+          .eq("status", "active")
+          .textSearch("fts", prefixQuery, { type: "websearch" })
+          .range(offset, offset + limit - 1);
+
+        if (!ftsResult.error && ftsResult.data && ftsResult.data.length > 0) {
+          products = ftsResult.data;
+          count = ftsResult.count;
+        }
+      } catch {
+        // FTS column not available yet
+      }
+    }
+
+    // ── Phase 2: Fallback to ilike if FTS gave no results ─────────────────
+    if (!products || products.length === 0) {
+      const ilike = await serviceClient
+        .from("products")
+        .select(
+          `id, name, slug, base_price, compare_at_price, status, is_featured, total_sold, average_rating, review_count,
+           category:categories(name, slug),
+           images:product_images(cloudinary_public_id, alt_text, is_primary)`,
+          { count: "exact" }
+        )
+        .eq("status", "active")
+        .or(`name.ilike.%${q}%,description.ilike.%${q}%,short_description.ilike.%${q}%,material.ilike.%${q}%`)
+        .range(offset, offset + limit - 1);
+
+      if (ilike.error) {
+        return dbError(ilike.error, "DATABASE_ERROR", 500);
+      }
+
+      products = ilike.data;
+      count = ilike.count;
     }
 
     const transformed = (products || []).map((p: any) => {

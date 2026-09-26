@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { ImageViewer } from "@gts/ui";
 import { ProductItem } from "./page";
 
 interface ProductInfoDrawerProps {
@@ -11,58 +12,47 @@ interface ProductInfoDrawerProps {
   onEdit: (product: ProductItem) => void;
 }
 
-function getVariantImageForColor(color: string = "", defaultImg: string = "", productName: string = ""): string {
-  const c = color.toLowerCase();
-  const p = productName.toLowerCase();
-
-  // Nexus Washing Machine
-  if (p.includes("nexus") || p.includes("wash") || p.includes("twin tub")) {
-    if (c.includes("blue") || c.includes("royal")) return "/products/hero/nexus_washing_machine_blue.png";
-    if (c.includes("grey") || c.includes("gray") || c.includes("metallic")) return "/products/hero/nexus_washing_machine_grey.png";
-    if (c.includes("white") || c.includes("classic")) return "/products/hero/nexus_washing_machine_white.png";
-    if (c.includes("green") || c.includes("mint")) return "/products/hero/nexus_washing_machine_green.png";
-    if (c.includes("yellow") || c.includes("solar")) return "/products/hero/nexus_washing_machine_yellow.png";
-  }
-
-  // Samsung Fridge
-  if (p.includes("samsung") || p.includes("fridge") || p.includes("refrigerator") || p.includes("bespoke")) {
-    if (c.includes("black") || c.includes("matte")) return "/products/hero/samsung_fridge_black.png";
-    if (c.includes("grey") || c.includes("gray") || c.includes("silver") || c.includes("metallic")) return "/products/hero/samsung_fridge_grey.png";
-    if (c.includes("white") || c.includes("cream") || c.includes("classic")) return "/products/hero/samsung_fridge_white.png";
-    if (c.includes("bronze") || c.includes("tuscan") || c.includes("brown")) return "/products/hero/samsung_fridge_bronze.png";
-  }
-
-  // Pixel 10 Pro
-  if (p.includes("pixel")) {
-    if (c.includes("metal") || c.includes("titanium") || c.includes("silver")) return "/products/hero/pixel_10_metal.png";
-    if (c.includes("green") || c.includes("hazel")) return "/products/hero/pixel_10_green.png";
-    if (c.includes("purple") || c.includes("obsidian")) return "/products/hero/pixel_10_purple.png";
-    if (c.includes("red") || c.includes("coral")) return "/products/hero/pixel_10_red.png";
-  }
-
-  // Air Jordan
-  if (p.includes("jordan")) {
-    if (c.includes("blue") || c.includes("royal")) return "/products/hero/air_jordan_retro_1_blue.png";
-    if (c.includes("red") || c.includes("chicago")) return "/products/hero/air_jordan_retro_1_red.png";
-    if (c.includes("black") || c.includes("shadow")) return "/products/hero/air_jordan_retro_1_black.png";
-  }
-
-  return defaultImg;
-}
+const STANDARD_COLOR_PALETTE: Record<string, string> = {
+  black: "#181818",
+  white: "#FFFFFF",
+  red: "#DC2626",
+  crimson: "#991B1B",
+  coral: "#EA580C",
+  blue: "#2563EB",
+  navy: "#1E3A8A",
+  green: "#10B981",
+  emerald: "#059669",
+  mint: "#34D399",
+  yellow: "#F59E0B",
+  amber: "#D97706",
+  gold: "#EAB308",
+  orange: "#EA580C",
+  purple: "#7C3AED",
+  violet: "#8B5CF6",
+  pink: "#EC4899",
+  rose: "#F43F5E",
+  gray: "#6B7280",
+  grey: "#6B7280",
+  silver: "#94A3B8",
+  metal: "#64748B",
+  titanium: "#475569",
+  brown: "#78350F",
+  bronze: "#92400E",
+  mocha: "#5B3A29",
+  teal: "#0D9488",
+  cyan: "#06B6D4",
+  beige: "#D4C5B9",
+};
 
 function getColorHex(colorName: string, fallbackHex?: string): string {
-  if (fallbackHex && fallbackHex !== "#111827" && fallbackHex !== "#000000") return fallbackHex;
+  if (fallbackHex && fallbackHex.trim().startsWith("#")) {
+    return fallbackHex.trim();
+  }
   const c = colorName.toLowerCase();
-  if (c.includes("blue") || c.includes("royal")) return "#2563EB";
-  if (c.includes("grey") || c.includes("gray") || c.includes("silver") || c.includes("metallic")) return "#6B7280";
-  if (c.includes("white") || c.includes("cream") || c.includes("classic")) return "#FFFFFF";
-  if (c.includes("green") || c.includes("mint") || c.includes("hazel")) return "#10B981";
-  if (c.includes("yellow") || c.includes("solar")) return "#F59E0B";
-  if (c.includes("bronze") || c.includes("tuscan") || c.includes("brown")) return "#78350F";
-  if (c.includes("purple") || c.includes("obsidian")) return "#7C3AED";
-  if (c.includes("red") || c.includes("coral") || c.includes("chicago")) return "#DC2626";
-  if (c.includes("black") || c.includes("matte") || c.includes("shadow")) return "#181818";
-  return fallbackHex || "#3B82F6";
+  for (const [name, hex] of Object.entries(STANDARD_COLOR_PALETTE)) {
+    if (c.includes(name)) return hex;
+  }
+  return fallbackHex || "#6B7280";
 }
 
 const sampleCustomerReviews = [
@@ -106,7 +96,6 @@ export default function ProductInfoDrawer({
 
   // Zoom Lightbox Modal States
   const [isZoomOpen, setIsZoomOpen] = useState(false);
-  const [zoomScale, setZoomScale] = useState(1);
   const [zoomIndex, setZoomIndex] = useState(0);
 
   useEffect(() => {
@@ -115,7 +104,6 @@ export default function ProductInfoDrawer({
       setSelectedColor(null);
       setSelectedSize(null);
       setIsZoomOpen(false);
-      setZoomScale(1);
     }
   }, [isOpen, product]);
 
@@ -131,7 +119,7 @@ export default function ProductInfoDrawer({
   (product.variants || []).forEach((v: any) => {
     const rawImg = v.image_url || primaryImg;
     const colorName = v.color || "Default";
-    const resolvedImg = getVariantImageForColor(colorName, rawImg, product.name);
+    const resolvedImg = rawImg;
     const resolvedHex = getColorHex(colorName, v.color_hex);
 
     if (v.color) {
@@ -222,18 +210,7 @@ export default function ProductInfoDrawer({
   const handleOpenZoom = (img: string) => {
     const idx = galleryImages.indexOf(img);
     setZoomIndex(idx >= 0 ? idx : 0);
-    setZoomScale(1);
     setIsZoomOpen(true);
-  };
-
-  const handleNextZoom = () => {
-    setZoomIndex((prev) => (prev + 1) % galleryImages.length);
-    setZoomScale(1);
-  };
-
-  const handlePrevZoom = () => {
-    setZoomIndex((prev) => (prev - 1 + galleryImages.length) % galleryImages.length);
-    setZoomScale(1);
   };
 
   return (
@@ -577,126 +554,14 @@ export default function ProductInfoDrawer({
         </div>
       </div>
 
-      {/* ────── INTERACTIVE ZOOM LIGHTBOX MODAL ────── */}
-      {isZoomOpen && (
-        <div className="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex flex-col justify-between animate-fadeIn font-sans">
-          
-          {/* Lightbox Top Control Bar */}
-          <div className="px-6 py-4 flex items-center justify-between text-white border-b border-white/10 bg-black/40">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-mono text-gray-400">
-                Image {zoomIndex + 1} of {galleryImages.length}
-              </span>
-              <span className="text-xs font-bold text-white truncate max-w-xs">
-                {product.name}
-              </span>
-            </div>
-
-            {/* Zoom & Navigation Controls */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setZoomScale((s) => Math.max(1, s - 0.5))}
-                className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition-colors cursor-pointer"
-                title="Zoom Out"
-              >
-                - Zoom
-              </button>
-              <span className="text-xs font-mono text-gray-300 w-12 text-center">
-                {Math.round(zoomScale * 100)}%
-              </span>
-              <button
-                onClick={() => setZoomScale((s) => Math.min(3.5, s + 0.5))}
-                className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition-colors cursor-pointer"
-                title="Zoom In"
-              >
-                + Zoom
-              </button>
-              <button
-                onClick={() => setZoomScale(1)}
-                className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition-colors cursor-pointer ml-2"
-                title="Reset Zoom"
-              >
-                Reset
-              </button>
-              <button
-                onClick={() => setIsZoomOpen(false)}
-                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors cursor-pointer ml-4"
-                title="Close Lightbox (ESC)"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          {/* Lightbox Center Zoom Container */}
-          <div
-            className="flex-1 relative flex items-center justify-center p-8 overflow-hidden cursor-grab active:cursor-grabbing"
-            onDoubleClick={() => setZoomScale((s) => (s > 1 ? 1 : 2.5))}
-            onWheel={(e) => {
-              if (e.deltaY < 0) {
-                setZoomScale((s) => Math.min(3.5, s + 0.2));
-              } else {
-                setZoomScale((s) => Math.max(1, s - 0.2));
-              }
-            }}
-          >
-            {/* Prev Image Arrow */}
-            {galleryImages.length > 1 && (
-              <button
-                onClick={handlePrevZoom}
-                className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center text-xl font-bold transition-all z-20 cursor-pointer"
-              >
-                ‹
-              </button>
-            )}
-
-            {/* Main Zoomed Image */}
-            <div
-              className="transition-transform duration-200 ease-out max-w-full max-h-full flex items-center justify-center"
-              style={{ transform: `scale(${zoomScale})` }}
-            >
-              <img
-                src={galleryImages[zoomIndex] || activeImg}
-                alt={product.name}
-                className="max-h-[75vh] max-w-[85vw] object-contain drop-shadow-2xl select-none"
-              />
-            </div>
-
-            {/* Next Image Arrow */}
-            {galleryImages.length > 1 && (
-              <button
-                onClick={handleNextZoom}
-                className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center text-xl font-bold transition-all z-20 cursor-pointer"
-              >
-                ›
-              </button>
-            )}
-          </div>
-
-          {/* Lightbox Bottom Thumbnails Strip */}
-          {galleryImages.length > 1 && (
-            <div className="px-6 py-4 bg-black/60 border-t border-white/10 flex items-center justify-center gap-3 overflow-x-auto">
-              {galleryImages.map((img, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => {
-                    setZoomIndex(idx);
-                    setZoomScale(1);
-                  }}
-                  className={`w-14 h-14 rounded-xl border overflow-hidden transition-all cursor-pointer p-1 shrink-0 ${
-                    zoomIndex === idx
-                      ? "border-[#EDCF5D] ring-2 ring-[#EDCF5D] scale-110 bg-white/10"
-                      : "border-white/20 opacity-50 hover:opacity-100 bg-black/40"
-                  }`}
-                >
-                  <img src={img} alt="Thumb" className="w-full h-full object-contain" />
-                </button>
-              ))}
-            </div>
-          )}
-
-        </div>
-      )}
+      {/* ────── CENTRAL INTERACTIVE ZOOM LIGHTBOX MODAL ────── */}
+      <ImageViewer
+        isOpen={isZoomOpen}
+        onClose={() => setIsZoomOpen(false)}
+        images={galleryImages}
+        initialIndex={zoomIndex}
+        title={product.name}
+      />
     </div>
   );
 }

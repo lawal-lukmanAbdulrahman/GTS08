@@ -11,7 +11,7 @@ import WhatsAppPanel, { type PendingWhatsAppOrder } from "./whatsapp-panel";
 import FlagProductModal from "./flag-product-modal";
 import ErrorBanner from "./error-banner";
 import FindSalePanel, { type FoundSale, type SaleQuery } from "./find-sale-panel";
-import { useSidebar } from "../admin/sidebar-context";
+import { useSidebar, SidebarToggle } from "../admin/sidebar-context";
 import NoPosAccess from "./no-pos-access";
 import HeldSalesBar from "./held-sales-bar";
 import { discardHeldSale, holdSale, loadHeldSales, type HeldSale } from "./held-sales";
@@ -26,7 +26,6 @@ import { loadStoreDetails, toReceiptStore } from "../lib/store-settings-api";
 import { apiCall } from "../lib/staff-api";
 import { getSessionUser, reauthenticate, signOut } from "../lib/session";
 import { useStaffSession } from "../lib/use-staff-session";
-import StaffMenu from "../components/staff/staff-menu";
 import IdleLockScreen from "../components/idle/idle-lock-screen";
 import { useIdleLock } from "../components/idle/use-idle-lock";
 import type { CartLine, CompletedSale, PaymentMethod, PosProduct } from "./pos-types";
@@ -116,6 +115,7 @@ export default function PosPage() {
   // Today's orders
   const [showTodaysOrders, setShowTodaysOrders] = useState(false);
   const [todaysOrders, setTodaysOrders] = useState<TodaysOrder[]>([]);
+  const [todaysOrdersLoading, setTodaysOrdersLoading] = useState(false);
   const [reprintError, setReprintError] = useState<string | null>(null);
 
   // WhatsApp flow
@@ -219,6 +219,7 @@ export default function PosPage() {
       "/pos/orders",
       {
         method: "POST",
+        headers: { "Idempotency-Key": `pos_${crypto.randomUUID()}` },
         json: {
           items: cart.map((l) => ({ variant_id: l.variantId, quantity: l.quantity })),
           payment_method: paymentMethod,
@@ -324,15 +325,27 @@ export default function PosPage() {
 
   async function openTodaysOrders() {
     setReprintError(null);
-    setTodaysOrders(await fetchTodaysOrders());
     setShowTodaysOrders(true);
+    setTodaysOrdersLoading(true);
+    try {
+      const orders = await fetchTodaysOrders();
+      setTodaysOrders(orders);
+    } finally {
+      setTodaysOrdersLoading(false);
+    }
   }
 
   async function voidOrder(orderId: string, reason: string) {
     const result = await apiCall(`/pos/orders/${orderId}/void`, { method: "PUT", json: { reason } });
     if (!result.ok) setReprintError(result.message);
     else setReprintError(null);
-    setTodaysOrders(await fetchTodaysOrders());
+    setTodaysOrdersLoading(true);
+    try {
+      const orders = await fetchTodaysOrders();
+      setTodaysOrders(orders);
+    } finally {
+      setTodaysOrdersLoading(false);
+    }
   }
 
   async function searchSales(query: SaleQuery): Promise<{ ok: true; data: FoundSale[] } | { ok: false; message: string }> {
@@ -434,7 +447,11 @@ export default function PosPage() {
     if (!foundOrder || !waPaymentMethod) return;
     const result = await apiCall<{ order_number: string; total: number }>(
       `/pos/whatsapp-orders/${foundOrder.id}/confirm`,
-      { method: "POST", json: { payment_method: waPaymentMethod } }
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": `wa_${crypto.randomUUID()}` },
+        json: { payment_method: waPaymentMethod },
+      }
     );
     if (!result.ok) {
       setSaleError(result.message);
@@ -502,13 +519,17 @@ export default function PosPage() {
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#F8F7F4] dark:bg-[#1C1C1C] font-sans">
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-[#262626] bg-white dark:bg-[#1C1C1C]">
-        <div className="flex items-center gap-3">
-          {isAdmin && (
-            <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open menu" className="lg:hidden min-w-[44px] min-h-[44px] -ml-2 text-xl text-gray-600 dark:text-gray-300">
-              ☰
-            </button>
-          )}
-          <h1 className="text-base font-bold text-gray-900 dark:text-white">GTS POS</h1>
+        <div className="flex items-center gap-2">
+          <SidebarToggle className="hidden lg:inline-flex -ml-2 mr-0.5" />
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Open menu"
+            className="lg:hidden min-w-[36px] min-h-[36px] -ml-2 text-xl text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors cursor-pointer flex items-center justify-center"
+          >
+            ☰
+          </button>
+          <h1 className="text-base font-bold text-gray-900 dark:text-white">POS</h1>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex gap-1 bg-gray-100 dark:bg-[#242424] rounded-full p-0.5">
@@ -544,16 +565,6 @@ export default function PosPage() {
           >
             Find a sale
           </button>
-          {profile && (
-            <StaffMenu
-              name={cashierName}
-              role={profile.role}
-              isAdmin={isAdmin}
-              canUsePos={session.canUsePos}
-              current="pos"
-              onSignOut={session.signOut}
-            />
-          )}
         </div>
       </div>
 
@@ -655,6 +666,7 @@ export default function PosPage() {
       {showTodaysOrders && (
         <TodaysOrdersPanel
           orders={todaysOrders}
+          loading={todaysOrdersLoading}
           canVoid={canVoid}
           reprintError={reprintError}
           onVoid={voidOrder}

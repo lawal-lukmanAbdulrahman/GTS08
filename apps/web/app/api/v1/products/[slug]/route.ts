@@ -76,7 +76,7 @@ export async function GET(
     // Fetch recent 3 approved reviews
     const { data: reviews } = await serviceClient
       .from("reviews")
-      .select("id, rating, title, body, created_at, user:users(full_name)")
+      .select("id, rating, title, body, created_at, user:users!reviews_user_id_fkey(full_name)")
       .eq("product_id", product.id)
       .eq("is_approved", true)
       .order("created_at", { ascending: false })

@@ -2272,6 +2272,22 @@ export default function EditProductPage() {
                     alt={name || "Product Image"}
                     className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
                   />
+
+                  {/* Transparent Background Check Mark Toggle */}
+                  <label className="absolute bottom-2.5 left-2.5 right-2.5 z-20 flex items-center justify-between px-3 py-1.5 rounded-lg bg-white/95 dark:bg-[#1e1e1e]/95 backdrop-blur-md border border-gray-200 dark:border-[#383838] shadow-sm cursor-pointer select-none">
+                    <span className="flex items-center gap-2 text-xs font-semibold text-gray-800 dark:text-gray-200">
+                      <input
+                        type="checkbox"
+                        checked={hasTransparentBg}
+                        onChange={(e) => setHasTransparentBg(e.target.checked)}
+                        className="w-4 h-4 rounded text-black border-gray-300 dark:border-gray-600 focus:ring-[#EDCF5D] cursor-pointer"
+                      />
+                      <span>Transparent Background</span>
+                    </span>
+                    <span className="text-[10px] text-gray-500 font-mono">
+                      {hasTransparentBg ? "Centered & Padded" : "Full Bleed"}
+                    </span>
+                  </label>
                 </div>
               ) : (
                 /* Drag & Drop Upload Zone when empty */

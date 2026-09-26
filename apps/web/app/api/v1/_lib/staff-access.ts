@@ -14,6 +14,7 @@ export interface StaffPermissions {
   can_handle_tickets: boolean;
   can_void_orders: boolean;
   can_apply_discounts: boolean;
+  can_manage_broadcasts: boolean;
 }
 
 export type PermissionKey = keyof StaffPermissions;
@@ -42,6 +43,7 @@ export const PERMISSION_KEYS = [
   "can_handle_tickets",
   "can_void_orders",
   "can_apply_discounts",
+  "can_manage_broadcasts",
 ] as const;
 
 const NO_PERMISSIONS: StaffPermissions = {
@@ -52,6 +54,7 @@ const NO_PERMISSIONS: StaffPermissions = {
   can_handle_tickets: false,
   can_void_orders: false,
   can_apply_discounts: false,
+  can_manage_broadcasts: false,
 };
 
 const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
@@ -62,6 +65,7 @@ const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
   can_manage_products: "manage products",
   can_handle_tickets: "handle support tickets",
   can_process_pos: "use the point of sale",
+  can_manage_broadcasts: "manage broadcasts & popups",
 };
 
 function deny(status: number, error: string, code: string): { ok: false; response: NextResponse } {

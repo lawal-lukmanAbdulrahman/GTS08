@@ -22,6 +22,7 @@ const GRANTS: Array<{ key: keyof PermissionsView; label: string; hint?: string }
   { key: "can_view_all_orders", label: "View all orders" },
   { key: "can_manage_products", label: "Manage products" },
   { key: "can_handle_tickets", label: "Handle support tickets" },
+  { key: "can_manage_broadcasts", label: "Manage broadcasts & popups", hint: "Create, edit, and publish store banners and popup announcements" },
 ];
 
 /** What an admin can change about a staff member: which actions they may take, and whether they can sign in at all. */
@@ -122,8 +123,15 @@ export default function PermissionEditor({ name, permissions, isAdminAccount, is
             </div>
           </div>
         ) : (
-          <button type="button" onClick={() => setConfirmingBlock(true)} className="px-3 py-1.5 text-xs font-semibold rounded-[6px] text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50">
-            Block {name}
+          <button
+            type="button"
+            onClick={() => setConfirmingBlock(true)}
+            className="px-3.5 py-1.5 text-xs font-bold rounded-[6px] bg-red-600 hover:bg-red-700 text-white shadow-xs hover:shadow-red-500/25 active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1.5"
+          >
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+            </svg>
+            <span>Block {name}</span>
           </button>
         )}
       </div>

@@ -6,10 +6,20 @@ import { ProductCard } from "../ui/product-card";
 
 import { useCatalogue } from "../catalogue-context";
 
-export function CrazyFinds() {
+export function CrazyDeals() {
   const { products: catalogue } = useCatalogue();
-  // Products marked down: they carry a was-price, so the catalogue flags them as on sale.
-  const CRAZY_FINDS = useMemo(() => catalogue.filter((p) => p.badge === "SALE" || Boolean(p.badge && p.badge.includes("OFF"))), [catalogue]);
+  // Products with significant markdowns, sorted by discount percentage descending
+  const CRAZY_DEALS = useMemo(() => {
+    return [...catalogue]
+      .filter(
+        (p) =>
+          (p.rawCompareAtPrice && p.rawCompareAtPrice > (p.rawBasePrice ?? 0)) ||
+          Boolean(p.originalPrice) ||
+          p.badge === "SALE"
+      )
+      .sort((a, b) => (b.discountPercent ?? 0) - (a.discountPercent ?? 0))
+      .slice(0, 12);
+  }, [catalogue]);
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -45,13 +55,13 @@ export function CrazyFinds() {
         <div className="flex justify-between items-end mb-5 sm:mb-6">
           <div>
             <h2 className="text-lg sm:text-xl md:text-3xl font-normal text-[#010101] tracking-tight flex items-center gap-2">
-              Mind Blowing <span className="text-[#EDCF5D] font-bold">✧</span>
-              <span className="font-serif italic font-bold text-[#010101]">Crazy Finds</span>
+              Crazy Deals <span className="text-[#EDCF5D] font-bold">✧</span>
+              <span className="font-serif italic font-bold text-[#010101]">Big Discounts</span>
             </h2>
           </div>
 
           <Link
-            href="/search"
+            href="/search?filter=deals"
             className="text-xs sm:text-sm text-gray-700 font-normal hover:text-black flex items-center gap-1 transition-colors group shrink-0"
           >
             <span className="underline underline-offset-4 decoration-gray-300 group-hover:decoration-gray-700">
@@ -90,14 +100,14 @@ export function CrazyFinds() {
             className="flex gap-4 sm:gap-5 overflow-x-auto scroll-smooth no-scrollbar py-1"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
-            {CRAZY_FINDS.map((product) => (
+            {CRAZY_DEALS.map((product) => (
               <ProductCard
                 key={product.id}
                 id={product.id}
                 title={product.title}
                 price={product.price}
                 originalPrice={product.originalPrice}
-                badge={product.badge}
+                badge={product.badge || (product.discountPercent ? `${product.discountPercent}% OFF` : "DEAL")}
                 rating={product.rating}
                 reviews={product.reviews}
                 image={product.image}
@@ -133,3 +143,5 @@ export function CrazyFinds() {
     </section>
   );
 }
+
+export const CrazyFinds = CrazyDeals;
