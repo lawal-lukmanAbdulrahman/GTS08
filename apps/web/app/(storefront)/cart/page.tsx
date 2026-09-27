@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { ProductCard } from "../_components/ui/product-card";
-import { checkPromo } from "../_lib/checkout-client";
 import { useCheckoutQuote } from "../_lib/use-checkout-quote";
 import { useCatalogue } from "../_components/catalogue-context";
 import { Footer } from "../_components/landing/footer";
@@ -13,17 +12,24 @@ import { useCart } from "../_components/cart-context";
 export default function CartPage() {
   const { cartItems, updateQuantity, setQuantity, syncCartLimits, removeFromCart, clearCart, totalItemCount } = useCart();
 
-  const [promoCode, setPromoCode] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number } | null>(null); // discount in kobo, from the server
-  const [promoError, setPromoError] = useState("");
   const { quote, error: _quoteError } = useCheckoutQuote(cartItems);
 
   // Sync server stock limits to cart items
+  const quoteLinesKey = quote?.lines
+    ? quote.lines
+        .map(
+          (l) =>
+            `${l.product_slug}:${(l.size ?? "").toLowerCase()}:${(l.color ?? "").toLowerCase()}:${l.available}`
+        )
+        .join("|")
+    : "";
+
   useEffect(() => {
     if (quote?.lines && quote.lines.length > 0) {
       syncCartLimits(quote.lines);
     }
-  }, [quote?.lines, syncCartLimits]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoteLinesKey, syncCartLimits]);
 
   // Check if any cart item exceeds live inventory or is out of stock
   const hasStockIssue = cartItems.some((item) => {
@@ -39,39 +45,17 @@ export default function CartPage() {
 
   const canProceedToCheckout = cartItems.length > 0 && !hasStockIssue && (quote ? quote.all_available : true);
 
-  const handleApplyPromo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPromoError("");
-    if (!quote) {
-      setPromoError("Please wait while we check your cart.");
-      return;
-    }
-    const result = await checkPromo(promoCode, quote.subtotal);
-    if (result.ok) {
-      setAppliedPromo({ code: result.code, discount: result.discount });
-      setPromoCode("");
-    } else {
-      setPromoError(result.message);
-    }
-  };
-
-  const removePromo = () => {
-    setAppliedPromo(null);
-  };
-
   // ── Calculation Math ──
   // The server's prices once they arrive; the page's own estimate until then.
   const rawSubtotal = quote
     ? quote.subtotal / 100
     : cartItems.reduce((sum, item) => sum + item.product.priceNum * item.quantity, 0);
 
-  const discountAmount = appliedPromo ? appliedPromo.discount / 100 : 0;
-
   const FREE_SHIPPING_THRESHOLD = 500000;
   const isFreeShipping = rawSubtotal >= FREE_SHIPPING_THRESHOLD || cartItems.length === 0;
   const shippingFee = isFreeShipping ? 0 : 15000;
 
-  const grandTotal = Math.max(0, rawSubtotal - discountAmount + shippingFee);
+  const grandTotal = Math.max(0, rawSubtotal + shippingFee);
 
   // Recommended Products for the bottom carousel
   const { products: catalogue } = useCatalogue();
@@ -117,7 +101,7 @@ export default function CartPage() {
         {cartItems.length > 0 ? (
           /* ── Main Two-Column Layout ── */
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* ────── LEFT COLUMN: Cart Items List & Promo Code ────── */}
+            {/* ────── LEFT COLUMN: Cart Items List ────── */}
             <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-4">
               {cartItems.map((item, index) => {
                 const itemSubtotal = item.product.priceNum * item.quantity;
@@ -277,50 +261,7 @@ export default function CartPage() {
                 );
               })}
 
-              {/* ── Promo Code Card ── */}
-              <div className="bg-[#F9F8F5] rounded-2xl p-5 border border-gray-200/80 shadow-2xs mt-2">
-                <h3 className="text-sm font-bold text-[#010101] mb-2 flex items-center gap-2">
-                  <svg className="w-4 h-4 text-[#EDCF5D]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
-                  </svg>
-                  Have a Promo Code or Gift Card?
-                </h3>
 
-                {appliedPromo ? (
-                  <div className="flex items-center justify-between bg-[#F2F0EA] rounded-xl px-4 py-2.5">
-                    <span className="text-xs font-bold text-emerald-800 flex items-center gap-2">
-                      <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                        -₦{(appliedPromo.discount / 100).toLocaleString()}
-                      </span>
-                      Code <strong>{appliedPromo.code}</strong> applied
-                    </span>
-                    <button
-                      onClick={removePromo}
-                      className="text-xs font-bold text-gray-500 hover:text-red-600 underline"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleApplyPromo} className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Enter promo code (e.g. GTS10)"
-                      value={promoCode}
-                      onChange={(e) => setPromoCode(e.target.value)}
-                      className="flex-1 bg-[#F9F8F5] border border-gray-200 focus:border-[#010101] rounded-xl px-4 py-2 text-xs font-semibold text-[#010101] placeholder-gray-400 outline-none transition-all"
-                    />
-                    <button
-                      type="submit"
-                      className="bg-[#010101] hover:bg-[#EDCF5D] text-white hover:text-[#010101] text-xs font-bold px-5 py-2 rounded-xl transition-all shadow-2xs"
-                    >
-                      Apply
-                    </button>
-                  </form>
-                )}
-                {promoError && <p className="text-xs font-semibold text-red-500 mt-2">{promoError}</p>}
-              </div>
             </div>
 
             {/* ────── RIGHT COLUMN: Sticky Order Summary ────── */}
@@ -337,13 +278,7 @@ export default function CartPage() {
                     <span className="font-bold text-[#010101]">₦{rawSubtotal.toLocaleString()}</span>
                   </div>
 
-                  {/* Promo Discount */}
-                  {appliedPromo && (
-                    <div className="flex items-center justify-between text-emerald-700 font-medium">
-                      <span>Promo Discount ({appliedPromo.code})</span>
-                      <span className="font-bold">-₦{discountAmount.toLocaleString()}</span>
-                    </div>
-                  )}
+
 
                   {/* Estimated Shipping */}
                   <div className="flex items-center justify-between text-gray-600 font-medium">

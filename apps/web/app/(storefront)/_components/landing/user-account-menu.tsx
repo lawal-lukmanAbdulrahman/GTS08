@@ -233,24 +233,7 @@ export function UserAccountMenu() {
                 )}
               </button>
 
-              {/* Voucher */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOpen(false);
-                  if (user) {
-                    router.push("/account?tab=vouchers");
-                  } else {
-                    openAuthModal("login");
-                  }
-                }}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold text-gray-700 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors cursor-pointer text-left"
-              >
-                <svg className="w-4 h-4 shrink-0 text-[#010101]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-12v.75m0 3v.75m0 3v.75m0 3V18M3 7.5h18a1.5 1.5 0 011.5 1.5v7.5a1.5 1.5 0 01-1.5 1.5H3a1.5 1.5 0 01-1.5-1.5V9A1.5 1.5 0 013 7.5z" />
-                </svg>
-                <span>Vouchers</span>
-              </button>
+
             </div>
 
             <div className="my-1.5 border-t border-gray-100" />

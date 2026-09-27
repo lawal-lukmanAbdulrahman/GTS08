@@ -8,7 +8,7 @@ import { useAuth } from "../_components/auth-context";
 import { useAuthModal } from "../_components/auth-modal-context";
 import { Footer } from "../_components/landing/footer";
 import { idempotentFetch } from "@gts/utils";
-import { toCheckoutLines, checkPromo } from "../_lib/checkout-client";
+import { toCheckoutLines } from "../_lib/checkout-client";
 import { useCheckoutQuote } from "../_lib/use-checkout-quote";
 
 import { NIGERIAN_STATES, NIGERIAN_LOCATIONS } from "../_data/nigerian-locations";
@@ -735,10 +735,7 @@ export default function CheckoutPage() {
   // ── Step 3: Payment state ──
   const [selectedPayment, setSelectedPayment] = useState("paystack");
 
-  // ── Promo code ──
-  const [promoCode, setPromoCode] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number } | null>(null);  // discount in kobo, from the server
-  const [promoError, setPromoError] = useState("");
+
 
   // ── Submission & Order Success State ──
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -768,40 +765,6 @@ export default function CheckoutPage() {
     }
   }, [customer, user, savedAddresses]);
 
-  const handleApplyPromo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPromoError("");
-    if (!quote) {
-      setPromoError("Please wait while we check your cart.");
-      return;
-    }
-    const result = await checkPromo(promoCode, quote.subtotal);
-    if (result.ok) {
-      setAppliedPromo({ code: result.code, discount: result.discount });
-      setPromoCode("");
-    } else {
-      setPromoError(result.message);
-    }
-  };
-
-  // The discount follows the cart: if the subtotal changes, ask the server again, and drop the code if it no longer fits.
-  useEffect(() => {
-    if (!appliedPromo || !quote) return;
-    let cancelled = false;
-    checkPromo(appliedPromo.code, quote.subtotal).then((r) => {
-      if (cancelled) return;
-      if (!r.ok) {
-        setAppliedPromo(null);
-        setPromoError(r.message);
-      } else if (r.discount !== appliedPromo.discount) {
-        setAppliedPromo({ code: r.code, discount: r.discount });
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [quote?.subtotal]);
-
   // ── Order math ──
   const selectedStation =
     GTS_CHECKOUT_PICKUP_STATIONS.find((s) => s.id === selectedPickupStationId) ||
@@ -811,10 +774,9 @@ export default function CheckoutPage() {
   // the order can't be placed until the server has confirmed every item is available.
   const estimatedSubtotal = cartItems.reduce((sum, i) => sum + i.product.priceNum * i.quantity, 0);
   const rawSubtotal = quote ? quote.subtotal / 100 : estimatedSubtotal;
-  const discountAmount = appliedPromo ? appliedPromo.discount / 100 : 0;
   const localDeliveryFee = selectedDelivery === "express" ? 4500 : selectedDelivery === "pickup" ? selectedStation.fee : 1500;
   const deliveryFeeNum = quote ? quote.delivery_fees[selectedDelivery as "door" | "pickup" | "express"] / 100 : localDeliveryFee;
-  const grandTotal = Math.max(0, rawSubtotal - discountAmount + deliveryFeeNum);
+  const grandTotal = Math.max(0, rawSubtotal + deliveryFeeNum);
   const canPlaceOrder = cartItems.length > 0 && quote?.all_available === true;
 
   const cities = region ? (NIGERIAN_LOCATIONS[region] ?? []) : [];
@@ -939,7 +901,6 @@ export default function CheckoutPage() {
       items: toCheckoutLines(cartItems),
       deliveryOption: selectedDelivery,
       paymentMethod: selectedPayment,
-      promoCode: appliedPromo?.code,
     };
 
     setSubmitError(null);
@@ -1526,55 +1487,12 @@ export default function CheckoutPage() {
                 )}
               </div>
 
-              {/* Promo code */}
-              {appliedPromo ? (
-                <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 mb-4">
-                  <span className="text-xs font-bold text-emerald-700 flex items-center gap-2">
-                    <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                      -₦{(appliedPromo.discount / 100).toLocaleString()}
-                    </span>
-                    Code <strong>{appliedPromo.code}</strong> applied
-                  </span>
-                  <button onClick={() => setAppliedPromo(null)} className="text-[11px] font-bold text-gray-400 hover:text-red-500 underline transition-colors cursor-pointer">
-                    Remove
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleApplyPromo} className="flex gap-2 mb-4">
-                  <div className="flex-1 flex items-center gap-2 border border-gray-200 rounded-xl px-3 bg-white focus-within:border-[#010101] transition-all">
-                    <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-                    </svg>
-                    <input
-                      type="text"
-                      value={promoCode}
-                      onChange={(e) => setPromoCode(e.target.value)}
-                      placeholder="Promo code (e.g. WELCOME10)"
-                      className="flex-1 py-2.5 text-xs font-semibold text-[#010101] placeholder-gray-400 outline-none bg-transparent"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="text-xs font-bold text-[#010101] hover:text-[#EDCF5D] px-3 transition-colors cursor-pointer"
-                  >
-                    APPLY
-                  </button>
-                </form>
-              )}
-              {promoError && <p className="text-xs text-red-500 font-semibold -mt-2 mb-3">{promoError}</p>}
-
               {/* Totals */}
               <div className="space-y-2.5 border-t border-gray-200 pt-4 text-sm">
                 <div className="flex justify-between text-gray-600 font-medium">
                   <span>Item{"'"}s total ({cartItems.reduce((s, i) => s + i.quantity, 0)})</span>
                   <span className="font-bold text-[#010101]">₦{rawSubtotal.toLocaleString()}</span>
                 </div>
-                {appliedPromo && (
-                  <div className="flex justify-between text-emerald-700 font-medium">
-                    <span>Promo Discount ({appliedPromo.code})</span>
-                    <span className="font-bold">-₦{discountAmount.toLocaleString()}</span>
-                  </div>
-                )}
                 <div className="flex justify-between text-gray-600 font-medium">
                   <span>Delivery fee</span>
                   <span className="font-bold text-[#010101]">₦{deliveryFeeNum.toLocaleString()}</span>

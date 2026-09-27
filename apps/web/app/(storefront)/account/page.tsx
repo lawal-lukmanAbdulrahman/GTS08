@@ -69,96 +69,7 @@ const GTS_PICKUP_STATIONS = [
   { id: "ps_6", name: "GTS Hub - Tanke, Ilorin", address: "10 Rex Alaya Str, Balogun, Tanke", state: "Kwara", hours: "Mon - Sat (8am - 6pm)" },
 ];
 
-function ScallopedTicket({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ w: 0, h: 0 });
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const el = containerRef.current;
-    const updateSize = () => {
-      const rect = el.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        setDimensions({
-          w: Math.round(rect.width),
-          h: Math.round(rect.height),
-        });
-      }
-    };
-    updateSize();
-
-    const ro = new ResizeObserver(() => updateSize());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const { w, h } = dimensions;
-  const cr = 14; // corner radius
-  const nr = 5;  // scallop notch radius
-  const count = 5; // number of scallops
-
-  let pathData = "";
-  if (w > 0 && h > 0) {
-    const availH = h - 2 * cr;
-    let d = `M ${cr} 0 L ${w - cr} 0 A ${cr} ${cr} 0 0 1 ${w} ${cr} `;
-
-    // Right edge notches (top to bottom)
-    for (let i = 0; i < count; i++) {
-      const centerY = cr + (i + 0.5) * (availH / count);
-      const y1 = centerY - nr;
-      const y2 = centerY + nr;
-      d += `L ${w} ${y1} A ${nr} ${nr} 0 0 0 ${w} ${y2} `;
-    }
-
-    d += `L ${w} ${h - cr} A ${cr} ${cr} 0 0 1 ${w - cr} ${h} L ${cr} ${h} A ${cr} ${cr} 0 0 1 0 ${h - cr} `;
-
-    // Left edge notches (bottom to top)
-    for (let i = count - 1; i >= 0; i--) {
-      const centerY = cr + (i + 0.5) * (availH / count);
-      const y1 = centerY - nr;
-      const y2 = centerY + nr;
-      d += `L 0 ${y2} A ${nr} ${nr} 0 0 0 0 ${y1} `;
-    }
-
-    d += `L 0 ${cr} A ${cr} ${cr} 0 0 1 ${cr} 0 Z`;
-    pathData = d;
-  }
-
-  return (
-    <div
-      ref={containerRef}
-      className={`relative p-2.5 sm:p-3.5 transition-all hover:scale-[1.008] ${className}`}
-    >
-      {/* Background SVG Ticket with Scalloped Border Tracing the Ticket */}
-      {w > 0 && h > 0 ? (
-        <svg
-          className="absolute inset-0 w-full h-full pointer-events-none"
-          width={w}
-          height={h}
-          viewBox={`0 0 ${w} ${h}`}
-        >
-          <path
-            d={pathData}
-            fill="#FEF9EE"
-            stroke="#D1BA8E"
-            strokeWidth={2}
-          />
-        </svg>
-      ) : (
-        <div className="absolute inset-0 bg-[#FEF9EE] rounded-2xl border-2 border-[#D1BA8E]" />
-      )}
-
-      {/* Content inside the ticket */}
-      <div className="relative z-10">{children}</div>
-    </div>
-  );
-}
 
 function AccountContent() {
   const router = useRouter();
@@ -173,7 +84,6 @@ function AccountContent() {
     inbox: "Customer Inbox",
     addresses: "Address Book",
     profile: "Account Management",
-    vouchers: "Vouchers & Promos",
     reviews: "Pending Reviews",
   };
 
@@ -326,8 +236,7 @@ function AccountContent() {
     }
   }, [customer, user]);
 
-  // Copy coupon toast
-  const [copiedCoupon, setCopiedCoupon] = useState<string | null>(null);
+
 
   // Inbox & Replies state
   interface InboxItem {
@@ -819,11 +728,7 @@ function AccountContent() {
     } catch {}
   };
 
-  const handleCopyCoupon = (code: string) => {
-    navigator.clipboard.writeText(code);
-    setCopiedCoupon(code);
-    setTimeout(() => setCopiedCoupon(null), 2000);
-  };
+
 
   const handleSaveBasicProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1373,20 +1278,7 @@ function AccountContent() {
                   <span className="text-gray-400 text-base">›</span>
                 </button>
 
-                {/* Voucher */}
-                <button
-                  type="button"
-                  onClick={() => router.push("/account?tab=vouchers")}
-                  className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left cursor-pointer"
-                >
-                  <div className="flex items-center gap-3.5">
-                    <svg className="w-5 h-5 text-gray-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-12v.75m0 3v.75m0 3v.75m0 3V18M3 7.5h18a1.5 1.5 0 011.5 1.5v7.5a1.5 1.5 0 01-1.5 1.5H3a1.5 1.5 0 01-1.5-1.5V9A1.5 1.5 0 013 7.5z" />
-                    </svg>
-                    <span className="text-sm font-medium text-gray-800">Voucher</span>
-                  </div>
-                  <span className="text-gray-400 text-base">›</span>
-                </button>
+
 
                 {/* Wishlist */}
                 <button
@@ -1606,24 +1498,7 @@ function AccountContent() {
               <span>Pending Reviews</span>
             </button>
 
-            {/* Voucher */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("vouchers");
-                router.push("/account?tab=vouchers");
-              }}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-                activeTab === "vouchers"
-                  ? "bg-[#010101] text-white shadow-xs font-bold"
-                  : "text-gray-700 hover:bg-white hover:text-[#010101]"
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-12v.75m0 3v.75m0 3v.75m0 3V18M3 7.5h18a1.5 1.5 0 011.5 1.5v7.5a1.5 1.5 0 01-1.5 1.5H3a1.5 1.5 0 01-1.5-1.5V9A1.5 1.5 0 013 7.5z" />
-              </svg>
-              <span>Vouchers & Promos</span>
-            </button>
+
 
             {/* Wishlist */}
             <button
@@ -4199,7 +4074,7 @@ function AccountContent() {
 
                           <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
                             <div>
-                              <h4 className="text-xs font-bold text-[#010101]">Special Offers & Vouchers</h4>
+                              <h4 className="text-xs font-bold text-[#010101]">Special Offers & Deals</h4>
                               <p className="text-[11px] text-gray-500 mt-0.5">Personalized discounts and seasonal flash sale alerts.</p>
                             </div>
                             <button
@@ -4406,116 +4281,7 @@ function AccountContent() {
               </div>
             )}
 
-            {/* TAB 4: VOUCHERS & PROMOS */}
-            {activeTab === "vouchers" && (
-              <div className="space-y-6 max-w-4xl w-full">
-                <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
-                  <button
-                    type="button"
-                    onClick={() => router.push("/account")}
-                    className="lg:hidden p-1 -ml-1 text-gray-700 hover:text-[#010101] rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
-                    aria-label="Back to Account"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-                    </svg>
-                  </button>
-                  <div>
-                    <h2 className="font-bold text-base sm:text-lg text-[#010101]">Vouchers & Discounts</h2>
-                    <p className="text-xs text-gray-500">
-                      Copy and apply these active promo codes upon checkout.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {[
-                    {
-                      code: "GIFT50",
-                      title: "GIFT VOUCHER",
-                      discount: "50% OFF",
-                      description: "Present this gift voucher upon payment and enjoy discount on any items.",
-                      issuer: "Berry Clothing Co",
-                      validity: "VALID UNTIL DECEMBER 2050",
-                    },
-                    {
-                      code: "WELCOME10",
-                      title: "GIFT VOUCHER",
-                      discount: "10% OFF",
-                      description: "Present this gift voucher upon payment and enjoy discount on your first order.",
-                      issuer: "GTS Luxe Collection",
-                      validity: "VALID UNTIL DECEMBER 2026",
-                    },
-                    {
-                      code: "GTS20",
-                      title: "GIFT VOUCHER",
-                      discount: "20% OFF",
-                      description: "Special seasonal promo for household appliances, lifestyle & groceries.",
-                      issuer: "GTS Living Store",
-                      validity: "VALID UNTIL DECEMBER 2026",
-                    },
-                  ].map((voucher) => (
-                    <ScallopedTicket key={voucher.code}>
-                      <div className="flex gap-2 sm:gap-3 mx-1 sm:mx-2">
-                        {/* Main Left Frame */}
-                        <div className="flex-1 border-2 border-[#D1BA8E] rounded-xl p-2.5 sm:p-3 relative flex flex-col justify-between min-h-[96px] sm:min-h-[108px] bg-[#FEF9EE]">
-                          {/* Top-left Sparkles */}
-                          <div className="absolute top-1.5 left-2 text-[#D1BA8E] flex gap-1 select-none pointer-events-none">
-                            <span className="text-[10px]">✦</span>
-                            <span className="text-[7px] translate-y-0.5">✦</span>
-                          </div>
-
-                          {/* Bottom-right Sparkles */}
-                          <div className="absolute bottom-1.5 right-2 text-[#D1BA8E] flex gap-1 select-none pointer-events-none">
-                            <span className="text-[7px] -translate-y-0.5">✦</span>
-                            <span className="text-[10px]">✦</span>
-                          </div>
-
-                          {/* Title & Description */}
-                          <div className="text-center px-2">
-                            <h3 className="font-serif font-extrabold text-base sm:text-xl text-[#4A2E2B] tracking-wider uppercase">
-                              {voucher.title}
-                            </h3>
-                            <p className="text-[10px] sm:text-[11.5px] text-gray-600 font-medium max-w-lg mx-auto mt-0.5 leading-snug">
-                              {voucher.description}
-                            </p>
-                          </div>
-
-                          {/* Footer / Copy Code */}
-                          <div className="flex items-center justify-between pt-1.5 sm:pt-2 border-t border-[#D1BA8E]/30 mt-1 px-1">
-                            <span className="text-[10px] sm:text-xs font-serif italic text-[#4A2E2B] font-semibold">
-                              {voucher.issuer}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyCoupon(voucher.code)}
-                              className="inline-flex items-center gap-1.5 px-3 py-0.5 sm:py-1 rounded-full bg-[#4A2E2B] hover:bg-[#010101] text-white text-[10px] sm:text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
-                            >
-                              <span>{voucher.code}</span>
-                              <span className="text-[#EDCF5D]">
-                                {copiedCoupon === voucher.code ? "✓ Copied" : "Copy"}
-                              </span>
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Right Stub Frame */}
-                        <div className="w-20 sm:w-28 border-2 border-[#D1BA8E] rounded-xl p-1.5 sm:p-2.5 flex items-center justify-center gap-1 sm:gap-2 bg-[#FAF5E8] shrink-0">
-                          <span className="text-base sm:text-lg font-black text-[#4A2E2B] font-serif tracking-wider [writing-mode:vertical-rl] rotate-180 select-none">
-                            {voucher.discount}
-                          </span>
-                          <span className="text-[7px] sm:text-[8px] uppercase tracking-widest text-gray-500 font-bold [writing-mode:vertical-rl] rotate-180 select-none whitespace-nowrap">
-                            {voucher.validity}
-                          </span>
-                        </div>
-                      </div>
-                    </ScallopedTicket>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* TAB 5: INBOX & REPLIES */}
+            {/* TAB 4: INBOX & REPLIES */}
             {activeTab === "inbox" && (
               <div className="space-y-6">
                 <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
