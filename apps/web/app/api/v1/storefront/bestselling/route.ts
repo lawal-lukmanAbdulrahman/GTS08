@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { serverError } from "../../_lib/http";
 import { getOrComputeCached } from "../../_lib/storefront-cache";
+import { publicCache } from "../../_lib/public-cache";
 
 /**
  * GET /api/v1/storefront/bestselling
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: {
-          "Cache-Control": "public, s-maxage=300, stale-while-revalidate=900",
+          "Cache-Control": await publicCache("public, s-maxage=300, stale-while-revalidate=900"),
         },
       }
     );

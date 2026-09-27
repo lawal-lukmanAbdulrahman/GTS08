@@ -1,3 +1,5 @@
+import { getRequestDataMode } from "@gts/database";
+
 export interface EmailMessage {
   to: string;
   subject: string;
@@ -28,6 +30,13 @@ function config(): { key: string; from: string; replyTo?: string } | null {
 
 function payload(message: EmailMessage, from: string, replyTo?: string) {
   return { from, to: [message.to.trim()], subject: message.subject, html: message.html, text: message.text, ...(replyTo ? { reply_to: replyTo } : {}), ...(message.headers ? { headers: message.headers } : {}) };
+}
+
+const DEMO_REASON = "Demo account: emails are not sent.";
+
+/** The demo account works on demo records, whose addresses may belong to real people: it never sends mail. */
+async function demoRequest(): Promise<boolean> {
+  return (await getRequestDataMode()) === "test";
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -74,6 +83,7 @@ async function post(path: string, key: string, body: unknown, extraHeaders: Reco
  * Logs never include the API key or the message content.
  */
 export async function sendEmail(message: EmailMessage): Promise<SendResult> {
+  if (await demoRequest()) return { ok: false, skipped: true, reason: DEMO_REASON };
   const cfg = config();
   if (!cfg) return { ok: false, skipped: true, reason: "Email is not configured." };
 
@@ -100,6 +110,7 @@ export async function sendEmail(message: EmailMessage): Promise<SendResult> {
  * addresses are dropped up front and counted as failed.
  */
 export async function sendEmailBatch(messages: EmailMessage[]): Promise<{ sent: number; failed: number; skipped?: true }> {
+  if (await demoRequest()) return { sent: 0, failed: messages.length, skipped: true };
   const cfg = config();
   if (!cfg) return { sent: 0, failed: messages.length, skipped: true };
 

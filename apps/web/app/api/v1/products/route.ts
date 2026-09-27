@@ -6,6 +6,7 @@ import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../_lib/staff-access";
 import { serverError, dbError } from "../_lib/http";
 import { invalidateStorefrontCaches } from "../_lib/storefront-cache";
+import { publicCache } from "../_lib/public-cache";
 
 export async function GET(request: NextRequest) {
   try {
@@ -55,6 +56,7 @@ export async function GET(request: NextRequest) {
         average_rating,
         review_count,
         created_at,
+        updated_at,
         category:categories(id, name, slug, parent:parent_id(id, name, slug)),
         images:product_images(id, cloudinary_public_id, alt_text, is_primary, sort_order, variant_id),
         variants:product_variants(id, size, color, color_hex, sku, price_modifier, is_active, inventory(quantity, reserved_quantity))
@@ -224,6 +226,7 @@ export async function GET(request: NextRequest) {
           is_featured: p.is_featured,
           total_sold: p.total_sold,
           created_at: p.created_at,
+          updated_at: p.updated_at,
           badges,
           variants,
         };
@@ -244,7 +247,7 @@ export async function GET(request: NextRequest) {
     }, {
       // The public list is the same for everyone, so a shared cache may keep it briefly. An answer given to a
       // signed-in caller can differ (staff see cost prices) and must never be shared.
-      headers: { "Cache-Control": user ? "private, no-store" : "public, s-maxage=30, stale-while-revalidate=120" },
+      headers: { "Cache-Control": user ? "private, no-store" : await publicCache("public, s-maxage=30, stale-while-revalidate=120") },
     });
   } catch (err: any) {
     return serverError(err);

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createServiceClient } from "@gts/database";
+import { createServiceClient, getRequestDataMode } from "@gts/database";
 import { serverError } from "../_lib/http";
+import { publicCache } from "../_lib/public-cache";
 
 /**
  * GET /api/v1/search?q=...&limit=30&page=1&category=...&mode=storefront|pos
@@ -44,6 +45,8 @@ export async function GET(request: NextRequest) {
         result_offset: offset,
         category_filter: category,
         active_only: true,
+        // The function runs with the server key (RLS doesn't apply), so it is told which catalogue to search.
+        data_is_test: (await getRequestDataMode()) === "test",
       }
     );
 
@@ -151,7 +154,7 @@ export async function GET(request: NextRequest) {
       meta: { total, page, limit, pages, query: q },
     }, {
       headers: {
-        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120",
+        "Cache-Control": await publicCache("public, s-maxage=30, stale-while-revalidate=120"),
       },
     });
   } catch (err) {

@@ -34,6 +34,8 @@ function makeStub(table: string) {
 }
 // The service client has no signInWithPassword on purpose: signing in on it would make its later writes run as the user.
 vi.mock("@gts/database", () => ({
+  getRequestDataMode: async () => "live",
+  runWithDataMode: (_mode: unknown, fn: () => unknown) => fn(),
   createServiceClient: () => ({
     from: (table: string) => makeStub(table),
     auth: { admin: { updateUserById: (...a: unknown[]) => mockUpdateUser(...a) } },

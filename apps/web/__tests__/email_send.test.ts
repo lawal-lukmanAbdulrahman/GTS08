@@ -1,5 +1,8 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+let requestMode: "test" | "live" = "live";
+vi.mock("@gts/database", () => ({ getRequestDataMode: async () => requestMode }));
+
 import { sendEmail, sendEmailBatch } from "../app/api/v1/_lib/email/send";
 import { esc } from "../app/api/v1/_lib/email/html";
 
@@ -14,6 +17,7 @@ beforeEach(() => {
   process.env.EMAIL_FROM = "GTS <hello@gts.ng>";
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
+  requestMode = "live";
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -106,6 +110,15 @@ describe("sendEmail reliability", () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ name: "validation_error", message: "The gts.ng domain is not verified." }), { status: 403 }));
     const r = await sendEmail(MSG);
     expect(r.ok === false && r.reason).toMatch(/not verified/);
+  });
+});
+
+describe("the demo account", () => {
+  it("never sends email: demo records hold real-looking addresses", async () => {
+    requestMode = "test";
+    expect(await sendEmail(MSG)).toMatchObject({ ok: false, skipped: true, reason: expect.stringMatching(/demo/i) });
+    expect(await sendEmailBatch([MSG, MSG])).toEqual({ sent: 0, failed: 2, skipped: true });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

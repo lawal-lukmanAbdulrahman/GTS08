@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { serverError } from "../../_lib/http";
+import { publicCache } from "../../_lib/public-cache";
 
 /**
  * GET /api/v1/search/suggestions?q=&limit=8
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
     if (!q) {
       if (trendingCache && Date.now() - trendingCache.at < TRENDING_TTL) {
         return NextResponse.json({ data: trendingCache.data.slice(0, limit) }, {
-          headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" },
+          headers: { "Cache-Control": await publicCache("public, s-maxage=60, stale-while-revalidate=300") },
         });
       }
 
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
       trendingCache = { data: trending, at: Date.now() };
 
       return NextResponse.json({ data: trending.slice(0, limit) }, {
-        headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" },
+        headers: { "Cache-Control": await publicCache("public, s-maxage=60, stale-while-revalidate=300") },
       });
     }
 
@@ -116,7 +117,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ data: suggestions }, {
-      headers: { "Cache-Control": "public, s-maxage=15, stale-while-revalidate=60" },
+      headers: { "Cache-Control": await publicCache("public, s-maxage=15, stale-while-revalidate=60") },
     });
   } catch (err) {
     return serverError(err);

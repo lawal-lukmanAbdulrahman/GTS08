@@ -20,7 +20,9 @@ export async function GET(request: NextRequest) {
     const { data: staffList, error } = await serviceClient
       .from("users")
       .select("id, email, full_name, role, is_blocked, created_at")
-      .neq("role", "customer");
+      .neq("role", "customer")
+      // The demo account and real staff never see each other.
+      .eq("is_demo", access.isDemo === true);
 
     if (error) {
       return dbError(error, "DATABASE_ERROR", 500);

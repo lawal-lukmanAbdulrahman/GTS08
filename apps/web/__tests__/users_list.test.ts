@@ -38,7 +38,16 @@ describe("GET /users (admin)", () => {
   it("filters by role and blocked state", async () => {
     await call("?role=cashier&is_blocked=false");
     const eqs = db.calls.users!.filter((c) => c.method === "eq").map((c) => c.args);
-    expect(eqs).toEqual([["role", "cashier"], ["is_blocked", false]]);
+    expect(eqs).toEqual([["is_demo", false], ["role", "cashier"], ["is_blocked", false]]);
+  });
+  it("shows only accounts on the caller's side: a real admin never sees the demo login, the demo login never sees real staff", async () => {
+    await call();
+    expect(db.calls.users!.find((c) => c.method === "eq")!.args).toEqual(["is_demo", false]);
+    db.reset();
+    db.results.users = { data: [], error: null, count: 0 };
+    mockAdmin.mockResolvedValue({ ok: true, user: { id: "demo" }, isAdmin: true, isDemo: true });
+    await call();
+    expect(db.calls.users!.find((c) => c.method === "eq")!.args).toEqual(["is_demo", true]);
   });
   it("searches name and email safely", async () => {
     await call("?q=ada%25,role.eq.admin");

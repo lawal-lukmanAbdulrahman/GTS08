@@ -20,19 +20,27 @@
 - No `driver_id` columns
 - No delivery-related enums or status values
 
-## AMENDMENT 002: Test / Live data isolation
+## AMENDMENT 002: Demo / live data isolation (revised 2026-09-27)
 
-**Status:** ACTIVE. Requested by the owner: start production clean while keeping everything recorded so far as test data.
+**Status:** ACTIVE. Requested by the owner: start production clean, and keep everything recorded while the app was built as demo data that only a demo account can see.
 
-### Changes
+### Model
 
-1. **`is_test` flag** (migration `00024_test_data_isolation.sql`) on the business-data tables: `orders`, `order_items`, `transactions`, `checkout_reservations`, `promo_code_uses`, `customers`, `addresses`, `support_tickets`, `ticket_messages`, `admin_notifications`, `email_campaigns`, `activity_logs`, `stock_movements`, `product_views`, `search_queries`. Every row that existed at migration time is marked test data; new rows take the mode that is active when they are written (column default `gts_is_test_mode()`).
-2. **`settings.data_mode`** (`'test'` | `'live'`, default `'live'`) says which side the app shows. Only the super admin can change it (`PUT /api/v1/settings/data-mode`); the change is audit-logged as `settings.data_mode`. Nothing is deleted.
-3. **Enforcement.** The public and signed-in keys are held to the current mode by a RESTRICTIVE RLS policy (`gts_mode_isolation`) on each table. The server (service-role) client bypasses RLS, so `packages/database/src/data-scope.ts` adds `is_test=eq.<mode>` to every query on those tables. `createServiceClient({ allModes: true })` opts out, and is used only by the Paystack webhook and the two stock-releasing cron jobs, which must reach records of either mode.
-4. **Shared on purpose:** catalogue (products, variants, images, categories, brands, inventory levels, promos, content slots, size guides), staff accounts and permissions, carts and wishlists, reviews, webhook de-duplication, settings.
+- **Data follows the account, not a switch.** `users.is_demo` marks demo accounts. A demo account sees and writes only demo rows; everyone else, including anonymous storefront visitors, sees only the live shop. (The first version had a shop-wide `settings.data_mode` switch; that column is no longer read.)
+- **What is split** (`is_test` on each row, existing rows = demo):
+  - Business records (migration `00024`): `orders`, `order_items`, `transactions`, `checkout_reservations`, `promo_code_uses`, `customers`, `addresses`, `support_tickets`, `ticket_messages`, `admin_notifications`, `email_campaigns`, `activity_logs`, `stock_movements`, `product_views`, `search_queries`.
+  - Catalogue and storefront content (migration `00025`): `products`, `product_variants`, `product_images`, `inventory`, `categories`, `brands`, `promos`, `product_flags`, `content_slots`, `size_guides`, `reviews`, `product_drafts`, `hero_carousel`.
+- **Shared on purpose:** staff and customer accounts (`users`, `employee_permissions`), store details (`settings`), carts and wishlists (keyed per visitor), `storefront_sections`, webhook de-duplication.
+- Slugs, SKUs, barcodes, brand names, promo codes and content slot keys are unique per data set, so the live shop can reuse a demo name.
+
+### Enforcement
+
+- **Public and signed-in keys:** a RESTRICTIVE RLS policy (`gts_mode_isolation`) on each split table compares `is_test` with `gts_is_test_mode()`, which is the signed-in user's `is_demo` (false for anonymous).
+- **Server (service role, bypasses RLS):** `packages/database/src/data-scope.ts` reads the caller from the bearer token or Supabase session cookie, adds `is_test=eq.<mode>` to every query on a split table, and stamps every insert/upsert with the caller's mode (overriding any `is_test` the caller sent). `search_products` takes `data_is_test`. `createServiceClient({ allModes: true })` opts out; only the Paystack webhook and the two stock-releasing cron jobs use it.
+- **The demo account is sandboxed:** it can't change store settings, staff accounts/permissions or its own login (`DEMO_READ_ONLY`), can never hold super-admin powers, never sends email, and its answers are never publicly cached (`publicCache`). Staff lists show only accounts on the caller's side.
 
 ### Known limits
 
-- The mode is cached for up to 5 seconds per server instance (the instance that changes it refreshes immediately).
-- `users.total_orders` / `total_spent` (maintained by a trigger) count orders of both modes.
-- Order numbers come from one sequence, so live numbering continues after the test numbers rather than restarting at 1.
+- The token is decoded (not verified) only to choose the data set; every protected route still verifies it, so a forged token can only view public demo data.
+- `users.total_orders` / `total_spent` (trigger-maintained) count both data sets. Order numbers share one sequence.
+- A demo account's Paystack payment would record its transaction as live (the webhook runs without a caller).

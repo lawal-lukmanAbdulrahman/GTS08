@@ -29,7 +29,9 @@ export async function GET(request: NextRequest) {
     let query = createServiceClient()
       .from("users")
       .select("id, email, full_name, phone, role, is_blocked, created_at", { count: "exact" })
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      // The demo account and real staff never see each other.
+      .eq("is_demo", admin.isDemo === true);
     if (role) query = query.eq("role", role);
     if (blocked !== null) query = query.eq("is_blocked", blocked === "true");
     // Keep only characters that can't change the meaning of the filter expression.

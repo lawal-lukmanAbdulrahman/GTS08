@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { getAuthenticatedUser } from "../../auth/utils";
 import { serverError } from "../../_lib/http";
 import { getOrComputeCached } from "../../_lib/storefront-cache";
+import { publicCache } from "../../_lib/public-cache";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -185,7 +186,7 @@ export async function GET(request: NextRequest) {
       const data = pool.slice(0, limit).map((s) => formatProduct(s.product));
       return NextResponse.json(
         { success: true, data, source: "global_trending" },
-        { headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=600" } }
+        { headers: { "Cache-Control": await publicCache("public, s-maxage=120, stale-while-revalidate=600") } }
       );
     }
 

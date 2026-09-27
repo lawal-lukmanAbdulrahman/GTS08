@@ -17,6 +17,8 @@ type Result = { data?: unknown; error?: unknown };
 let results: Record<string, Result> = {};
 const calls: Array<{ table: string; method: string; args: unknown[] }> = [];
 vi.mock("@gts/database", () => ({
+  getRequestDataMode: async () => "live",
+  runWithDataMode: (_mode: unknown, fn: () => unknown) => fn(),
   createServiceClient: () => ({
     from: (table: string) => {
       const stub: any = new Proxy(

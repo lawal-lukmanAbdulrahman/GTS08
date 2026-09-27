@@ -13,28 +13,27 @@ beforeEach(() => {
 });
 
 describe("DataModeBanner", () => {
-  it("warns staff that they are looking at test data", async () => {
+  it("marks the demo account's screens as demo data", async () => {
     localStorage.setItem("gts_token", "tok");
-    loadDataMode.mockResolvedValue({ ok: true, mode: "test", ready: true });
+    loadDataMode.mockResolvedValue({ ok: true, mode: "test" });
     render(<DataModeBanner />);
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/test data/i));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/demo data/i));
   });
 
   it("says nothing in live mode", async () => {
     localStorage.setItem("gts_token", "tok");
-    loadDataMode.mockResolvedValue({ ok: true, mode: "live", ready: true });
+    loadDataMode.mockResolvedValue({ ok: true, mode: "live" });
     render(<DataModeBanner />);
     await waitFor(() => expect(loadDataMode).toHaveBeenCalled());
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("says nothing before the migration, or if the mode can't be read", async () => {
+  it("says nothing if the mode can't be read", async () => {
     localStorage.setItem("gts_token", "tok");
-    loadDataMode.mockResolvedValue({ ok: true, mode: null, ready: false });
-    const { unmount } = render(<DataModeBanner />);
+    loadDataMode.mockResolvedValue({ ok: false, message: "x" });
+    render(<DataModeBanner />);
     await waitFor(() => expect(loadDataMode).toHaveBeenCalled());
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    unmount();
     loadDataMode.mockResolvedValue({ ok: false, message: "x" });
     render(<DataModeBanner />);
     await waitFor(() => expect(loadDataMode).toHaveBeenCalledTimes(2));

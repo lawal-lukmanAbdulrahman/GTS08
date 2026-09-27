@@ -5,6 +5,7 @@ import { requireAdmin } from "../../_lib/staff-access";
 import { serverError, dbError } from "../../_lib/http";
 
 import { getOrComputeCached, invalidateCache } from "../../_lib/storefront-cache";
+import { publicCache } from "../../_lib/public-cache";
 
 /**
  * GET /api/v1/storefront/hero
@@ -39,7 +40,7 @@ export async function GET() {
 
     return NextResponse.json(
       { success: true, data },
-      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=1200" } }
+      { headers: { "Cache-Control": await publicCache("public, s-maxage=300, stale-while-revalidate=1200") } }
     );
   } catch (err) {
     return serverError(err);

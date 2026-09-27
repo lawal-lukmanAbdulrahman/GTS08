@@ -3,7 +3,9 @@ import crypto from "crypto";
 import { makeDbStub } from "./_helpers/db-stub";
 
 const db = makeDbStub();
-vi.mock("@gts/database", () => ({ createServiceClient: () => db.client }));
+vi.mock("@gts/database", () => ({
+  getRequestDataMode: async () => "live",
+  runWithDataMode: (_mode: unknown, fn: () => unknown) => fn(), createServiceClient: () => db.client }));
 
 const mockAdjustAll = vi.fn();
 vi.mock("../app/api/v1/pos/_lib/inventory", () => ({ adjustAll: (...a: unknown[]) => mockAdjustAll(...a) }));

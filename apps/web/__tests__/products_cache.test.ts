@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { makeDbStub } from "./_helpers/db-stub";
 
 const db = makeDbStub();
-vi.mock("@gts/database", () => ({ createServiceClient: () => db.client }));
+vi.mock("@gts/database", () => ({ createServiceClient: () => db.client, getRequestDataMode: async () => "live" }));
 let user: { id: string } | null = null;
 vi.mock("../app/api/v1/auth/utils", async (orig) => ({ ...(await orig<typeof import("../app/api/v1/auth/utils")>()), getAuthenticatedUser: async () => user }));
 
@@ -21,6 +21,11 @@ describe("GET /products caching", () => {
   it("lets a shared cache keep the public list for a short while, since it is the same for everyone", async () => {
     const res = await GET(new NextRequest("http://localhost:3000/api/v1/products"));
     expect(res.headers.get("Cache-Control")).toBe("public, s-maxage=30, stale-while-revalidate=120");
+  });
+  it("tells the dashboard when each product was last changed", async () => {
+    db.results.products = { data: [{ id: "p1", name: "Shirt", slug: "shirt", base_price: 100, status: "active", created_at: "2026-09-01T00:00:00Z", updated_at: "2026-09-20T10:00:00Z", images: [], variants: [] }], error: null, count: 1 };
+    const { data } = await (await GET(new NextRequest("http://localhost:3000/api/v1/products"))).json();
+    expect(data[0].updated_at).toBe("2026-09-20T10:00:00Z");
   });
   it("never lets a shared cache keep an answer given to someone signed in (staff see cost prices)", async () => {
     user = { id: "u1" };

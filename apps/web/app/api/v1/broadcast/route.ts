@@ -478,7 +478,7 @@ async function syncToRealtimeAndDb(
         is_active: item.isActive,
         updated_at: item.updatedAt,
       },
-      { onConflict: "slot_key" }
+      { onConflict: "slot_key,is_test" }
     );
   } catch (e) {
     console.warn("DB content_slots persistence warning:", e);

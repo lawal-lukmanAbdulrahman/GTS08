@@ -40,7 +40,7 @@ export async function PUT(request: NextRequest, { params }: Context) {
     const client = createServiceClient();
     const { data, error } = await client
       .from("content_slots")
-      .upsert({ ...check.value, slot_key: key, updated_by: admin.user.id, updated_at: new Date().toISOString() }, { onConflict: "slot_key" })
+      .upsert({ ...check.value, slot_key: key, updated_by: admin.user.id, updated_at: new Date().toISOString() }, { onConflict: "slot_key,is_test" })
       .select(COLUMNS)
       .single();
     if (error) return serverError(new Error(error.message));

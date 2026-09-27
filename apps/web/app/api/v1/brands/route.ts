@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
           description: description || null,
           is_featured: Boolean(is_featured),
         },
-        { onConflict: "name" }
+        { onConflict: "name,is_test" }
       )
       .select()
       .single();

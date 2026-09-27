@@ -13,7 +13,7 @@ import { dbError } from "../../_lib/http";
 type Context = { params: Promise<{ id: string }> };
 
 const STAFF_COLUMNS =
-  "id, email, full_name, phone, role, is_blocked, created_at, employee_permissions!employee_permissions_user_id_fkey(*)";
+  "id, email, full_name, phone, role, is_blocked, is_demo, created_at, employee_permissions!employee_permissions_user_id_fkey(*)";
 
 interface StaffRow {
   id: string;
@@ -24,16 +24,18 @@ interface StaffRow {
   is_blocked: boolean;
   created_at: string;
   employee_permissions: Record<string, unknown> | Array<Record<string, unknown>> | null;
+  is_demo?: boolean;
 }
 
 function permissionRow(row: StaffRow): Record<string, unknown> | null {
   return Array.isArray(row.employee_permissions) ? (row.employee_permissions[0] ?? null) : row.employee_permissions;
 }
 
-async function loadStaff(id: string): Promise<StaffRow | null> {
+/** A staff member on the caller's side: the demo account and real staff never see each other's records. */
+async function loadStaff(id: string, callerIsDemo: boolean): Promise<StaffRow | null> {
   const { data } = await createServiceClient().from("users").select(STAFF_COLUMNS).eq("id", id).maybeSingle();
   const row = data as unknown as StaffRow | null;
-  return row && row.role !== "customer" ? row : null;
+  return row && row.role !== "customer" && (row.is_demo === true) === callerIsDemo ? row : null;
 }
 
 /** An admin's view of one staff member: profile and permissions, what they've sold, and what they've done. */
@@ -48,7 +50,7 @@ export async function GET(request: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "range must be today, week or month.", code: "INVALID_RANGE" }, { status: 400 });
   }
 
-  const staff = await loadStaff(id);
+  const staff = await loadStaff(id, admin.isDemo === true);
   if (!staff) return NextResponse.json({ error: "Staff member not found.", code: "NOT_FOUND" }, { status: 404 });
 
   const serviceClient = createServiceClient();
@@ -115,7 +117,7 @@ export async function PATCH(request: NextRequest, { params }: Context) {
     return NextResponse.json({ error: "Nothing to update.", code: "NOTHING_TO_UPDATE" }, { status: 400 });
   }
 
-  const target = await loadStaff(id);
+  const target = await loadStaff(id, admin.isDemo === true);
   if (!target) {
     // loadStaff hides customers as not-found; distinguish them for a clearer message.
     const { data } = await createServiceClient().from("users").select("role").eq("id", id).maybeSingle();

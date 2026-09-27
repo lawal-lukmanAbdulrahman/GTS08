@@ -6,7 +6,6 @@ import { loadStoreDetails, saveStoreDetails } from "../../lib/store-settings-api
 import StoreSettingsForm, { type StoreDetails } from "./store-settings-form";
 import DataModeCard from "./data-mode-card";
 import EmailStatusCard from "./email-status-card";
-import { getSessionUser } from "../../lib/session";
 
 export default function AdminSettingsPage() {
   const [details, setDetails] = useState<StoreDetails | null>(null);
@@ -52,7 +51,7 @@ export default function AdminSettingsPage() {
 
       <EmailStatusCard />
 
-      <DataModeCard canSwitch={getSessionUser()?.is_super_admin === true} onSwitched={() => window.location.reload()} />
+      <DataModeCard />
     </div>
   );
 }

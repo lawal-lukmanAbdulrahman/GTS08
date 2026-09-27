@@ -135,7 +135,7 @@ export async function PUT(request: NextRequest) {
       subheadline: "Storefront Sections Layout Configuration",
       is_active: true,
       updated_at: new Date().toISOString(),
-    });
+    }, { onConflict: "slot_key,is_test" });
     if (error) {
       return NextResponse.json({ success: false, error: "Could not save the layout. Try again." }, { status: 500 });
     }

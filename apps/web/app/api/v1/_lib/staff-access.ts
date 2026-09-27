@@ -6,6 +6,19 @@ import { getAuthenticatedUser } from "../auth/utils";
 const STAFF_ROLES = ["admin", "cashier", "inventory_staff"];
 const PASSWORD_CHANGE_PATHS = ["/api/v1/staff/me", "/api/v1/staff/me/password"];
 
+/**
+ * What the demo account may not change: things shared with the real shop (store
+ * details, staff accounts and permissions) and the demo login itself, which
+ * several people may use. Everything else it touches is demo data.
+ */
+const DEMO_READ_ONLY_PREFIXES = ["/api/v1/settings", "/api/v1/users", "/api/v1/staff/me"];
+
+function demoMayNotWrite(request: NextRequest): boolean {
+  if (request.method === "GET" || request.method === "HEAD") return false;
+  const path = new URL(request.url).pathname;
+  return DEMO_READ_ONLY_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
+}
+
 export interface StaffPermissions {
   can_process_pos: boolean;
   can_manage_inventory: boolean;
@@ -31,6 +44,8 @@ export interface StaffContext {
   phone: string | null;
   /** Effective permissions: an admin has every one implicitly. */
   permissions: StaffPermissions;
+  /** The demo account: sees demo data only and can't change anything shared with the real shop. */
+  isDemo: boolean;
 }
 
 export type StaffResult = ({ ok: true } & StaffContext) | { ok: false; response: NextResponse };
@@ -106,6 +121,7 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
     role: string;
     is_blocked?: boolean;
     is_super_admin?: boolean;
+    is_demo?: boolean;
     must_change_password?: boolean;
     employee_permissions?: Record<string, unknown> | Array<Record<string, unknown>> | null;
   };
@@ -116,6 +132,11 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
 
   if (row.is_blocked) return deny(403, "Your account access has been suspended.", "ACCOUNT_BLOCKED");
   if (!STAFF_ROLES.includes(row.role)) return deny(403, "This area is for staff only.", "FORBIDDEN");
+
+  const isDemo = row.is_demo === true;
+  if (isDemo && demoMayNotWrite(request)) {
+    return deny(403, "The demo account can't change store settings, staff accounts or its own login.", "DEMO_READ_ONLY");
+  }
 
   const mustChangePassword = row.must_change_password === true;
   // Until they choose their own password the only things they can reach are their profile and the change itself.
@@ -129,11 +150,13 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
     user: { id: user.id, email: user.email ?? null },
     role: row.role,
     isAdmin,
-    isSuperAdmin: isAdmin && row.is_super_admin === true,
+    // The demo login may be shared, so it can never hold the super admin's powers.
+    isSuperAdmin: isAdmin && !isDemo && row.is_super_admin === true,
     mustChangePassword,
     fullName: row.full_name ?? "",
     phone: row.phone ?? null,
     permissions: effectivePermissions(permissionRow, isAdmin),
+    isDemo,
   };
 }
 

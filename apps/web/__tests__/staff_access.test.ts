@@ -352,3 +352,51 @@ describe("a staff account that must change its one-time password", () => {
     expect((await requireStaff(at("/api/v1/pos/orders"))).ok).toBe(true);
   });
 });
+
+describe("the demo account is sandboxed", () => {
+  const at = (method: string, path: string) => new NextRequest(`http://localhost:3000${path}`, { method });
+  beforeEach(() => {
+    mockGetUser.mockReset().mockResolvedValue({ id: "d1", email: "demo@gts.ng" });
+    profile({ role: "admin", is_demo: true }, null);
+  });
+
+  it("says it is the demo account", async () => {
+    const r = await requireStaff(at("GET", "/api/v1/orders"));
+    expect(r.ok && r.isDemo).toBe(true);
+  });
+
+  it.each([
+    ["PATCH", "/api/v1/settings"],
+    ["POST", "/api/v1/settings/email"],
+    ["PATCH", "/api/v1/users/u2"],
+    ["POST", "/api/v1/users/staff"],
+    ["PATCH", "/api/v1/staff/me"],
+    ["POST", "/api/v1/staff/me/password"],
+  ])("cannot %s %s: it is shared with the real shop", async (method, path) => {
+    await denied(requireStaff(at(method, path)), 403, "DEMO_READ_ONLY");
+  });
+
+  it.each([
+    ["GET", "/api/v1/settings/email"],
+    ["GET", "/api/v1/users/staff"],
+    ["POST", "/api/v1/pos/orders"],
+    ["PATCH", "/api/v1/orders/o1/status"],
+    ["POST", "/api/v1/products"],
+    ["PUT", "/api/v1/storefront/sections"],
+  ])("can still %s %s (demo data)", async (method, path) => {
+    expect((await requireStaff(at(method, path))).ok).toBe(true);
+  });
+
+  it("does not touch a real admin", async () => {
+    profile({ role: "admin", is_demo: false }, null);
+    expect((await requireStaff(at("PATCH", "/api/v1/settings"))).ok).toBe(true);
+    const r = await requireStaff(at("GET", "/api/v1/orders"));
+    expect(r.ok && r.isDemo).toBe(false);
+  });
+
+  it("cannot be the super admin, whatever the database says", async () => {
+    profile({ role: "admin", is_demo: true, is_super_admin: true }, null);
+    const r = await requireStaff(at("GET", "/api/v1/orders"));
+    expect(r.ok && r.isSuperAdmin).toBe(false);
+  });
+});

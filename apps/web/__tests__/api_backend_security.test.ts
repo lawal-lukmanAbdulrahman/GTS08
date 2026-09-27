@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 // Mock Supabase Database Module
 vi.mock("@gts/database", () => {
   return {
+    getRequestDataMode: async () => "live",
     createServerClient: vi.fn().mockImplementation(async () => ({
       auth: {
         getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),

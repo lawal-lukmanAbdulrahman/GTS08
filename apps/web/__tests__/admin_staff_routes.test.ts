@@ -117,6 +117,26 @@ describe("GET /api/v1/users/:id (admin views a staff member's record)", () => {
   });
 });
 
+describe("the demo account and real staff can't see each other's records", () => {
+  beforeEach(() => {
+    mockRequireAdmin.mockReset();
+    results = {};
+    calls.length = 0;
+  });
+
+  it("the demo account gets 'not found' for a real staff member", async () => {
+    mockRequireAdmin.mockResolvedValue({ ...ADMIN, isDemo: true });
+    results.users = { data: { ...CASHIER_ROW, is_demo: false }, error: null };
+    expect((await GET(get(), ctx())).status).toBe(404);
+  });
+
+  it("a real admin gets 'not found' for the demo account", async () => {
+    mockRequireAdmin.mockResolvedValue({ ...ADMIN, isDemo: false });
+    results.users = { data: { ...CASHIER_ROW, role: "admin", is_demo: true }, error: null };
+    expect((await GET(get(), ctx())).status).toBe(404);
+  });
+});
+
 describe("PATCH /api/v1/users/:id (grant, revoke, block)", () => {
   beforeEach(() => {
     results.employee_permissions = { data: { user_id: "e4774cdd-a079-4f86-814e-8b9140bb6db4", can_process_pos: true, can_void_orders: false, can_apply_discounts: true }, error: null };
