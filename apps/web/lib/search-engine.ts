@@ -657,7 +657,7 @@ export class ProductSearchEngine {
     const effectiveInStockOnly = options?.inStockOnly ?? intent.inStockOnly;
     const effectiveColors = options?.colors ?? (intent.colors.length > 0 ? intent.colors : null);
     const effectiveCategory = options?.category ?? intent.category;
-    let searchTerms = intent.terms;
+    const searchTerms = intent.terms;
 
     // Expand search terms with synonyms
     const expandedTerms: string[] = [...searchTerms];
