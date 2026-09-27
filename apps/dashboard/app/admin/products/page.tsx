@@ -1,5 +1,6 @@
 "use client";
 
+import { formatWAT } from "@gts/utils";
 import { API_BASE } from "../../lib/api-base";
 import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
@@ -28,6 +29,8 @@ export interface ProductItem {
   has_low_stock: boolean;
   total_quantity?: number;
   is_featured?: boolean;
+  created_at?: string;
+  updated_at?: string;
   primary_image?: { cloudinary_id: string; alt?: string };
   category?: { id?: string; name: string; slug: string };
   tags?: string[];
@@ -386,6 +389,8 @@ export default function AdminProductsPage() {
   };
 
   const formatNaira = (kobo: number) => "₦" + (kobo / 100).toLocaleString("en-NG");
+  /** "20 Sep 2026, 10:30 am" in Lagos time, or a dash when it isn't known. */
+  const describeUpdated = (iso: string | undefined) => (iso ? formatWAT(iso) : "—");
 
   // Dynamic available categories and brands for filter menu
   const availableCategories = useMemo(() => {
@@ -502,26 +507,9 @@ export default function AdminProductsPage() {
   const _inStockCount = products.filter((p) => p.status !== "draft" && p.in_stock).length;
   const lowStockCount = products.filter((p) => p.status !== "draft" && p.has_low_stock).length;
   const outOfStockCount = products.filter((p) => p.status !== "draft" && !p.in_stock).length;
-  const _avgMargin =
-    products.filter((p) => p.margin_pct !== null && p.margin_pct !== undefined).length > 0
-      ? Math.round(
-          products
-            .filter((p) => p.margin_pct !== null && p.margin_pct !== undefined)
-            .reduce((acc, p) => acc + (p.margin_pct || 0), 0) /
-            products.filter((p) => p.margin_pct !== null && p.margin_pct !== undefined).length
-        )
-      : 58;
-
-  // Calculate total orders
-  const _totalOrdersCount = products.length > 0
-    ? products.reduce((acc, p) => acc + (p.total_sold || 0), 0) || 142
-    : 142;
-
-  // Calculate total inventory revenue value in Naira
-  const totalRevenueNaira = products.length > 0
-    ? Math.round(products.reduce((acc, p) => acc + (p.base_price > 100000 ? p.base_price / 100 : p.base_price || 0), 0))
-    : 84320;
-  const formattedRevenue = "₦" + (totalRevenueNaira > 0 ? totalRevenueNaira.toLocaleString("en-NG") : "84,320");
+  // What the stock on hand is worth at its selling price (kobo).
+  const stockUnits = products.reduce((acc, p) => acc + (p.total_quantity ?? 0), 0);
+  const stockValueKobo = products.reduce((acc, p) => acc + p.base_price * (p.total_quantity ?? 0), 0);
 
   return (
     <div className="px-4 pt-3.5 pb-6 sm:px-6 lg:px-8 lg:pt-3.5 space-y-4 max-w-[1600px] mx-auto font-sans transition-colors duration-200">
@@ -668,13 +656,13 @@ export default function AdminProductsPage() {
         >
           <div className="relative z-10 space-y-1">
             <span className="text-xs font-normal text-gray-500 dark:text-gray-400 block font-sans">
-              Total Revenue Value
+              Stock Value
             </span>
             {loading ? (
               <div className="h-8 w-32 bg-gray-200 dark:bg-[#2F2F2F] rounded-md animate-pulse my-0.5" />
             ) : (
               <p className="text-2xl sm:text-3xl font-bold tracking-tight text-[#010101] dark:text-white font-sans truncate">
-                {formattedRevenue}
+                <span data-testid="card-stock-value">{formatNaira(stockValueKobo)}</span>
               </p>
             )}
           </div>
@@ -682,7 +670,7 @@ export default function AdminProductsPage() {
             <div className="h-3.5 w-32 bg-gray-200 dark:bg-[#2F2F2F] rounded-md animate-pulse relative z-10" />
           ) : (
             <div className="relative z-10 font-mono text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              +12.5% vs last month
+              At selling price · {stockUnits.toLocaleString()} units
             </div>
           )}
 
@@ -1124,13 +1112,13 @@ export default function AdminProductsPage() {
                     </td>
                   </tr>
                 ) : (
-                  paginatedProducts.map((p, idx) => {
+                  paginatedProducts.map((p) => {
                     const primaryImgUrl = p.primary_image?.cloudinary_id || "/products/denim_jacket.png";
                     const isSelected = selectedProducts.includes(p.id);
 
                     // Formatted updated time string & stock status calculation
-                    const updatedTimeStr = idx % 2 === 0 ? "Today at 1:23pm" : idx % 3 === 0 ? "Today at 3:50pm" : "Yesterday at 4:15pm";
-                    const stockQty = p.total_quantity !== undefined ? p.total_quantity : p.in_stock ? (idx % 2 === 0 ? 4 : 12) : 0;
+                    const updatedTimeStr = describeUpdated(p.updated_at ?? p.created_at);
+                    const stockQty = p.total_quantity ?? 0;
                     const _warehouseStockStr = stockQty === 0 ? "Out of Stock" : stockQty <= 5 ? `${stockQty} Low Stock` : `${stockQty} in Stock`;
                     const _stockColorClass = stockQty === 0 ? "text-red-600 dark:text-red-400 font-semibold" : stockQty <= 5 ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-gray-600 dark:text-gray-300 font-medium";
 

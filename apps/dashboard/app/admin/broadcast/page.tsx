@@ -378,11 +378,12 @@ export default function AdminBroadcastPage() {
   const totalImpressions = broadcasts.reduce((acc, b) => acc + (b.analytics?.impressions || 0), 0);
   const totalUniqueVisitors = broadcasts.reduce((acc, b) => acc + (b.analytics?.uniqueVisitors || 0), 0);
   const totalClicks = broadcasts.reduce((acc, b) => acc + (b.analytics?.clicks || 0), 0);
-  const overallCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 13.5;
+  // No invented figures: with nothing recorded, the rate and attention span are 0.
+  const overallCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
   const avgAttention =
     broadcasts.length > 0
       ? broadcasts.reduce((acc, b) => acc + (b.analytics?.avgAttentionSeconds || 0), 0) / broadcasts.length
-      : 6.6;
+      : 0;
 
   // Drawer handlers
   const handleOpenDrawer = (item: BroadcastItem) => {
