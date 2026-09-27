@@ -8,6 +8,7 @@ import { useAuth } from "./auth-context";
 import { authenticateWithPasskey } from "./auth/passkey-client";
 import { checkPasskeySupport } from "./auth/webauthn-utils";
 import { PinInput } from "./auth/pin-input";
+import DemoStoreButton from "./demo-store-button";
 
 // ── 4 Auto-advancing Story Items for GTS (E-Commerce Marketplace) ──
 const STORIES = [
@@ -738,6 +739,9 @@ export function AuthModal() {
                       )}
                     </button>
                   )}
+
+                  {/* One-click demo (demo data only), when offered */}
+                  {mode === "login" && <DemoStoreButton />}
                 </form>
               </div>
 

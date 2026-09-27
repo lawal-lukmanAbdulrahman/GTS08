@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { API_BASE } from "../lib/api-base";
-import { useState, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signOutMessage } from "../lib/session";
+import { demoLoginAvailable, signInToDemo } from "../lib/demo-login";
 
 /**
  * Prevents and sanitizes input parameters against SQL Injection attacks and malicious payloads.
@@ -43,6 +44,28 @@ function LoginForm() {
 
   // Shaking field state for weighted tactile jiggle feedback
   const [shakingField, setShakingField] = useState<"email" | "password" | "all" | null>(null);
+
+  // The one-click demo (demo data only), when the server offers it.
+  const [demoOffered, setDemoOffered] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    demoLoginAvailable().then((on) => {
+      if (!cancelled) setDemoOffered(on);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const openDemo = async () => {
+    setGeneralError(null);
+    setDemoLoading(true);
+    const r = await signInToDemo();
+    setDemoLoading(false);
+    if (r.ok) router.push(r.home);
+    else setGeneralError(r.message);
+  };
 
   const heroBuildingImg = "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=1600&auto=format&fit=crop";
 
@@ -331,6 +354,24 @@ function LoginForm() {
                 {loading ? "Authenticating..." : "Login to Terminal →"}
               </button>
             </form>
+
+            {demoOffered && (
+              <div className="mt-4 space-y-2">
+                <div className="relative flex items-center justify-center">
+                  <div className="border-t border-gray-200 w-full" />
+                  <span className="absolute bg-white px-3 text-[11px] font-semibold text-gray-400">or</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={openDemo}
+                  disabled={demoLoading || loading}
+                  className="w-full rounded-full border-2 border-[#EDCF5D] bg-[#FFF8DC] text-[#010101] py-3 font-bold text-xs sm:text-sm hover:bg-[#EDCF5D] transition-all disabled:opacity-50"
+                >
+                  {demoLoading ? "Opening the demo..." : "Try the demo"}
+                </button>
+                <p className="text-[11px] text-gray-500 text-center">Explore the app with sample products, orders and customers. Nothing you do affects the real shop.</p>
+              </div>
+            )}
           </div>
 
           {/* Footer Info */}

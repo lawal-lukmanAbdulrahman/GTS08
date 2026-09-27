@@ -37,6 +37,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
 
   // ── auth
   "auth/delete-account": { POST: "session" },
+  "auth/demo-login": { GET: "public", POST: "public" }, // opens the sandboxed demo account; off unless DEMO_LOGIN_ENABLED=true, rate limited
   "auth/forgot-password": { POST: "public" }, // emails a reset link; rate limited, never reveals whether the address has an account
   "auth/login": { POST: "public" }, // credentials endpoint; rate limited
   "auth/logout": { POST: "session" },

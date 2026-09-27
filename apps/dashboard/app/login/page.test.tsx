@@ -5,12 +5,22 @@ import "@testing-library/jest-dom";
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }), useSearchParams: () => new URLSearchParams("") }));
 
+const demoAvailable = vi.fn();
+const signInToDemo = vi.fn();
+vi.mock("../lib/demo-login", async (orig) => ({
+  ...(await orig<typeof import("../lib/demo-login")>()),
+  demoLoginAvailable: () => demoAvailable(),
+  signInToDemo: () => signInToDemo(),
+}));
+
 import LoginPage from "./page";
 
 const fetchMock = vi.fn();
 beforeEach(() => {
   push.mockReset();
   fetchMock.mockReset();
+  demoAvailable.mockReset().mockResolvedValue(false);
+  signInToDemo.mockReset();
   vi.stubGlobal("fetch", fetchMock);
 });
 
@@ -41,5 +51,27 @@ describe("Staff sign-in", () => {
   it("offers a way to reset a forgotten password", () => {
     render(<LoginPage />);
     expect(screen.getByRole("link", { name: /forgot password/i })).toHaveAttribute("href", "/forgot-password");
+  });
+
+  it("offers a one-click demo when the server allows it, and opens the dashboard", async () => {
+    demoAvailable.mockResolvedValue(true);
+    signInToDemo.mockResolvedValue({ ok: true, home: "/admin" });
+    render(<LoginPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /try the demo/i }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/admin"));
+  });
+
+  it("hides the demo button when the demo is switched off", async () => {
+    render(<LoginPage />);
+    await waitFor(() => expect(demoAvailable).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: /try the demo/i })).not.toBeInTheDocument();
+  });
+
+  it("shows why the demo couldn't open", async () => {
+    demoAvailable.mockResolvedValue(true);
+    signInToDemo.mockResolvedValue({ ok: false, message: "The demo account hasn't been set up yet." });
+    render(<LoginPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /try the demo/i }));
+    expect(await screen.findByText(/hasn't been set up/i)).toBeInTheDocument();
   });
 });
