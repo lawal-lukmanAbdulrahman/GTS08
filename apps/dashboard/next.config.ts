@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { apiProxyTarget } from "./app/lib/api-base";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false, // don't announce the framework to every visitor
@@ -24,16 +25,12 @@ const nextConfig: NextConfig = {
     ],
   },
   async rewrites() {
-    const apiOrigin = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000")
-      .replace(/\/+$/, "")
-      .replace(/\/api\/v1\/?$/, "")
-      .replace(/\/api\/?$/, "");
     return [
       {
-        // Proxy API calls to the web app in local development.
-        // In production, configure this at the infrastructure level (e.g. reverse proxy).
+        // Every API call from the browser goes through the dashboard's own origin (see app/lib/api-base.ts),
+        // so it is same-origin and CORS never applies. NEXT_PUBLIC_API_URL must be set when this is built.
         source: "/api/:path*",
-        destination: `${apiOrigin}/api/:path*`,
+        destination: `${apiProxyTarget(process.env.NEXT_PUBLIC_API_URL)}/api/:path*`,
       },
     ];
   },

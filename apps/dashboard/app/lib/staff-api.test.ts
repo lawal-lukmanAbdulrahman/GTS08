@@ -29,7 +29,7 @@ describe("apiCall", () => {
     const r = await apiCall<{ hello: number }>("/staff/me");
     expect(r).toEqual({ ok: true, status: 200, data: { hello: 1 } });
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe("http://localhost:3000/api/v1/staff/me");
+    expect(url).toBe("/api/v1/staff/me");
     expect(init.headers.Authorization).toBe("Bearer tok123");
   });
 

@@ -1,10 +1,21 @@
 /**
- * Where the GTS API lives. Set NEXT_PUBLIC_API_URL (origin only, no path) when
- * it isn't on localhost:3000: another project may hold that port in dev, and
- * production points at the real host.
+ * Where the dashboard sends API calls.
+ *
+ * The browser always calls the dashboard's own origin (`/api/v1/...`), and
+ * next.config.ts rewrites `/api/*` to the real API. Calls are therefore
+ * same-origin: CORS never applies, so a new deployment address (a Vercel
+ * preview, a custom domain) can't break sign-in by missing from an allowlist.
  */
-export const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000")
-  .replace(/\/+$/, "")
-  .replace(/\/api\/v1\/?$/, "")
-  .replace(/\/api\/?$/, "");
-export const API_BASE = `${API_ORIGIN}/api/v1`;
+export const API_BASE = "/api/v1";
+
+/**
+ * The API's origin for the proxy, from NEXT_PUBLIC_API_URL (origin only; a
+ * trailing slash or /api/v1 suffix is tolerated). Read by next.config.ts when
+ * the dashboard is built, so it must be set before the build.
+ */
+export function apiProxyTarget(configured: string | undefined): string {
+  return (configured || "http://localhost:3002")
+    .replace(/\/+$/, "")
+    .replace(/\/api\/v1\/?$/, "")
+    .replace(/\/api\/?$/, "");
+}

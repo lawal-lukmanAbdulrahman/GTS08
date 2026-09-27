@@ -29,6 +29,12 @@ export function middleware(request: NextRequest) {
   const token = request.cookies.get("gts_access_token")?.value;
   const role = request.cookies.get("gts_user_role")?.value;
 
+  // API calls are proxied to the API (next.config.ts rewrites), which checks the caller itself.
+  // Redirecting them to /login would stop sign-in from ever reaching the API.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
   // Allow static assets, images, and public files
   if (
     pathname.startsWith("/_next") ||
