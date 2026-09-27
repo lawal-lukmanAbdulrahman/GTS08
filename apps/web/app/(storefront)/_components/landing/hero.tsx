@@ -56,222 +56,6 @@ function getHeroEligibleVariants(product: HeroProduct): ColorVariant[] {
   return eligible.length > 0 ? eligible : [product.variants[0]!];
 }
 
-// ─── Product Data ─────────────────────────────────────────────────────────────
-const HERO_PRODUCTS: HeroProduct[] = [
-  {
-    id: "air-jordan",
-    slug: "air-jordan-1",
-    headline: "Air Jordan\nRetro 1",
-    tagline: "Classic court meets street culture",
-    price: "₦85,000",
-    originalPrice: "₦120,000",
-    badge: "30% OFF",
-    rating: 4.8,
-    reviews: "2.1k",
-    variants: [
-      {
-        id: "aj-blue",
-        colorName: "Royal Blue",
-        colorHex: "#1E3A8A",
-        image: "/products/hero/air_jordan_retro_1_blue.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #2A52C4 0%, #1A3678 20%, #0E2050 42%, #070F2C 62%, #030818 80%, #010510 100%)",
-        glowColor: "rgba(30, 58, 138, 0.65)",
-        edgeColor: "#010510",
-      },
-      {
-        id: "aj-brown",
-        colorName: "Mocha Brown",
-        colorHex: "#92400E",
-        image: "/products/hero/air_jordan_retro_1_brown.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #B45309 0%, #78350F 20%, #452006 42%, #221003 62%, #0E0802 80%, #060402 100%)",
-        glowColor: "rgba(120, 53, 15, 0.65)",
-        edgeColor: "#060402",
-      },
-      {
-        id: "aj-green",
-        colorName: "Forest Green",
-        colorHex: "#14532D",
-        image: "/products/hero/air_jordan_retro_1_green.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #166534 0%, #0F4024 20%, #082816 42%, #041408 62%, #020A04 80%, #010502 100%)",
-        glowColor: "rgba(20, 83, 45, 0.65)",
-        edgeColor: "#010502",
-      },
-    ],
-  },
-  {
-    id: "nexus-washer",
-    slug: "nexus-washing-machine",
-    headline: "Nexus V8 Pro\nSmart Washer",
-    tagline: "Eco Inverter Direct Drive with AI Fabric Care",
-    price: "₦480,000",
-    originalPrice: "₦550,000",
-    badge: "15% OFF",
-    rating: 4.9,
-    reviews: "142",
-    variants: [
-      {
-        id: "nw-green",
-        colorName: "Forest",
-        colorHex: "#15803D",
-        image: "/products/hero/nexus_washing_machine_green.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #3E7B5A 0%, #2A5C3E 20%, #1C4230 42%, #0E2419 62%, #08130E 80%, #040A07 100%)",
-        glowColor: "rgba(52, 105, 76, 0.65)",
-        edgeColor: "#040A07",
-      },
-      {
-        id: "nw-blue",
-        colorName: "Ocean",
-        colorHex: "#1D4ED8",
-        image: "/products/hero/nexus_washing_machine_blue.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #2E5E96 0%, #1A3A68 20%, #112848 42%, #0A1528 62%, #050C18 80%, #020610 100%)",
-        glowColor: "rgba(40, 80, 135, 0.65)",
-        edgeColor: "#020610",
-      },
-      {
-        id: "nw-grey",
-        colorName: "Slate",
-        colorHex: "#6B7280",
-        image: "/products/hero/nexus_washing_machine_grey.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #565F6C 0%, #333A44 20%, #222830 42%, #131820 62%, #080B10 80%, #040608 100%)",
-        glowColor: "rgba(90, 100, 115, 0.65)",
-        edgeColor: "#040608",
-      },
-      {
-        id: "nw-white",
-        colorName: "Pearl",
-        colorHex: "#CBD5E1",
-        image: "/products/hero/nexus_washing_machine_white.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #4E5968 0%, #2C3340 20%, #1E2535 42%, #111824 62%, #090E18 80%, #050810 100%)",
-        glowColor: "rgba(160, 168, 185, 0.55)",
-        edgeColor: "#050810",
-      },
-      {
-        id: "nw-yellow",
-        colorName: "Amber",
-        colorHex: "#B45309",
-        image: "/products/hero/nexus_washing_machine_yellow.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #B07820 0%, #6E4A0C 20%, #44290A 42%, #201203 62%, #0E0803 80%, #060402 100%)",
-        glowColor: "rgba(190, 140, 30, 0.65)",
-        edgeColor: "#060402",
-      },
-    ],
-  },
-  {
-    id: "pixel-10",
-    slug: "pixel-10",
-    headline: "Google Pixel\n10 Pro",
-    tagline: "Pro camera. Pro power. Pure Google.",
-    price: "₦620,000",
-    originalPrice: "₦720,000",
-    badge: "15% OFF",
-    rating: 4.9,
-    reviews: "1.8k",
-    variants: [
-      {
-        id: "p10-green",
-        colorName: "Matcha",
-        colorHex: "#166534",
-        image: "/products/hero/pixel_10_green.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #1A7A3E 0%, #0F4C26 20%, #082E18 42%, #041508 62%, #020A04 80%, #010502 100%)",
-        glowColor: "rgba(22, 101, 52, 0.65)",
-        edgeColor: "#010502",
-      },
-      {
-        id: "p10-metal",
-        colorName: "Titanium",
-        colorHex: "#64748B",
-        image: "/products/hero/pixel_10_metal.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #505E72 0%, #2E3844 20%, #1C2430 42%, #0E1318 62%, #080C12 80%, #040608 100%)",
-        glowColor: "rgba(80, 94, 115, 0.65)",
-        edgeColor: "#040608",
-      },
-      {
-        id: "p10-purple",
-        colorName: "Violet",
-        colorHex: "#6D28D9",
-        image: "/products/hero/pixel_10_purple.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #7C3AED 0%, #4C1D95 20%, #2E1260 42%, #160840 62%, #080424 80%, #04020E 100%)",
-        glowColor: "rgba(109, 40, 217, 0.65)",
-        edgeColor: "#04020E",
-      },
-      {
-        id: "p10-red",
-        colorName: "Crimson",
-        colorHex: "#991B1B",
-        image: "/products/hero/pixel_10_red.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #B91C1C 0%, #7F1D1D 20%, #4C0F0F 42%, #280808 62%, #140404 80%, #060102 100%)",
-        glowColor: "rgba(153, 27, 27, 0.65)",
-        edgeColor: "#060102",
-      },
-    ],
-  },
-  {
-    id: "samsung-fridge",
-    slug: "samsung-fridge",
-    headline: "Samsung French\nDoor Fridge",
-    tagline: "Smart cooling meets elegant design",
-    price: "₦750,000",
-    originalPrice: "₦940,000",
-    badge: "20% OFF",
-    rating: 4.8,
-    reviews: "1.1k",
-    variants: [
-      {
-        id: "sf-black",
-        colorName: "Matte Black",
-        colorHex: "#1F2937",
-        image: "/products/hero/samsung_fridge_black.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #252F3E 0%, #161E2A 20%, #0D1218 42%, #080B10 62%, #040608 80%, #020304 100%)",
-        glowColor: "rgba(31, 41, 55, 0.65)",
-        edgeColor: "#020304",
-      },
-      {
-        id: "sf-bronze",
-        colorName: "Bronze",
-        colorHex: "#92400E",
-        image: "/products/hero/samsung_fridge_bronze.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #A86018 0%, #6A3A0C 20%, #3E2208 42%, #1E1004 62%, #0E0802 80%, #060402 100%)",
-        glowColor: "rgba(146, 64, 14, 0.65)",
-        edgeColor: "#060402",
-      },
-      {
-        id: "sf-grey",
-        colorName: "Graphite",
-        colorHex: "#374151",
-        image: "/products/hero/samsung_fridge_grey.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #434E60 0%, #272F3C 20%, #181E28 42%, #0C1018 62%, #060810 80%, #030408 100%)",
-        glowColor: "rgba(55, 65, 81, 0.65)",
-        edgeColor: "#030408",
-      },
-      {
-        id: "sf-white",
-        colorName: "Ivory",
-        colorHex: "#94A3B8",
-        image: "/products/hero/samsung_fridge_white.png",
-        radialGradient:
-          "radial-gradient(ellipse 90% 80% at 50% 52%, #536070 0%, #303A48 20%, #1C2430 42%, #0E1318 62%, #080C12 80%, #040608 100%)",
-        glowColor: "rgba(148, 163, 184, 0.55)",
-        edgeColor: "#040608",
-      },
-    ],
-  },
-];
-
 // ─── Helper: true modulo (always non-negative, unlike JS's `%`) ──────────────
 function mod(n: number, m: number) {
   if (m <= 0) return 0;
@@ -344,7 +128,7 @@ export function Hero() {
   /**
    * `centerStep` is a plain integer that only ever increments (next) or
    * decrements (prev) — it never wraps and nothing ever "recycles" it.
-   * The product shown at any virtual step is `HERO_PRODUCTS[mod(step, N)]`.
+   * The product shown at any virtual step is `productsList[mod(step, N)]`.
    *
    * Each rendered slide is keyed by its virtual step, not by product id.
    * Its role is derived every render as `OFFSET_ROLE[step - centerStep]`.
@@ -360,21 +144,30 @@ export function Hero() {
    * A slide can only ever reverse direction if the *user* reverses
    * direction, which is correct, expected behavior.
    */
-  const [productsList, setProductsList] = useState<HeroProduct[]>(HERO_PRODUCTS);
+  // Only real products: the admin's hero slides, else the shop's own products. Never sample data.
+  const [productsList, setProductsList] = useState<HeroProduct[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [centerStep, setCenterStep] = useState(2);
   const [isPaused, setIsPaused] = useState(false);
-  const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>(
-    Object.fromEntries(HERO_PRODUCTS.map((p) => [p.id, 0]))
-  );
+  const [selectedVariants, setSelectedVariants] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let mounted = true;
     async function loadHeroFromDb() {
       try {
         const res = await fetch("/api/v1/storefront/hero");
-        if (!res.ok) return;
-        const json = await res.json();
-        if (mounted && Array.isArray(json.data) && json.data.length > 0) {
+        const heroJson = res.ok ? await res.json() : null;
+        let items: Array<{ product: any }> = Array.isArray(heroJson?.data) ? heroJson.data : [];
+        if (items.length === 0) {
+          // No slides chosen: feature the shop's own products (whatever this visitor's data set holds).
+          const pr = await fetch("/api/v1/products?limit=5");
+          const prJson = pr.ok ? await pr.json() : null;
+          items = (Array.isArray(prJson?.data) ? prJson.data : []).map((p: any) => ({
+            product: { ...p, images: (p.images ?? []).map((i: any) => ({ cloudinary_public_id: i.cloudinary_public_id ?? i.cloudinary_id })) },
+          }));
+        }
+        const json = { data: items };
+        if (mounted && json.data.length > 0) {
           const PALETTES = [
             {
               radialGradient: "radial-gradient(ellipse 90% 80% at 50% 52%, #2A52C4 0%, #1A3678 20%, #0E2050 42%, #070F2C 62%, #030818 80%, #010510 100%)",
@@ -456,8 +249,8 @@ export function Hero() {
                 ? `₦${(p.compare_at_price / 100).toLocaleString("en-NG")}`
                 : "",
               badge: discount,
-              rating: Number(p.average_rating || 4.9),
-              reviews: `${p.review_count || 120}`,
+              rating: Number(p.average_rating || 0),
+              reviews: `${p.review_count || 0}`,
               variants,
             };
           });
@@ -467,7 +260,9 @@ export function Hero() {
           }
         }
       } catch {
-        // silent fallback
+        // silent fallback: the welcome banner shows instead
+      } finally {
+        if (mounted) setLoaded(true);
       }
     }
     void loadHeroFromDb();
@@ -498,6 +293,8 @@ export function Hero() {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [isPaused, handleNext]);
+
+  if (productsList.length === 0) return <HeroWelcome loaded={loaded} />;
 
   const activeProduct = productsList[currentIndex] ?? productsList[0]!;
   const activeVariants = getHeroEligibleVariants(activeProduct);
@@ -733,8 +530,12 @@ export function Hero() {
                 </span>
               </div>
               <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-white/90 font-medium whitespace-nowrap">
-                <FiveStarRating rating={activeProduct.rating} />
-                <span className="text-white/60">({activeProduct.reviews})</span>
+                {activeProduct.reviews !== "0" && (
+                  <>
+                    <FiveStarRating rating={activeProduct.rating} />
+                    <span className="text-white/60">({activeProduct.reviews})</span>
+                  </>
+                )}
               </div>
             </motion.div>
           </AnimatePresence>
@@ -762,6 +563,29 @@ export function Hero() {
           ))}
         </div>
       </section>
+      </div>
+    </div>
+  );
+}
+/** Shown when the shop has no products to feature yet (and while loading): the brand, no invented items. */
+function HeroWelcome({ loaded }: { loaded: boolean }) {
+  return (
+    <div className="w-full px-3 md:px-4 pt-1 md:pt-2 bg-white flex flex-col box-border">
+      <div className="w-full max-w-[1240px] mx-auto">
+        <section
+          data-testid="hero-welcome"
+          aria-busy={!loaded}
+          className="relative w-full h-[52vh] sm:h-[430px] md:h-[460px] lg:h-[490px] min-h-[340px] max-h-[510px] overflow-hidden rounded-[18px] shadow-xl flex items-center justify-center text-center"
+          style={{ background: "radial-gradient(ellipse 90% 80% at 50% 52%, #3A3A3A 0%, #1C1C1C 45%, #0A0A0A 100%)" }}
+        >
+          {loaded && (
+            <div className="px-6 space-y-4">
+              <p className="text-[#EDCF5D] text-xs font-bold tracking-[0.3em] uppercase">GTS</p>
+              <h1 className="text-white text-3xl sm:text-5xl font-black tracking-tight">New collection coming soon</h1>
+              <p className="text-white/70 text-sm sm:text-base max-w-md mx-auto">We&apos;re getting the shelves ready. Check back shortly.</p>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
