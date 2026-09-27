@@ -936,7 +936,7 @@ export default function AdminProductsPage() {
                       type="checkbox"
                       checked={featuredOnly}
                       onChange={(e) => setFeaturedOnly(e.target.checked)}
-                      className="rounded border-gray-300 dark:border-[#444444] text-[#EDCF5D] focus:ring-0 cursor-pointer"
+                      className="w-[18px] h-[18px] min-w-[18px] min-h-[18px] rounded-[4px] border border-gray-300 dark:border-[#555] bg-white dark:bg-[#1E1E1E] accent-[#010101] dark:accent-[#EDCF5D] [color-scheme:light] dark:[color-scheme:dark] focus:ring-2 focus:ring-[#EDCF5D]/50 focus:ring-offset-0 cursor-pointer transition-colors shadow-2xs"
                     />
                     <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">
                       ★ Featured Products Only
@@ -1093,7 +1093,7 @@ export default function AdminProductsPage() {
                       type="checkbox"
                       checked={paginatedProducts.length > 0 && paginatedProducts.every((p) => selectedProducts.includes(p.id))}
                       onChange={handleSelectAll}
-                      className="rounded border-gray-300 dark:border-[#444444] text-[#EDCF5D] focus:ring-0 cursor-pointer"
+                      className="w-[18px] h-[18px] min-w-[18px] min-h-[18px] rounded-[4px] border border-gray-300 dark:border-[#555] bg-white dark:bg-[#1E1E1E] accent-[#010101] dark:accent-[#EDCF5D] [color-scheme:light] dark:[color-scheme:dark] focus:ring-2 focus:ring-[#EDCF5D]/50 focus:ring-offset-0 cursor-pointer transition-colors shadow-2xs"
                     />
                   </th>
                   <th className="px-3 py-3 font-semibold text-gray-500 dark:text-gray-400">Name</th>
@@ -1125,34 +1125,46 @@ export default function AdminProductsPage() {
                     return (
                       <tr
                         key={p.id}
-                        className={`hover:bg-gray-50/80 dark:hover:bg-[#222222]/60 transition-colors ${
+                        onClick={(e) => {
+                          const target = e.target as HTMLElement | null;
+                          if (target?.closest("button, a, input, select, textarea, [role='button'], [data-no-row-toggle]")) {
+                            return;
+                          }
+                          handleToggleSelect(p.id);
+                        }}
+                        className={`hover:bg-gray-50/80 dark:hover:bg-[#222222]/60 transition-colors cursor-pointer select-none ${
                           isSelected ? "bg-amber-500/5 dark:bg-[#EDCF5D]/5" : ""
                         }`}
                       >
                         {/* Checkbox */}
-                        <td className="pl-4 pr-2 py-3">
+                        <td className="pl-4 pr-2 py-3 w-10">
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => handleToggleSelect(p.id)}
-                            className="rounded border-gray-300 dark:border-[#444444] text-[#EDCF5D] focus:ring-0 cursor-pointer"
+                            className="w-[18px] h-[18px] min-w-[18px] min-h-[18px] rounded-[4px] border border-gray-300 dark:border-[#555] bg-white dark:bg-[#1E1E1E] accent-[#010101] dark:accent-[#EDCF5D] [color-scheme:light] dark:[color-scheme:dark] focus:ring-2 focus:ring-[#EDCF5D]/50 focus:ring-offset-0 cursor-pointer transition-colors shadow-2xs"
                           />
                         </td>
 
-                        {/* Name (Clickable Circular Avatar + Product Title) */}
+                        {/* Name (Clickable Circular Avatar Button + Product Title) */}
                         <td className="px-3 py-3">
-                          <div
-                            onClick={() => handleOpenInfoModal(p)}
-                            className="flex items-center gap-3 cursor-pointer group"
-                          >
-                            <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-[#222222] border border-gray-200 dark:border-[#333333] flex items-center justify-center shrink-0 overflow-hidden relative shadow-2xs group-hover:scale-105 transition-transform">
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenInfoModal(p);
+                              }}
+                              title="Click to view details"
+                              className="w-8 h-8 rounded-full bg-gray-100 dark:bg-[#222222] border border-gray-200 dark:border-[#333333] flex items-center justify-center shrink-0 overflow-hidden relative shadow-2xs hover:scale-105 transition-transform cursor-pointer"
+                            >
                               <img
                                 src={primaryImgUrl}
                                 alt={p.name}
                                 className="w-full h-full object-cover"
                               />
-                            </div>
-                            <span className="font-semibold text-gray-900 dark:text-white text-xs tracking-tight group-hover:text-[#EDCF5D] transition-colors">
+                            </button>
+                            <span className="font-semibold text-gray-900 dark:text-white text-xs tracking-tight transition-colors">
                               {p.name}
                             </span>
                           </div>

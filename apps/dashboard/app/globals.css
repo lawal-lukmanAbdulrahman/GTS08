@@ -8,7 +8,11 @@
 @layer base {
   html {
     scroll-behavior: smooth;
-    color-scheme: light dark;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   body {
@@ -23,6 +27,17 @@
   html.dark body {
     background-color: #1C1C1C;
     color: #FFFFFF;
+  }
+
+  /* Universal Dashboard Checkbox Theme */
+  input[type="checkbox"] {
+    accent-color: #010101;
+    color-scheme: light;
+  }
+
+  html.dark input[type="checkbox"] {
+    accent-color: #EDCF5D;
+    color-scheme: dark;
   }
 
   :focus-visible {

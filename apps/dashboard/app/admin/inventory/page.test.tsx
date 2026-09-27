@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
 vi.mock("next/link", () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
@@ -38,5 +38,60 @@ describe("Admin inventory page never shows invented stock", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
     expect(screen.queryByText("Cool back pack")).not.toBeInTheDocument();
+  });
+
+  it("checks the item checkbox when clicking any non-button part of the row", async () => {
+    const itemData = {
+      id: "inv-1",
+      variant_id: "var-1",
+      product_name: "Blue Oxford Shirt",
+      quantity: 20,
+      reserved_quantity: 0,
+      available_quantity: 20,
+      low_stock_threshold: 5,
+      unit_price: 1000000,
+      sku: "GTS-SHIRT-BLU",
+    };
+    fetchMock.mockResolvedValue(json({ data: [itemData] }));
+    render(<InventoryPage />);
+
+    await screen.findByText("Blue Oxford Shirt");
+    const checkboxes = screen.getAllByRole("checkbox");
+    const rowCheckbox = checkboxes[1]!;
+    expect(rowCheckbox).not.toBeChecked();
+
+    // Clicking the product name on the row toggles the checkbox
+    fireEvent.click(screen.getByText("Blue Oxford Shirt"));
+    expect(rowCheckbox).toBeChecked();
+
+    // Clicking again untoggles it
+    fireEvent.click(screen.getByText("Blue Oxford Shirt"));
+    expect(rowCheckbox).not.toBeChecked();
+  });
+
+  it("does not toggle the checkbox when clicking a button on the row", async () => {
+    const itemData = {
+      id: "inv-1",
+      variant_id: "var-1",
+      product_name: "Blue Oxford Shirt",
+      quantity: 20,
+      reserved_quantity: 0,
+      available_quantity: 20,
+      low_stock_threshold: 5,
+      unit_price: 1000000,
+      sku: "GTS-SHIRT-BLU",
+    };
+    fetchMock.mockResolvedValue(json({ data: [itemData] }));
+    render(<InventoryPage />);
+
+    await screen.findByText("Blue Oxford Shirt");
+    const checkboxes = screen.getAllByRole("checkbox");
+    const rowCheckbox = checkboxes[1]!;
+    expect(rowCheckbox).not.toBeChecked();
+
+    // Clicking threshold button opens threshold modal and does NOT check the box
+    fireEvent.click(screen.getByRole("button", { name: /≤ 5 units/i }));
+    expect(rowCheckbox).not.toBeChecked();
+    expect(screen.getByText(/Set Reorder Warning Threshold/i)).toBeInTheDocument();
   });
 });

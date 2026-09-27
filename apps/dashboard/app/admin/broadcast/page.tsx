@@ -1093,7 +1093,7 @@ export default function AdminBroadcastPage() {
                       type="checkbox"
                       checked={filteredBroadcasts.length > 0 && filteredBroadcasts.every((b) => selectedBroadcastIds.includes(b.id))}
                       onChange={handleSelectAll}
-                      className="rounded border-gray-300 dark:border-[#444444] text-[#EDCF5D] focus:ring-0 cursor-pointer"
+                      className="w-[18px] h-[18px] min-w-[18px] min-h-[18px] rounded-[4px] border border-gray-300 dark:border-[#555] bg-white dark:bg-[#1E1E1E] accent-[#010101] dark:accent-[#EDCF5D] [color-scheme:light] dark:[color-scheme:dark] focus:ring-2 focus:ring-[#EDCF5D]/50 focus:ring-offset-0 cursor-pointer transition-colors shadow-2xs"
                     />
                   </th>
                   <th className="px-3 py-3 font-semibold text-gray-500 dark:text-gray-400">Broadcast Creative</th>
@@ -1112,12 +1112,20 @@ export default function AdminBroadcastPage() {
                     onClick={() => handleOpenDrawer(item)}
                     className="hover:bg-gray-50/70 dark:hover:bg-[#202020] transition-colors cursor-pointer group"
                   >
-                    <td className="pl-4 pr-2 py-3 w-10" onClick={(e) => e.stopPropagation()}>
+                    <td
+                      className="pl-4 pr-2 py-3 w-10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if ((e.target as HTMLElement).tagName !== "INPUT") {
+                          handleToggleSelect(item.id);
+                        }
+                      }}
+                    >
                       <input
                         type="checkbox"
                         checked={selectedBroadcastIds.includes(item.id)}
                         onChange={() => handleToggleSelect(item.id)}
-                        className="rounded border-gray-300 dark:border-[#444444] text-[#EDCF5D] focus:ring-0 cursor-pointer"
+                        className="w-[18px] h-[18px] min-w-[18px] min-h-[18px] rounded-[4px] border border-gray-300 dark:border-[#555] bg-white dark:bg-[#1E1E1E] accent-[#010101] dark:accent-[#EDCF5D] [color-scheme:light] dark:[color-scheme:dark] focus:ring-2 focus:ring-[#EDCF5D]/50 focus:ring-offset-0 cursor-pointer transition-colors shadow-2xs"
                       />
                     </td>
                     {/* Creative & Title */}
