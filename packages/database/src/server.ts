@@ -39,7 +39,7 @@ export async function createServerClient() {
  * Service role client for server-only admin operations.
  * NEVER import this in client components or expose the key.
  *
- * Business tables show only the current Test/Live mode (migration 00017). Pass
+ * Business tables show only the current Test/Live mode (migration 00024). Pass
  * `allModes` for work that must reach records of either mode: the payment
  * webhook (a test order can be paid after the mode is switched) and the jobs
  * that release stock held by unpaid orders (inventory is shared).

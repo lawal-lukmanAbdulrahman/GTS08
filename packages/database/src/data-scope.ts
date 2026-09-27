@@ -1,7 +1,7 @@
 /**
  * Test / Live data isolation for the server (service-role) client.
  *
- * Business records carry an `is_test` flag (migration 00017) and settings.data_mode
+ * Business records carry an `is_test` flag (migration 00024) and settings.data_mode
  * says which side the shop is on. The service key bypasses row-level security, so
  * the app scopes its own reads and writes here, in one place: every query on a
  * business table gets `is_test=eq.<mode>` added before it leaves the server.
@@ -25,6 +25,9 @@ export const SCOPED_TABLES: readonly string[] = [
   "email_campaigns",
   "activity_logs",
   "stock_movements",
+  // Shopper activity: test browsing must not steer live recommendations.
+  "product_views",
+  "search_queries",
 ];
 
 const SETTINGS_ID = "00000000-0000-0000-0000-000000000001";
@@ -112,7 +115,7 @@ const reader = createDataModeReader({
       signal: AbortSignal.timeout(3000),
       cache: "no-store",
     });
-    // Before migration 00017 the column doesn't exist: no isolation yet, and nothing breaks.
+    // Before migration 00024 the column doesn't exist: no isolation yet, and nothing breaks.
     if (!res.ok) return null;
     const rows = (await res.json()) as Array<{ data_mode?: string }>;
     const value = rows[0]?.data_mode;
@@ -123,7 +126,7 @@ const reader = createDataModeReader({
 /** The fetch the server client uses. */
 export const scopedServerFetch: typeof fetch = createScopedFetch((...args) => fetch(...args), () => reader.get());
 
-/** The current mode (cached a few seconds). Null until migration 00017 is applied. */
+/** The current mode (cached a few seconds). Null until migration 00024 is applied. */
 export const getDataMode = () => reader.get();
 
 /** Call after changing the mode so this server sees it immediately rather than after the cache window. */

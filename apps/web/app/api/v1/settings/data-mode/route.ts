@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest) {
 
   const current = await getDataMode();
   if (!current) {
-    return NextResponse.json({ error: "The database needs migration 00017 before test and live data can be separated.", code: "MIGRATION_REQUIRED" }, { status: 409 });
+    return NextResponse.json({ error: "The database needs migration 00024 before test and live data can be separated.", code: "MIGRATION_REQUIRED" }, { status: 409 });
   }
   if (current === body.mode) return NextResponse.json({ data: { mode: current, ready: true } });
 

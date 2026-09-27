@@ -61,7 +61,7 @@ export default function DataModeCard({ canSwitch, onSwitched }: Props) {
       )}
       {state.kind === "unready" && (
         <p className="text-sm text-amber-700 dark:text-amber-400">
-          Test and live data aren't separated yet: the database needs migration 00017 (supabase/migrations/00017_test_data_isolation.sql) applied first.
+          Test and live data aren't separated yet: the database needs migration 00024 (supabase/migrations/00024_test_data_isolation.sql) applied first.
         </p>
       )}
 

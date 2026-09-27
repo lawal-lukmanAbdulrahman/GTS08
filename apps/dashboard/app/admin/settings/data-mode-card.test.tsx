@@ -58,7 +58,7 @@ describe("DataModeCard", () => {
   it("explains that the database needs the migration first", async () => {
     loadDataMode.mockResolvedValue({ ok: true, mode: null, ready: false });
     render(<DataModeCard canSwitch onSwitched={vi.fn()} />);
-    expect(await screen.findByText(/migration 00017/i)).toBeInTheDocument();
+    expect(await screen.findByText(/migration 00024/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /switch to/i })).not.toBeInTheDocument();
   });
 

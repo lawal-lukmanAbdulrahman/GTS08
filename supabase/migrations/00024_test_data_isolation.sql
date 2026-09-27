@@ -1,7 +1,7 @@
 -- Test / Live data isolation.
 --
 -- Every record that comes from running the business (orders, customers, tickets,
--- campaigns, logs...) carries an is_test flag. Everything that exists today is
+-- campaigns, logs, shopper browsing and searches...) carries an is_test flag. Everything that exists today is
 -- test data. settings.data_mode says which side the app is showing; the shop
 -- starts in 'live' mode, so it starts clean, and flipping to 'test' brings the
 -- old data back. Nothing is deleted.
@@ -39,7 +39,8 @@ BEGIN
     'orders', 'order_items', 'transactions', 'checkout_reservations', 'promo_code_uses',
     'customers', 'addresses',
     'support_tickets', 'ticket_messages', 'admin_notifications', 'email_campaigns',
-    'activity_logs', 'stock_movements'
+    'activity_logs', 'stock_movements',
+    'product_views', 'search_queries'
   ]
   LOOP
     -- A constant default backfills every existing row as test data without rewriting the table...

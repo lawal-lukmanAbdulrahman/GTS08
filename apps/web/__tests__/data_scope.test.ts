@@ -23,6 +23,12 @@ describe("scoped fetch", () => {
     expect(url.searchParams.get("status")).toBe("eq.paid");
   });
 
+  it.each(["product_views", "search_queries"])("hides test shopper activity (%s) from live recommendations", async (table) => {
+    const { scoped, calls } = harness("live");
+    await scoped(`${BASE}/rest/v1/${table}?select=product_id`);
+    expect(new URL(calls[0]!.url).searchParams.get("is_test")).toBe("eq.false");
+  });
+
   it("limits reads to test rows in test mode", async () => {
     const { scoped, calls } = harness("test");
     await scoped(`${BASE}/rest/v1/customers?select=id`);
@@ -70,7 +76,7 @@ describe("scoped fetch", () => {
 
   it("covers exactly the business tables", () => {
     expect([...SCOPED_TABLES].sort()).toEqual(
-      ["activity_logs", "addresses", "admin_notifications", "checkout_reservations", "customers", "email_campaigns", "order_items", "orders", "promo_code_uses", "stock_movements", "support_tickets", "ticket_messages", "transactions"].sort()
+      ["activity_logs", "addresses", "admin_notifications", "checkout_reservations", "customers", "email_campaigns", "order_items", "orders", "product_views", "promo_code_uses", "search_queries", "stock_movements", "support_tickets", "ticket_messages", "transactions"].sort()
     );
   });
 });
