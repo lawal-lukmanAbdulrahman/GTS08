@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { ProductItem } from "../_data/products";
 import { useCatalogue } from "./catalogue-context";
 import { AuthContext } from "./auth-context";
@@ -113,95 +113,101 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [hydrated, userId]);
 
-  const addToCart = (
-    product: ProductItem,
-    size?: string,
-    color?: string,
-    quantity: number = 1,
-    variantId?: string,
-    maxAvailable?: number
-  ): { ok: boolean; message?: string } => {
-    const defaultSize = size || (product.sizes && product.sizes[0]) || "Standard";
-    const defaultColor = color || (product.images && product.images[0]?.label) || "Default";
+  const addToCart = useCallback(
+    (
+      product: ProductItem,
+      size?: string,
+      color?: string,
+      quantity: number = 1,
+      variantId?: string,
+      maxAvailable?: number
+    ): { ok: boolean; message?: string } => {
+      const defaultSize = size || (product.sizes && product.sizes[0]) || "Standard";
+      const defaultColor = color || (product.images && product.images[0]?.label) || "Default";
 
-    // Resolve max available stock
-    let resolvedMax = maxAvailable;
-    if (resolvedMax === undefined && product.variants && product.variants.length > 0) {
-      const match = product.variants.find(
-        (v) => (variantId && v.id === variantId) ||
-               (v.size?.toLowerCase() === defaultSize.toLowerCase() && v.color?.toLowerCase() === defaultColor.toLowerCase())
-      ) || product.variants[0];
-      if (match) {
-        resolvedMax = match.available;
+      // Resolve max available stock
+      let resolvedMax = maxAvailable;
+      if (resolvedMax === undefined && product.variants && product.variants.length > 0) {
+        const match =
+          product.variants.find(
+            (v) =>
+              (variantId && v.id === variantId) ||
+              (v.size?.toLowerCase() === defaultSize.toLowerCase() &&
+                v.color?.toLowerCase() === defaultColor.toLowerCase())
+          ) || product.variants[0];
+        if (match) {
+          resolvedMax = match.available;
+        }
       }
-    }
-    if (resolvedMax === undefined && typeof product.availableStock === "number") {
-      resolvedMax = product.availableStock;
-    }
-    const capLimit = resolvedMax !== undefined ? Math.max(0, resolvedMax) : 999;
+      if (resolvedMax === undefined && typeof product.availableStock === "number") {
+        resolvedMax = product.availableStock;
+      }
+      const capLimit = resolvedMax !== undefined ? Math.max(0, resolvedMax) : 999;
 
-    if (capLimit <= 0) {
-      return { ok: false, message: "This item is currently out of stock." };
-    }
+      if (capLimit <= 0) {
+        return { ok: false, message: "This item is currently out of stock." };
+      }
 
-    let resultOk = true;
-    let resultMsg: string | undefined = undefined;
+      let resultOk = true;
+      let resultMsg: string | undefined = undefined;
 
-    setCartItems((prev) => {
-      const existingIndex = prev.findIndex(
-        (item) =>
-          item.product.id === product.id &&
-          item.size === defaultSize &&
-          item.color === defaultColor
-      );
+      setCartItems((prev) => {
+        const existingIndex = prev.findIndex(
+          (item) =>
+            item.product.id === product.id &&
+            item.size === defaultSize &&
+            item.color === defaultColor
+        );
 
-      if (existingIndex > -1) {
-        const updated = [...prev];
-        const existingItem = updated[existingIndex]!;
-        const desiredQty = existingItem.quantity + quantity;
-        const finalQty = Math.min(capLimit, desiredQty);
+        if (existingIndex > -1) {
+          const updated = [...prev];
+          const existingItem = updated[existingIndex]!;
+          const desiredQty = existingItem.quantity + quantity;
+          const finalQty = Math.min(capLimit, desiredQty);
 
-        if (desiredQty > capLimit) {
-          resultOk = false;
-          resultMsg = `Maximum available stock of ${capLimit} reached.`;
+          if (desiredQty > capLimit) {
+            resultOk = false;
+            resultMsg = `Maximum available stock of ${capLimit} reached.`;
+          }
+
+          updated[existingIndex] = {
+            ...existingItem,
+            quantity: finalQty,
+            maxAvailable: capLimit,
+            variantId: variantId || existingItem.variantId,
+          };
+          return updated;
         }
 
-        updated[existingIndex] = {
-          ...existingItem,
-          quantity: finalQty,
-          maxAvailable: capLimit,
-          variantId: variantId || existingItem.variantId,
-        };
-        return updated;
-      }
+        const initialQty = Math.min(capLimit, quantity);
+        if (quantity > capLimit) {
+          resultOk = false;
+          resultMsg = `Only ${capLimit} available in stock. Added ${initialQty} to your cart.`;
+        }
 
-      const initialQty = Math.min(capLimit, quantity);
-      if (quantity > capLimit) {
-        resultOk = false;
-        resultMsg = `Only ${capLimit} available in stock. Added ${initialQty} to your cart.`;
-      }
+        return [
+          ...prev,
+          {
+            product,
+            size: defaultSize,
+            color: defaultColor,
+            quantity: initialQty,
+            maxAvailable: capLimit,
+            variantId,
+          },
+        ];
+      });
 
-      return [
-        ...prev,
-        {
-          product,
-          size: defaultSize,
-          color: defaultColor,
-          quantity: initialQty,
-          maxAvailable: capLimit,
-          variantId,
-        },
-      ];
-    });
+      return { ok: resultOk, message: resultMsg };
+    },
+    []
+  );
 
-    return { ok: resultOk, message: resultMsg };
-  };
-
-  const removeFromCart = (index: number) => {
+  const removeFromCart = useCallback((index: number) => {
     setCartItems((prev) => prev.filter((_, i) => i !== index));
-  };
+  }, []);
 
-  const updateQuantity = (index: number, delta: number) => {
+  const updateQuantity = useCallback((index: number, delta: number) => {
     setCartItems((prev) =>
       prev.map((item, i) => {
         if (i === index) {
@@ -213,9 +219,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return item;
       })
     );
-  };
+  }, []);
 
-  const setQuantity = (index: number, quantity: number) => {
+  const setQuantity = useCallback((index: number, quantity: number) => {
     setCartItems((prev) =>
       prev.map((item, i) => {
         if (i === index) {
@@ -226,49 +232,67 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return item;
       })
     );
-  };
+  }, []);
 
-  const syncCartLimits = (
-    limits: Array<{ product_slug: string; size?: string | null; color?: string | null; available: number }>
-  ) => {
-    setCartItems((prev) =>
-      prev.map((item) => {
-        const match = limits.find(
-          (l) =>
-            l.product_slug === item.product.id &&
-            (l.size ?? "").toLowerCase() === (item.size ?? "").toLowerCase() &&
-            (l.color ?? "").toLowerCase() === (item.color ?? "").toLowerCase()
-        );
-        if (match) {
-          return {
-            ...item,
-            maxAvailable: match.available,
-          };
-        }
-        return item;
-      })
-    );
-  };
+  const syncCartLimits = useCallback(
+    (
+      limits: Array<{ product_slug: string; size?: string | null; color?: string | null; available: number }>
+    ) => {
+      setCartItems((prev) => {
+        let hasChanges = false;
+        const next = prev.map((item) => {
+          const match = limits.find(
+            (l) =>
+              l.product_slug === item.product.id &&
+              (l.size ?? "").toLowerCase() === (item.size ?? "").toLowerCase() &&
+              (l.color ?? "").toLowerCase() === (item.color ?? "").toLowerCase()
+          );
+          if (match && item.maxAvailable !== match.available) {
+            hasChanges = true;
+            return {
+              ...item,
+              maxAvailable: match.available,
+            };
+          }
+          return item;
+        });
+        return hasChanges ? next : prev;
+      });
+    },
+    []
+  );
 
-  const clearCart = () => {
+  const clearCart = useCallback(() => {
     setCartItems([]);
-  };
+  }, []);
 
   const totalItemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
+  const contextValue = useMemo(
+    () => ({
+      cartItems,
+      addToCart,
+      removeFromCart,
+      updateQuantity,
+      setQuantity,
+      syncCartLimits,
+      clearCart,
+      totalItemCount,
+    }),
+    [
+      cartItems,
+      addToCart,
+      removeFromCart,
+      updateQuantity,
+      setQuantity,
+      syncCartLimits,
+      clearCart,
+      totalItemCount,
+    ]
+  );
+
   return (
-    <CartContext.Provider
-      value={{
-        cartItems,
-        addToCart,
-        removeFromCart,
-        updateQuantity,
-        setQuantity,
-        syncCartLimits,
-        clearCart,
-        totalItemCount,
-      }}
-    >
+    <CartContext.Provider value={contextValue}>
       {children}
     </CartContext.Provider>
   );
