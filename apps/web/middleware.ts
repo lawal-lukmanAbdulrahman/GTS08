@@ -1,22 +1,22 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { consume, createRateLimitStore, detectAttackPayload, planBuckets, userIdFromAuthHeader } from "@gts/utils";
+import { isOriginAllowed as isOriginAllowedFor } from "./lib/cors";
 
 const rateLimitStore = createRateLimitStore({
   UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
   UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-// Allowed origins for CORS (Storefront, Staff Dashboard, & Staging/Production GTS domains)
-const ALLOWED_ORIGIN_PATTERNS = [
-  /^http:\/\/localhost:(3000|3001)$/,
-  /^https:\/\/(.*\.)?gts\.ng$/,
-  /^https:\/\/dashboard\.gts\.ng$/,
-];
-
+// Allowed origins for CORS: local dev, the real GTS domains, and whichever
+// hosts NEXT_PUBLIC_STOREFRONT_URL / NEXT_PUBLIC_DASHBOARD_URL are set to
+// (e.g. the actual Vercel deployment URLs), so those two settings are the
+// only place this ever needs updating.
 function isOriginAllowed(origin: string | null): boolean {
-  if (!origin) return false;
-  return ALLOWED_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin));
+  return isOriginAllowedFor(origin, {
+    NEXT_PUBLIC_STOREFRONT_URL: process.env.NEXT_PUBLIC_STOREFRONT_URL,
+    NEXT_PUBLIC_DASHBOARD_URL: process.env.NEXT_PUBLIC_DASHBOARD_URL,
+  });
 }
 
 // Content Security Policy directives
