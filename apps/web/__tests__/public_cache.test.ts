@@ -9,9 +9,9 @@ vi.mock("@gts/database", () => ({ getRequestDataMode: async () => mode }));
 import { publicCache } from "../app/api/v1/_lib/public-cache";
 
 describe("publicCache", () => {
-  it("lets a shared cache keep a live answer", async () => {
+  it("never lets a shared cache keep an answer: the CDN can't tell the demo account from a visitor, so it would serve one the other's data", async () => {
     mode = "live";
-    expect(await publicCache("public, s-maxage=30")).toBe("public, s-maxage=30");
+    expect(await publicCache("public, s-maxage=30")).toBe("private, no-store");
   });
   it("never lets a shared cache keep the demo account's answer, or real visitors would be served demo data", async () => {
     mode = "test";

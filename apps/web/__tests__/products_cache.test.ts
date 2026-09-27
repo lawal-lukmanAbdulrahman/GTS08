@@ -18,9 +18,9 @@ beforeEach(() => {
 });
 
 describe("GET /products caching", () => {
-  it("lets a shared cache keep the public list for a short while, since it is the same for everyone", async () => {
+  it("is not kept by a shared cache: the list differs between the demo account and everyone else", async () => {
     const res = await GET(new NextRequest("http://localhost:3000/api/v1/products"));
-    expect(res.headers.get("Cache-Control")).toBe("public, s-maxage=30, stale-while-revalidate=120");
+    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
   });
   it("tells the dashboard when each product was last changed", async () => {
     db.results.products = { data: [{ id: "p1", name: "Shirt", slug: "shirt", base_price: 100, status: "active", created_at: "2026-09-01T00:00:00Z", updated_at: "2026-09-20T10:00:00Z", images: [], variants: [] }], error: null, count: 1 };

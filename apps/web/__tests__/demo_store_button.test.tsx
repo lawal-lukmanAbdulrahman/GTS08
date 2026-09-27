@@ -16,8 +16,10 @@ describe("DemoStoreButton", () => {
     reply(true, new Response(JSON.stringify({ data: { session: { access_token: "a" } } }), { status: 200 }));
     const reload = vi.fn();
     render(<DemoStoreButton reload={reload} />);
+    sessionStorage.setItem("gts_catalogue_v1", "{}");
     fireEvent.click(await screen.findByRole("button", { name: /explore the demo store/i }));
     await waitFor(() => expect(reload).toHaveBeenCalled());
+    expect(sessionStorage.getItem("gts_catalogue_v1")).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/auth/demo-login", expect.objectContaining({ method: "POST" }));
   });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CATALOGUE_CACHE_KEY } from "./catalogue-context";
 
 /**
  * "Explore the demo store": signs into the demo account (demo products and
@@ -32,7 +33,15 @@ export default function DemoStoreButton({ reload = () => window.location.reload(
     setError(null);
     try {
       const res = await fetch("/api/v1/auth/demo-login", { method: "POST" });
-      if (res.ok) return reload();
+      if (res.ok) {
+        // The tab's copy of the catalogue belongs to the live shop: drop it so the demo catalogue loads.
+        try {
+          sessionStorage.removeItem(CATALOGUE_CACHE_KEY);
+        } catch {
+          // storage blocked: nothing cached to drop
+        }
+        return reload();
+      }
       setError(((await res.json().catch(() => null)) as { error?: string } | null)?.error || "The demo couldn't be opened. Please try again.");
     } catch {
       setError("We couldn't reach the server. Please check your connection and try again.");

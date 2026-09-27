@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@gts/database/client";
 import type { User } from "@supabase/supabase-js";
+import { CATALOGUE_CACHE_KEY } from "./catalogue-context";
 
 export interface CustomerAddress {
   id: string;
@@ -277,6 +278,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     document.cookie = "gts_user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     localStorage.removeItem("gts_user");
     localStorage.removeItem("gts_token");
+    // The cached catalogue belonged to the signed-in data set (e.g. the demo store).
+    try {
+      sessionStorage.removeItem(CATALOGUE_CACHE_KEY);
+    } catch {
+      // storage blocked
+    }
   };
 
   const refreshCustomer = async () => {

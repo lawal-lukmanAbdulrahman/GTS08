@@ -16,7 +16,9 @@ interface CatalogueContextType {
 const EMPTY: CatalogueContextType = { products: [], loading: false, error: null, getProduct: () => undefined };
 const CatalogueContext = createContext<CatalogueContextType>(EMPTY);
 
-const CACHE_KEY = "gts_catalogue_v1";
+/** The tab's cached copy of the catalogue. Cleared when the signed-in data set changes (demo sign-in, sign-out). */
+export const CATALOGUE_CACHE_KEY = "gts_catalogue_v1";
+const CACHE_KEY = CATALOGUE_CACHE_KEY;
 const CACHE_TTL_MS = 10 * 60_000;
 const CATALOGUE_URL = "/api/v1/products?limit=100";
 
