@@ -4,6 +4,10 @@ import { apiProxyTarget } from "./app/lib/api-base";
 const nextConfig: NextConfig = {
   poweredByHeader: false, // don't announce the framework to every visitor
   transpilePackages: ["@gts/ui", "@gts/utils", "@gts/types", "@gts/database"],
+  onDemandEntries: {
+    maxInactiveAge: 60 * 1000,
+    pagesBufferLength: 3,
+  },
   images: {
     remotePatterns: [
       {

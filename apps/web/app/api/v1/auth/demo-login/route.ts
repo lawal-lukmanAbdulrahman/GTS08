@@ -11,7 +11,12 @@ const store = createRateLimitStore({
 });
 
 /** Offered only when DEMO_LOGIN_ENABLED=true: anyone who can reach the sign-in page can then open the demo. */
-const enabled = () => process.env.DEMO_LOGIN_ENABLED?.trim().toLowerCase() === "true";
+const enabled = () => {
+  const envVal = process.env.DEMO_LOGIN_ENABLED?.trim().toLowerCase();
+  if (envVal === "true") return true;
+  if (envVal === "false") return false;
+  return process.env.NODE_ENV === "development";
+};
 
 /** Whether the "Try the demo" buttons should show. */
 export async function GET() {
