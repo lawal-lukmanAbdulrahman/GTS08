@@ -17,19 +17,26 @@ const EMPTY: CatalogueContextType = { products: [], loading: false, error: null,
 const CatalogueContext = createContext<CatalogueContextType>(EMPTY);
 
 /** The tab's cached copy of the catalogue. Cleared when the signed-in data set changes (demo sign-in, sign-out). */
-export const CATALOGUE_CACHE_KEY = "gts_catalogue_v2";
+export const CATALOGUE_CACHE_KEY = "gts_catalogue_v1";
 const CACHE_KEY = CATALOGUE_CACHE_KEY;
-const OLD_CACHE_KEY = "gts_catalogue_v1";
 const CACHE_TTL_MS = 10 * 60_000;
 const CATALOGUE_URL = "/api/v1/products?limit=100";
 
 function readCache(): ApiProduct[] | null {
   try {
-    sessionStorage.removeItem(OLD_CACHE_KEY);
     const raw = sessionStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const saved = JSON.parse(raw) as { at?: number; mode?: string; products?: ApiProduct[] };
-    return Array.isArray(saved.products) && typeof saved.at === "number" && Date.now() - saved.at < CACHE_TTL_MS ? saved.products : null;
+    if (!Array.isArray(saved.products) || typeof saved.at !== "number" || Date.now() - saved.at >= CACHE_TTL_MS) {
+      return null;
+    }
+    // Discard cache if it contains test/mock products
+    const hasTestItems = saved.products.some((p) => (p as { is_test?: boolean }).is_test === true);
+    if (hasTestItems) {
+      sessionStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+    return saved.products;
   } catch {
     return null;
   }
