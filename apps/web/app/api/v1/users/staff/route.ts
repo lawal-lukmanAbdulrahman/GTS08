@@ -22,7 +22,8 @@ export async function GET(request: NextRequest) {
       .select("id, email, full_name, role, is_blocked, created_at")
       .neq("role", "customer")
       // The demo account and real staff never see each other.
-      .eq("is_demo", access.isDemo === true);
+      .eq("is_demo", access.isDemo === true)
+      .is("removed_at", null);
 
     if (error) {
       return dbError(error, "DATABASE_ERROR", 500);

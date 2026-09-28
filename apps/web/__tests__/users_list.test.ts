@@ -49,6 +49,10 @@ describe("GET /users (admin)", () => {
     await call();
     expect(db.calls.users!.find((c) => c.method === "eq")!.args).toEqual(["is_demo", true]);
   });
+  it("leaves out staff who were removed", async () => {
+    await call();
+    expect(db.calls.users!.some((c) => c.method === "is" && c.args[0] === "removed_at" && c.args[1] === null)).toBe(true);
+  });
   it("searches name and email safely", async () => {
     await call("?q=ada%25,role.eq.admin");
     const or = db.called("users", "or")!.args[0] as string;

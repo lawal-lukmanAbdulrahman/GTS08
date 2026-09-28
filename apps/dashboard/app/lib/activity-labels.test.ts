@@ -55,6 +55,10 @@ describe("describeActivity", () => {
   it("describes account actions without exposing anything sensitive", () => {
     expect(describeActivity(entry("auth.login")).title).toBe("Signed in");
     expect(describeActivity(entry("auth.logout")).title).toBe("Signed out");
+    expect(describeActivity(entry("profile.update", { fields: ["full_name", "avatar_cloudinary_id"] }))).toEqual({ title: "Updated their profile", detail: "Name, photo" });
+    expect(describeActivity(entry("staff.remove"))).toEqual({ title: "Removed a staff account" });
+    expect(describeActivity(entry("staff.block", { blocked: true })).title).toBe("Blocked a staff account");
+    expect(describeActivity(entry("staff.block", { blocked: false })).title).toBe("Unblocked a staff account");
     expect(describeActivity(entry("auth.login_failed", { reason: "wrong_password" }))).toEqual({ title: "Failed sign-in attempt", detail: "Wrong password" });
     expect(describeActivity(entry("auth.login_failed", { reason: "pin_not_allowed_for_staff" })).detail).toBe("A PIN can't be used to sign in to a staff account");
     expect(describeActivity(entry("auth.login_blocked")).title).toBe("Sign-in refused: account suspended");

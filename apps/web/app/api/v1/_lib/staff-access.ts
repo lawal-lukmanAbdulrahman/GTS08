@@ -42,6 +42,8 @@ export interface StaffContext {
   mustChangePassword: boolean;
   fullName: string;
   phone: string | null;
+  /** The profile photo's Cloudinary id, if any. */
+  avatarId: string | null;
   /** Effective permissions: an admin has every one implicitly. */
   permissions: StaffPermissions;
   /** The demo account: sees demo data only and can't change anything shared with the real shop. */
@@ -118,10 +120,12 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
   const row = data as unknown as {
     full_name?: string | null;
     phone?: string | null;
+    avatar_cloudinary_id?: string | null;
     role: string;
     is_blocked?: boolean;
     is_super_admin?: boolean;
     is_demo?: boolean;
+    removed_at?: string | null;
     must_change_password?: boolean;
     employee_permissions?: Record<string, unknown> | Array<Record<string, unknown>> | null;
   };
@@ -130,6 +134,7 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
     ? (row.employee_permissions[0] ?? null)
     : (row.employee_permissions ?? null);
 
+  if (row.removed_at) return deny(403, "This account has been removed.", "ACCOUNT_REMOVED");
   if (row.is_blocked) return deny(403, "Your account access has been suspended.", "ACCOUNT_BLOCKED");
   if (!STAFF_ROLES.includes(row.role)) return deny(403, "This area is for staff only.", "FORBIDDEN");
 
@@ -155,6 +160,7 @@ export async function requireStaff(request: NextRequest): Promise<StaffResult> {
     mustChangePassword,
     fullName: row.full_name ?? "",
     phone: row.phone ?? null,
+    avatarId: row.avatar_cloudinary_id ?? null,
     permissions: effectivePermissions(permissionRow, isAdmin),
     isDemo,
   };

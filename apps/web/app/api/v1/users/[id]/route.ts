@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { isUuid } from "@gts/utils";
 import type { SalesRange } from "@gts/utils";
-import { PERMISSION_KEYS, effectivePermissions, requireAdmin, type PermissionKey } from "../../_lib/staff-access";
+import { PERMISSION_KEYS, effectivePermissions, requireAdmin, requireSuperAdmin, type PermissionKey } from "../../_lib/staff-access";
 import { clientIp, logActivity } from "../../_lib/activity";
 import { afterResponse } from "../../_lib/email/after";
 import { notifyAccessChanged } from "../../_lib/email/events";
@@ -13,7 +13,7 @@ import { dbError } from "../../_lib/http";
 type Context = { params: Promise<{ id: string }> };
 
 const STAFF_COLUMNS =
-  "id, email, full_name, phone, role, is_blocked, is_demo, created_at, employee_permissions!employee_permissions_user_id_fkey(*)";
+  "id, email, full_name, phone, role, is_blocked, is_demo, is_super_admin, removed_at, created_at, employee_permissions!employee_permissions_user_id_fkey(*)";
 
 interface StaffRow {
   id: string;
@@ -25,6 +25,8 @@ interface StaffRow {
   created_at: string;
   employee_permissions: Record<string, unknown> | Array<Record<string, unknown>> | null;
   is_demo?: boolean;
+  is_super_admin?: boolean;
+  removed_at?: string | null;
 }
 
 function permissionRow(row: StaffRow): Record<string, unknown> | null {
@@ -35,7 +37,8 @@ function permissionRow(row: StaffRow): Record<string, unknown> | null {
 async function loadStaff(id: string, callerIsDemo: boolean): Promise<StaffRow | null> {
   const { data } = await createServiceClient().from("users").select(STAFF_COLUMNS).eq("id", id).maybeSingle();
   const row = data as unknown as StaffRow | null;
-  return row && row.role !== "customer" && (row.is_demo === true) === callerIsDemo ? row : null;
+  // Removed staff are gone from every admin screen; their row stays only so history keeps their name.
+  return row && row.role !== "customer" && !row.removed_at && (row.is_demo === true) === callerIsDemo ? row : null;
 }
 
 /** An admin's view of one staff member: profile and permissions, what they've sold, and what they've done. */
@@ -68,6 +71,7 @@ export async function GET(request: NextRequest, { params }: Context) {
         phone: staff.phone,
         role: staff.role,
         is_blocked: staff.is_blocked,
+        is_super_admin: staff.is_super_admin === true,
         created_at: staff.created_at,
         permissions: effectivePermissions(permissionRow(staff), staff.role === "admin"),
       },
@@ -131,7 +135,22 @@ export async function PATCH(request: NextRequest, { params }: Context) {
     if (id === admin.user.id && isBlocked === true) {
       return NextResponse.json({ error: "You can't block your own account.", code: "CANNOT_BLOCK_SELF" }, { status: 400 });
     }
-    return NextResponse.json({ error: "Admin access can't be edited here.", code: "CANNOT_MODIFY_ADMIN" }, { status: 400 });
+    // An admin holds every permission, so only blocking applies, and only the super admin decides it.
+    if (Object.keys(flags).length > 0 || isBlocked === undefined) {
+      return NextResponse.json({ error: "Admin access can't be edited here.", code: "CANNOT_MODIFY_ADMIN" }, { status: 400 });
+    }
+    if (!admin.isSuperAdmin) {
+      return NextResponse.json({ error: "Only the super admin can block or unblock another admin.", code: "SUPER_ADMIN_ONLY" }, { status: 403 });
+    }
+    if (target.is_super_admin) {
+      return NextResponse.json({ error: "The super admin can't be blocked.", code: "CANNOT_BLOCK_SUPER_ADMIN" }, { status: 400 });
+    }
+    const serviceClient = createServiceClient();
+    const { error } = await serviceClient.from("users").update({ is_blocked: isBlocked, updated_at: new Date().toISOString() }).eq("id", id);
+    if (error) return dbError(error, "DATABASE_ERROR", 500);
+    if (isBlocked !== target.is_blocked) afterResponse(() => notifyAccessChanged(serviceClient, id, isBlocked));
+    await logActivity(serviceClient, { actorId: admin.user.id, action: "staff.block", targetType: "user", targetId: id, changes: { blocked: isBlocked }, ip: clientIp(request) });
+    return NextResponse.json({ data: { id, is_blocked: isBlocked, permissions: effectivePermissions(permissionRow(target), true) } });
   }
 
   const serviceClient = createServiceClient();
@@ -176,4 +195,39 @@ export async function PATCH(request: NextRequest, { params }: Context) {
       permissions: effectivePermissions(after, false),
     },
   });
+}
+
+
+/**
+ * The super admin removes a staff member (another admin or anyone else). Their
+ * login is disabled for good and they vanish from staff lists, but the account
+ * row stays so the sales, voids and logs they made keep their name.
+ */
+export async function DELETE(request: NextRequest, { params }: Context) {
+  const superAdmin = await requireSuperAdmin(request);
+  if (!superAdmin.ok) return superAdmin.response;
+
+  const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "Staff member not found.", code: "NOT_FOUND" }, { status: 404 });
+  if (id === superAdmin.user.id) {
+    return NextResponse.json({ error: "You can't remove your own account.", code: "CANNOT_REMOVE_SELF" }, { status: 400 });
+  }
+
+  const target = await loadStaff(id, superAdmin.isDemo === true);
+  if (!target) return NextResponse.json({ error: "Staff member not found.", code: "NOT_FOUND" }, { status: 404 });
+  if (target.is_super_admin) {
+    return NextResponse.json({ error: "The super admin can't be removed.", code: "CANNOT_REMOVE_SUPER_ADMIN" }, { status: 400 });
+  }
+
+  const serviceClient = createServiceClient();
+  const now = new Date().toISOString();
+  const { error } = await serviceClient.from("users").update({ is_blocked: true, removed_at: now, updated_at: now }).eq("id", id);
+  if (error) return dbError(error, "DATABASE_ERROR", 500);
+
+  // Refuse any future sign-in at the auth level too (about a hundred years).
+  const { error: banError } = await serviceClient.auth.admin.updateUserById(id, { ban_duration: "876000h" });
+  if (banError) console.error("[users/remove] could not disable the login:", banError.message);
+
+  await logActivity(serviceClient, { actorId: superAdmin.user.id, action: "staff.remove", targetType: "user", targetId: id, changes: { role: target.role }, ip: clientIp(request) });
+  return NextResponse.json({ data: { id, removed: true } });
 }

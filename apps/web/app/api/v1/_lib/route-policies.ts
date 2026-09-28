@@ -146,7 +146,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "staff/me/sales": { GET: "staff" },
   "upload": { POST: "permission:can_manage_products" },
   "users": { GET: "admin" },
-  "users/[id]": { GET: "admin", PATCH: "admin" },
+  "users/[id]": { GET: "admin", PATCH: "admin", DELETE: "super_admin" },
   "users/staff": { GET: "admin", POST: "super_admin" },
 
   // ── point of sale

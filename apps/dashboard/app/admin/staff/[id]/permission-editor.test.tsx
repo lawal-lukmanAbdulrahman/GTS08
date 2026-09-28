@@ -109,4 +109,19 @@ describe("PermissionEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: /unblock/i }));
     await waitFor(() => expect(onSetBlocked).toHaveBeenCalledWith(false));
   });
+
+  it("lets the super admin block another admin, after asking", async () => {
+    const { onSetBlocked } = setup({ isAdminAccount: true, canBlockAdmin: true });
+    expect(screen.getByText(/full access/i)).toBeInTheDocument();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: /block ada obi/i }));
+    fireEvent.click(screen.getByRole("button", { name: /yes, block/i }));
+    await waitFor(() => expect(onSetBlocked).toHaveBeenCalledWith(true));
+  });
+
+  it("lets the super admin unblock a blocked admin", async () => {
+    const { onSetBlocked } = setup({ isAdminAccount: true, canBlockAdmin: true, isBlocked: true });
+    fireEvent.click(screen.getByRole("button", { name: /unblock ada obi/i }));
+    await waitFor(() => expect(onSetBlocked).toHaveBeenCalledWith(false));
+  });
 });

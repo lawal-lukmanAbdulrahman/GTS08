@@ -75,6 +75,15 @@ export function describeActivity(entry: ActivityLike): { title: string; detail?:
       return withDetail(c.to === "test" ? "Switched the shop to test data" : "Switched the shop to live data", str(c.from) ? `Was showing ${c.from} data` : undefined);
     case "profile.change_password":
       return { title: "Changed their password" };
+    case "profile.update": {
+      const words: Record<string, string> = { full_name: "Name", avatar_cloudinary_id: "photo", phone: "phone" };
+      const fields = Array.isArray(c.fields) ? (c.fields as string[]).map((f) => words[f] ?? f) : [];
+      return withDetail("Updated their profile", fields.length ? fields.map((f, i) => (i === 0 ? f.charAt(0).toUpperCase() + f.slice(1) : f)).join(", ") : undefined);
+    }
+    case "staff.remove":
+      return { title: "Removed a staff account" };
+    case "staff.block":
+      return { title: c.blocked === false ? "Unblocked a staff account" : "Blocked a staff account" };
     case "profile.update_phone":
       return { title: c.cleared === true ? "Removed their phone number" : "Updated their phone number" };
     case "staff.create":
