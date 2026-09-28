@@ -12,7 +12,7 @@ vi.mock("../app/api/v1/_lib/staff-access", async (orig) => ({
 }));
 
 import { NextRequest } from "next/server";
-import { POST as createCategory } from "../app/api/v1/categories/route";
+import { POST as createCategory, GET as listCategories } from "../app/api/v1/categories/route";
 import { GET, PATCH, DELETE } from "../app/api/v1/categories/[id]/route";
 import { PUT as REORDER } from "../app/api/v1/categories/reorder/route";
 
@@ -149,5 +149,53 @@ describe("POST /categories", () => {
   it("says so when the name or slug is taken", async () => {
     db.results.categories = { data: null, error: { code: "23505", message: "duplicate key" } };
     expect((await post({ name: "Shirts" })).status).toBe(409);
+  });
+});
+
+
+describe("GET /categories (the list)", () => {
+  const list = (qs = "") => listCategories(new NextRequest(`http://localhost:3000/api/v1/categories${qs}`));
+  const ROWS = [
+    { id: ID, name: "Shirts", slug: "shirts", description: null, parent_id: null, sort_order: 0, is_active: true, banner_cloudinary_id: null },
+    { id: ID2, name: "Oxford", slug: "oxford", description: null, parent_id: ID, sort_order: 0, is_active: true, banner_cloudinary_id: null },
+  ];
+
+  it("is empty for a shop with no categories: nothing built in", async () => {
+    db.results.categories = { data: [], error: null };
+    expect((await (await list()).json()).data).toEqual([]);
+  });
+
+  it("returns the shop's own categories, each with its sub-categories", async () => {
+    db.results.categories = { data: ROWS, error: null };
+    const { data } = await (await list()).json();
+    expect(data).toHaveLength(2);
+    expect(data[0]).toMatchObject({ id: ID, name: "Shirts", slug: "shirts", parent_id: null, sub_categories: ["Oxford"] });
+    expect(data[1]).toMatchObject({ id: ID2, parent_id: ID, sub_categories: [] });
+  });
+
+  it("shows only active categories to the public", async () => {
+    db.results.categories = { data: [], error: null };
+    await list();
+    expect(db.calls.categories!.some((c) => c.method === "eq" && c.args[0] === "is_active" && c.args[1] === true)).toBe(true);
+  });
+
+  it("includes hidden ones for staff who manage products (?all=true)", async () => {
+    db.results.categories = { data: [], error: null };
+    await list("?all=true");
+    expect(mockPerm).toHaveBeenCalled();
+    expect(db.calls.categories!.some((c) => c.method === "eq" && c.args[0] === "is_active")).toBe(false);
+  });
+
+  it("refuses ?all=true to anyone without the grant", async () => {
+    mockPerm.mockResolvedValue({ ok: false, response: NextResponse.json({}, { status: 403 }) });
+    expect((await list("?all=true")).status).toBe(403);
+  });
+
+  it("reports a database failure instead of inventing categories", async () => {
+    db.results.categories = { data: null, error: { message: "boom" } };
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await list();
+    spy.mockRestore();
+    expect(res.status).toBe(500);
   });
 });

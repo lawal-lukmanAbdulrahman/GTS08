@@ -7,146 +7,40 @@ import { isUuid, toSlug } from "@gts/utils";
 import { clientIp, logActivity } from "../_lib/activity";
 import { isDbUniqueViolation, isPlainObject, SLUG, textField } from "../_lib/validate";
 
-const STOREFRONT_CATEGORIES = [
-  {
-    name: "Appliances",
-    slug: "appliances",
-    sub_categories: [
-      "Washing Machines", "Fridges", "Freezers", "Air Conditioners", "Heaters", "Fans",
-      "Air Purifiers", "Water Dispensers", "Generators & Inverters", "Blenders",
-      "Deep Fryers", "Juicers", "Air Fryers", "Rice Cookers", "Toasters & Ovens",
-      "Microwaves", "Bundles", "Vacuum Cleaners", "Kettles", "Yam Pounders", "Irons",
-      "Electric Cookware", "Electric Drink Mixers", "Food Processors", "Coffee Makers",
-      "Electric Pressure Cookers", "Air Quality Control", "Cleaning Equipment", "Sewing Machines", "Water Heaters"
-    ],
-  },
-  {
-    name: "Phones & Tablets",
-    slug: "phones-tablets",
-    sub_categories: [
-      "Smartphones", "iOS Phones", "Android Phones", "Basic Phones", "Refurbished Phones",
-      "iPads", "Android Tablets", "Educational Tablets", "Graphics Tablets",
-      "Cases & Covers", "Screen Protectors", "Power Banks", "Chargers & Cables",
-      "Earphones & Headsets", "Smartwatches & Bands"
-    ],
-  },
-  {
-    name: "Health & Beauty",
-    slug: "health-beauty",
-    sub_categories: [
-      "Face Cleansers", "Moisturizers & Creams", "Sunscreen & SPF", "Serums & Oils",
-      "Face Masks", "Men's Perfumes", "Women's Perfumes", "Body Mists & Sprays",
-      "Deodorants", "Shampoos & Conditioners", "Styling Tools & Irons", "Wigs & Extensions"
-    ],
-  },
-  {
-    name: "Home & Office",
-    slug: "home-office",
-    sub_categories: [
-      "Office Chairs", "Executive Desks", "Living Room Sofas", "Bed Frames & Tables",
-      "Bed Sheets & Pillowcases", "Duvets & Comforters", "Bath Towels",
-      "Table Lamps & Bulbs", "Wall Art & Clocks", "Rugs & Carpets"
-    ],
-  },
-  {
-    name: "Electronics",
-    slug: "electronics",
-    sub_categories: [
-      "Smart TVs", "OLED & QLED TVs", "4K UHD TVs", "Projectors & Screens",
-      "Soundbars & Subwoofers", "Home Theatre Systems", "Bluetooth Speakers"
-    ],
-  },
-  {
-    name: "Fashion",
-    slug: "fashion",
-    sub_categories: [
-      "Dresses", "Tops & Blouses", "Footwear & Heels", "Handbags & Clutches",
-      "Casual T-Shirts", "Formal Shirts", "Jeans & Trousers", "Sneakers & Boots"
-    ],
-  },
-  {
-    name: "Supermarket",
-    slug: "supermarket",
-    sub_categories: [
-      "Juices & Drinks", "Coffee & Tea", "Energy & Soft Drinks",
-      "Rice & Grains", "Pasta & Noodles", "Cooking Oils"
-    ],
-  },
-  {
-    name: "Computing",
-    slug: "computing",
-    sub_categories: [
-      "Gaming Laptops", "MacBooks", "Ultrabooks & Slims", "Business Laptops",
-      "Monitors & Screens", "External Hard Drives", "SSDs & Flash Drives", "Keyboards & Mice"
-    ],
-  },
-  {
-    name: "Baby Products",
-    slug: "baby-products",
-    sub_categories: [
-      "Diapers & Wipes", "Baby Bottles", "High Chairs", "Strollers & Prams", "Car Seats", "Walkers"
-    ],
-  },
-  {
-    name: "Gaming",
-    slug: "gaming",
-    sub_categories: [
-      "PlayStation 5", "Xbox Series X/S", "Nintendo Switch",
-      "Wireless Controllers", "Gaming Headsets", "Gaming Chairs"
-    ],
-  },
-  {
-    name: "Automotive & Sports",
-    slug: "automotive-sports",
-    sub_categories: [
-      "Car Care & Polish", "Auto Electronics", "Fitness Equipment"
-    ],
-  },
-];
+const LIST_COLUMNS = "id, name, slug, description, parent_id, sort_order, is_active, banner_cloudinary_id";
 
-export async function GET() {
-  try {
-    const serviceClient = createServiceClient();
-    const { data: dbCategories, error } = await serviceClient
-      .from("categories")
-      .select("*")
-      .order("sort_order", { ascending: true });
+interface CategoryRow {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  parent_id: string | null;
+  sort_order: number;
+  is_active: boolean;
+  banner_cloudinary_id: string | null;
+}
 
-    const catMap = new Map<string, any>();
-
-    // Seed standard storefront categories
-    STOREFRONT_CATEGORIES.forEach((cat, idx) => {
-      catMap.set(cat.name.toLowerCase(), {
-        name: cat.name,
-        slug: cat.slug,
-        sub_categories: cat.sub_categories,
-        sort_order: idx,
-      });
-    });
-
-    // Merge database categories
-    if (!error && dbCategories && dbCategories.length > 0) {
-      dbCategories.forEach((dbCat: any) => {
-        const key = (dbCat.name || "").toLowerCase();
-        if (catMap.has(key)) {
-          catMap.set(key, { ...catMap.get(key), ...dbCat });
-        } else {
-          catMap.set(key, {
-            id: dbCat.id,
-            name: dbCat.name,
-            slug: dbCat.slug,
-            description: dbCat.description,
-            sub_categories: dbCat.sub_categories || [],
-            sort_order: dbCat.sort_order || 99,
-          });
-        }
-      });
-    }
-
-    return NextResponse.json({ data: Array.from(catMap.values()) });
-  } catch {
-    return NextResponse.json({ data: STOREFRONT_CATEGORIES });
+/**
+ * The shop's categories, straight from the database (so a new live shop has
+ * none until an admin creates them; the demo account sees the demo ones). Each
+ * comes with its sub-categories' names for the storefront menu. Staff who manage
+ * products can ask for hidden ones too (?all=true).
+ */
+export async function GET(request: NextRequest) {
+  const all = request.nextUrl.searchParams.get("all") === "true";
+  if (all) {
+    const access = await requirePermission(request, "can_manage_products");
+    if (!access.ok) return access.response;
   }
+  let query = createServiceClient().from("categories").select(LIST_COLUMNS);
+  if (!all) query = query.eq("is_active", true);
+  const { data, error } = await query.order("sort_order", { ascending: true }).order("name", { ascending: true });
+  if (error) return serverError(new Error(error.message));
+
+  const rows = (data ?? []) as CategoryRow[];
+  return NextResponse.json({
+    data: rows.map((c) => ({ ...c, sub_categories: rows.filter((x) => x.parent_id === c.id).map((x) => x.name) })),
+  });
 }
 
 export async function POST(request: NextRequest) {

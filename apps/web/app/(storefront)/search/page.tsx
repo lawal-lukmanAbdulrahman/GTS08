@@ -9,19 +9,8 @@ import { useCatalogue } from "../_components/catalogue-context";
 import { ProductSearchEngine, type SearchableProduct } from "../../../lib/search-engine";
 import { dbProductToItem, type ApiProduct } from "../_lib/catalogue";
 import { getCartSessionId } from "../_lib/server-sync";
+import { useStoreCategories } from "../_lib/categories";
 
-const MEGA_CATEGORY_NAMES = [
-  "Appliances",
-  "Phones & Tablets",
-  "Health & Beauty",
-  "Home & Office",
-  "Electronics",
-  "Fashion",
-  "Supermarket",
-  "Computing",
-  "Baby Products",
-  "Gaming",
-];
 
 const ALL_BRANDS = ALL_BRAND_KEYS;
 
@@ -478,9 +467,11 @@ function SearchPageInner() {
     return allCatalogProducts;
   }, [allCatalogProducts, activeFilter, sectionProducts]);
 
+  // The shop's own categories (never a built-in list), plus any a product carries.
+  const storeCategories = useStoreCategories();
   const CATEGORIES = useMemo(
-    () => ["All", ...Array.from(new Set([...MEGA_CATEGORY_NAMES, ...baseProducts.map((p) => p.category)]))],
-    [baseProducts]
+    () => ["All", ...Array.from(new Set([...(storeCategories ?? []).filter((c) => !c.parent_id).map((c) => c.name), ...baseProducts.map((p) => p.category)].filter(Boolean)))],
+    [baseProducts, storeCategories]
   );
   const [activeCategory, setActiveCategory] = useState(initialCat);
   const [priceRange, setPriceRange] = useState<[number, number]>([MIN_PRICE, MAX_PRICE]);
