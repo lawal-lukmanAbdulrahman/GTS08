@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
         if (isUuid) {
           baseProductQuery = baseProductQuery.eq("id", productIdOrSlug);
         } else {
-          baseProductQuery = baseProductQuery.or(`slug.eq.${productIdOrSlug},id.eq.${productIdOrSlug}`);
+          baseProductQuery = baseProductQuery.eq("slug", productIdOrSlug);
         }
 
         const { data: targetProductRow } = await baseProductQuery.maybeSingle();
