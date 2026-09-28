@@ -103,3 +103,11 @@ describe("PAID_STATUSES", () => {
     for (const s of ["paid", "completed", "delivered"]) expect(PAID_STATUSES).toContain(s);
   });
 });
+
+describe("summarize: pay-on-pickup orders", () => {
+  it("counts them as storefront (online) sales, not walk-ins", () => {
+    const s = summarize([{ total: 1000, channel: "pickup", created_at: "2026-09-20T10:00:00Z" }]);
+    expect(s.revenue).toMatchObject({ online: 1000, walkin: 0 });
+    expect(s.orders).toMatchObject({ online: 1, walkin: 0 });
+  });
+});

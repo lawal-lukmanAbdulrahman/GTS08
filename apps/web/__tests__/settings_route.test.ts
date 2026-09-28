@@ -68,7 +68,8 @@ describe("GET /api/v1/settings", () => {
   });
 
   it("still returns the details, with the default website, if the website column isn't in the database yet", async () => {
-    readQueue.push({ data: null, error: { message: "column settings.store_website does not exist" } });
+    // A database without the column refuses every column set that includes it.
+    readQueue.push({ data: null, error: { message: "column settings.store_website does not exist" } }, { data: null, error: { message: "column settings.store_website does not exist" } });
     settingsRead = { data: STORE, error: null };
     const res = await GET(new NextRequest("http://localhost:3000/api/v1/settings"));
     expect(res.status).toBe(200);
@@ -91,7 +92,8 @@ describe("PATCH /api/v1/settings website (before the column exists)", () => {
   });
 
   it("saves the other fields and says the website couldn't be saved yet", async () => {
-    upsertQueue.push({ data: null, error: { message: "Could not find the 'store_website' column of 'settings' in the schema cache" } });
+    const missing = { data: null, error: { message: "Could not find the 'store_website' column of 'settings' in the schema cache" } };
+    upsertQueue.push(missing, missing);
     upsertResult = { data: STORE, error: null };
     const res = await PATCH(patch({ store_name: "GTS", store_website: "gtswears.com" }));
     expect(res.status).toBe(200);
@@ -168,5 +170,47 @@ describe("PATCH /api/v1/settings (admin only)", () => {
     const res = await PATCH(patch({ store_address: "x" }));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe("DATABASE_ERROR");
+  });
+});
+
+describe("store details: pickup hold time and footer (migration 00026)", () => {
+  beforeEach(() => {
+    upsertSpy.mockReset();
+    readQueue.length = 0;
+    upsertQueue.length = 0;
+    mockGetUser.mockResolvedValue({ id: "admin-1", email: "admin@gts.ng" });
+    roleResult = { data: { role: "admin" }, error: null };
+  });
+
+  it("GET includes the footer and the pickup hold time", async () => {
+    settingsRead = { data: { ...STORE, store_website: null, pickup_hold_hours: 24, footer_about: "Menswear.", instagram_url: "https://instagram.com/gts", facebook_url: null, tiktok_url: null, x_url: null, linkedin_url: null }, error: null };
+    const { data } = await (await GET(new NextRequest("http://localhost:3000/api/v1/settings"))).json();
+    expect(data).toMatchObject({ pickup_hold_hours: 24, footer_about: "Menswear.", instagram_url: "https://instagram.com/gts" });
+  });
+
+  it("GET still answers, with defaults for the new fields, before the migration", async () => {
+    readQueue.push({ data: null, error: { message: "column settings.pickup_hold_hours does not exist" } });
+    settingsRead = { data: { ...STORE, store_website: null }, error: null };
+    const res = await GET(new NextRequest("http://localhost:3000/api/v1/settings"));
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toMatchObject({ store_name: "GTS", pickup_hold_hours: 48, footer_about: null, instagram_url: null });
+  });
+
+  it("PATCH saves the hold time and social links", async () => {
+    upsertResult = { data: { ...STORE, pickup_hold_hours: 72 }, error: null };
+    const res = await PATCH(patch({ pickup_hold_hours: 72, instagram_url: "https://instagram.com/gts" }));
+    expect(res.status).toBe(200);
+    expect(upsertSpy.mock.calls.at(-1)![1]).toMatchObject({ pickup_hold_hours: 72, instagram_url: "https://instagram.com/gts" });
+  });
+
+  it("PATCH before the migration saves what it can and says what couldn't be saved", async () => {
+    upsertQueue.push({ data: null, error: { message: "Could not find the 'pickup_hold_hours' column of 'settings' in the schema cache" } });
+    upsertResult = { data: STORE, error: null };
+    const res = await PATCH(patch({ store_name: "GTS", pickup_hold_hours: 72 }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.warning).toMatch(/00026/);
+    expect(upsertSpy.mock.calls.at(-1)![1]).not.toHaveProperty("pickup_hold_hours");
+    expect(upsertSpy.mock.calls.at(-1)![1]).toMatchObject({ store_name: "GTS" });
   });
 });

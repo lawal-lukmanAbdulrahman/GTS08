@@ -95,6 +95,15 @@ describe("expire-orders", () => {
     expect((await res.json()).data).toMatchObject({ expired: 1, failed: 1 });
   });
 
+  it("cancels pay-on-pickup orders once their pickup deadline has passed, and frees their items", async () => {
+    db.results.orders = forChannel("pickup", [stale("p1", "pickup")]);
+    await call(expirePost);
+    const pickupQuery = db.calls.orders!;
+    expect(pickupQuery.some((c) => c.method === "lt" && c.args[0] === "pickup_deadline")).toBe(true);
+    expect(mockTransition).toHaveBeenCalledWith(expect.anything(), "p1", "pending_payment", expect.objectContaining({ status: "cancelled", internal_notes: expect.stringMatching(/not collected/i) }));
+    expect(mockAdjustAll).toHaveBeenCalledWith(expect.anything(), [{ variantId: V1, deltaReserved: -2, clampReserved: true }]);
+  });
+
   it("running it twice in a row changes nothing the second time", async () => {
     db.results.orders = { data: [], error: null };
     const res = await call(expirePost);

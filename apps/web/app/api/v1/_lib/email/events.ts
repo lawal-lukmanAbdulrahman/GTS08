@@ -1,6 +1,6 @@
 import { formatWAT } from "@gts/utils";
 import { sendEmail, type SendResult } from "./send";
-import { customerWelcomeEmail, passwordResetEmail, accountAccessEmail, ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, type StoreInfo } from "./templates";
+import { pickupOrderEmail, customerWelcomeEmail, passwordResetEmail, accountAccessEmail, ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, type StoreInfo } from "./templates";
 
 type Client = { from(table: string): any };
 
@@ -100,6 +100,34 @@ export function notifyOrderPaid(client: Client, orderId: string): Promise<void> 
         trackUrl: `${storefrontUrl()}/track`,
       }),
       idempotencyKey: `order-paid/${orderId}`,
+    });
+  }, undefined);
+}
+
+/** A pay-on-pickup order was placed: where, what to pay and by when. Sent once per order. */
+export function notifyPickupOrder(client: Client, orderId: string): Promise<void> {
+  return safely(async () => {
+    const { data } = await client
+      .from("orders")
+      .select("order_number, total, pickup_deadline, customer:customers(email, full_name), items:order_items(quantity, line_total, product_snapshot)")
+      .eq("id", orderId)
+      .maybeSingle();
+    const order = data as { order_number: string; total: number; pickup_deadline: string | null; customer: { email: string | null; full_name: string | null } | null; items: Array<{ quantity: number; line_total: number; product_snapshot: { name?: string; size?: string | null; color?: string | null } | null }> | null } | null;
+    if (!order?.customer?.email) return;
+    const store = await storeInfo(client);
+    await sendEmail({
+      to: order.customer.email,
+      ...pickupOrderEmail({
+        store,
+        name: order.customer.full_name || "there",
+        orderNumber: order.order_number,
+        items: (order.items ?? []).map((i) => ({ name: i.product_snapshot?.name || "Item", size: i.product_snapshot?.size ?? null, color: i.product_snapshot?.color ?? null, quantity: i.quantity, lineTotal: i.line_total })),
+        total: order.total,
+        address: store.address ?? null,
+        deadlineText: order.pickup_deadline ? formatWAT(order.pickup_deadline) : "the deadline shown at checkout",
+        trackUrl: `${storefrontUrl()}/track`,
+      }),
+      idempotencyKey: `pickup-order/${orderId}`,
     });
   }, undefined);
 }

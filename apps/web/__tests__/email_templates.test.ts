@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, accountAccessEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, customerWelcomeEmail, passwordResetEmail } from "../app/api/v1/_lib/email/templates";
+import { ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, accountAccessEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, customerWelcomeEmail, passwordResetEmail, pickupOrderEmail } from "../app/api/v1/_lib/email/templates";
 
 const STORE = { name: "GTS Stores", address: "12 Marina, Lagos", phone: "0803 000 0000" };
 const EVIL = `<img src=x onerror=alert(1)>"&'`;
@@ -220,5 +220,39 @@ describe("passwordResetEmail", () => {
 
   it("never contains a password", () => {
     expect(JSON.stringify(passwordResetEmail(o))).not.toMatch(/password:/i);
+  });
+});
+
+describe("pickupOrderEmail", () => {
+  const o = {
+    store: { name: "GTS Wears", phone: "0814 830 8129", website: "www.GTS08.com" },
+    name: "Ada",
+    orderNumber: "GTS-202609-000010",
+    items: [{ name: "Oxford Shirt", size: "M", color: "Blue", quantity: 2, lineTotal: 3_100_000 }],
+    total: 3_100_000,
+    address: "12 Allen Avenue, Ikeja",
+    deadlineText: "30 Sept 2026, 3:00 pm",
+    trackUrl: "https://gts.ng/track",
+  };
+
+  it("says where to collect, what to pay and by when", () => {
+    const m = pickupOrderEmail(o);
+    expect(m.subject).toBe("Order GTS-202609-000010 is held for pickup");
+    for (const bit of ["12 Allen Avenue, Ikeja", "30 Sept 2026, 3:00 pm", "₦31,000", "Oxford Shirt"]) {
+      expect(m.html).toContain(bit);
+      expect(m.text).toContain(bit);
+    }
+    expect(m.text).toMatch(/pay when you collect/i);
+    expect(m.text).toMatch(/cancelled/i);
+  });
+
+  it("escapes the customer's name and item names", () => {
+    const m = pickupOrderEmail({ ...o, name: "<b>x</b>", items: [{ ...o.items[0]!, name: "<script>" }] });
+    expect(m.html).not.toMatch(/<b>x<\/b>|<script>/);
+  });
+
+  it("gives the store's phone when there is no address on file", () => {
+    const m = pickupOrderEmail({ ...o, address: null });
+    expect(m.text).toContain("0814 830 8129");
   });
 });

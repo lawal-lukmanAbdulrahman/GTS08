@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { ProductCard } from "../_components/ui/product-card";
 import { useCheckoutQuote } from "../_lib/use-checkout-quote";
 import { useCatalogue } from "../_components/catalogue-context";
@@ -11,6 +12,18 @@ import { useCart } from "../_components/cart-context";
 
 export default function CartPage() {
   const { cartItems, updateQuantity, setQuantity, syncCartLimits, removeFromCart, clearCart, totalItemCount } = useCart();
+  const router = useRouter();
+
+  // Once nothing is left there's nothing to do here: straight back to the products.
+  const removeItem = (index: number) => {
+    const wasLast = cartItems.length === 1;
+    removeFromCart(index);
+    if (wasLast) router.push("/search");
+  };
+  const emptyCart = () => {
+    clearCart();
+    router.push("/search");
+  };
 
   const { quote, error: _quoteError } = useCheckoutQuote(cartItems);
 
@@ -86,7 +99,7 @@ export default function CartPage() {
 
           {cartItems.length > 0 && (
             <button
-              onClick={() => clearCart()}
+              onClick={emptyCart}
               className="self-start sm:self-auto text-xs font-semibold text-gray-400 hover:text-red-600 transition-colors flex items-center gap-1.5"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -129,7 +142,7 @@ export default function CartPage() {
                   >
                     {/* Absolutely Positioned Red Trash Delete Icon (Top Right) */}
                     <button
-                      onClick={() => removeFromCart(index)}
+                      onClick={() => removeItem(index)}
                       aria-label="Remove item"
                       className="absolute top-3.5 right-3.5 sm:top-4 sm:right-4 text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors z-10"
                     >

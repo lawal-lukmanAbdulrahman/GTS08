@@ -17,6 +17,8 @@ import ProfileSidebar, { PROFILE_SECTIONS, type ProfileSection } from "./profile
 import PasswordForm, { type PasswordChangeInput, type PasswordChangeOutcome } from "./password-form";
 import PermissionList from "./permission-list";
 import PhoneForm, { type PhoneSaveResult } from "./phone-form";
+import AdminDetailsForm, { type AdminDetails, type DetailsSaveResult, type UploadResult } from "./admin-details-form";
+import { uploadToCloudinary } from "../admin/products/cloudinary-upload";
 
 const ACTIVITY_PAGE = 30;
 
@@ -118,6 +120,29 @@ export default function ProfilePage() {
     return r.ok ? { ok: true, phone: r.data.phone } : { ok: false, message: r.message, fieldErrors: r.details };
   }
 
+  async function saveDetails(patch: Partial<AdminDetails>): Promise<DetailsSaveResult> {
+    const r = await apiCall<AdminDetails>("/staff/me", { method: "PATCH", json: patch });
+    if (!r.ok) return { ok: false, message: r.message, fieldErrors: r.details };
+    // The sidebar shows the name from the saved sign-in: keep it in step and tell it to refresh.
+    try {
+      const stored = JSON.parse(localStorage.getItem("gts_user") || "{}");
+      localStorage.setItem("gts_user", JSON.stringify({ ...stored, full_name: r.data.full_name, avatar_cloudinary_id: r.data.avatar_cloudinary_id }));
+      window.dispatchEvent(new Event("gts_profile_updated"));
+    } catch {
+      // storage blocked: the new name shows after the next sign-in
+    }
+    return { ok: true, saved: { full_name: r.data.full_name ?? null, avatar_cloudinary_id: r.data.avatar_cloudinary_id ?? null } };
+  }
+
+  async function uploadPhoto(file: File): Promise<UploadResult> {
+    try {
+      const up = await uploadToCloudinary(file, "gts/avatars");
+      return { ok: true, publicId: up.public_id };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : "The photo couldn't be uploaded. Please try another image." };
+    }
+  }
+
   async function changePassword(input: PasswordChangeInput): Promise<PasswordChangeOutcome> {
     const r = await apiCall("/staff/me/password", { method: "POST", json: input });
     if (r.ok && mustChange) window.location.assign("/"); // password replaced: on to their work
@@ -149,9 +174,20 @@ export default function ProfilePage() {
         return (
           <div className="space-y-6">
             <Section title="Your details">
+              {profile!.is_admin && (
+                <AdminDetailsForm
+                  initial={{ full_name: profile!.full_name, avatar_cloudinary_id: profile!.avatar_cloudinary_id ?? null }}
+                  onSave={saveDetails}
+                  onUpload={uploadPhoto}
+                />
+              )}
               <dl className="grid grid-cols-[7rem_1fr] gap-y-2 text-base">
-                <dt className="text-gray-500">Name</dt>
-                <dd className="font-semibold text-gray-900 dark:text-white">{profile!.full_name || "—"}</dd>
+                {!profile!.is_admin && (
+                  <>
+                    <dt className="text-gray-500">Name</dt>
+                    <dd className="font-semibold text-gray-900 dark:text-white">{profile!.full_name || "—"}</dd>
+                  </>
+                )}
                 <dt className="text-gray-500">Email</dt>
                 <dd className="font-semibold text-gray-900 dark:text-white">{profile!.email}</dd>
                 <dt className="text-gray-500">Role</dt>

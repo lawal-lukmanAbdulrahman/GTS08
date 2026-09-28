@@ -12,6 +12,8 @@ interface Props {
   isBlocked: boolean;
   onSavePermissions: (changes: Partial<PermissionsView>) => Promise<SaveResult>;
   onSetBlocked: (blocked: boolean) => Promise<SaveResult>;
+  /** The viewer is the super admin and may block or unblock this admin account. */
+  canBlockAdmin?: boolean;
 }
 
 const GRANTS: Array<{ key: keyof PermissionsView; label: string; hint?: string }> = [
@@ -26,16 +28,12 @@ const GRANTS: Array<{ key: keyof PermissionsView; label: string; hint?: string }
 ];
 
 /** What an admin can change about a staff member: which actions they may take, and whether they can sign in at all. */
-export default function PermissionEditor({ name, permissions, isAdminAccount, isBlocked, onSavePermissions, onSetBlocked }: Props) {
+export default function PermissionEditor({ name, permissions, isAdminAccount, isBlocked, onSavePermissions, onSetBlocked, canBlockAdmin = false }: Props) {
   const [draft, setDraft] = useState<PermissionsView>(permissions);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
-
-  if (isAdminAccount) {
-    return <p className="text-sm text-gray-700 dark:text-gray-200">{name} is an admin, so they have full access. Admin access isn&apos;t edited here.</p>;
-  }
 
   const changes: Partial<PermissionsView> = {};
   for (const { key } of GRANTS) if (draft[key] !== permissions[key]) changes[key] = draft[key];
@@ -56,6 +54,62 @@ export default function PermissionEditor({ name, permissions, isAdminAccount, is
     const result = await onSetBlocked(blocked);
     if (result.ok) setConfirmingBlock(false);
     else setError(result.message);
+  }
+
+  const blockControls = (
+      <div className="border-t border-gray-200 dark:border-[#262626] pt-4 space-y-2">
+        {isBlocked ? (
+          <>
+            <p className="text-sm text-red-600 dark:text-red-400 font-semibold">This account is blocked.</p>
+            <button type="button" onClick={() => setBlocked(false)} className="px-3 py-1.5 text-xs font-semibold rounded-[6px] bg-gray-100 dark:bg-[#242424]">
+              Unblock {name}
+            </button>
+          </>
+        ) : confirmingBlock ? (
+          <div className="space-y-2">
+            <p className="text-sm text-gray-700 dark:text-gray-200">
+              {name} will be signed out and can&apos;t sign in until you unblock them.
+            </p>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setConfirmingBlock(false)} className="px-3 py-1.5 text-xs font-semibold rounded-[6px] border border-gray-200 dark:border-[#383838]">
+                Keep active
+              </button>
+              <button type="button" onClick={() => setBlocked(true)} className="px-3 py-1.5 text-xs font-bold rounded-[6px] bg-red-600 text-white">
+                Yes, block
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmingBlock(true)}
+            className="px-3.5 py-1.5 text-xs font-bold rounded-[6px] bg-red-600 hover:bg-red-700 text-white shadow-xs hover:shadow-red-500/25 active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1.5"
+          >
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+            </svg>
+            <span>Block {name}</span>
+          </button>
+        )}
+      </div>
+  );
+
+  if (isAdminAccount) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-gray-700 dark:text-gray-200">{name} is an admin, so they have full access. Their permissions aren&apos;t edited here.</p>
+        {canBlockAdmin && (
+          <>
+            {error && (
+              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                {error}
+              </p>
+            )}
+            {blockControls}
+          </>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -100,41 +154,7 @@ export default function PermissionEditor({ name, permissions, isAdminAccount, is
         </p>
       )}
 
-      <div className="border-t border-gray-200 dark:border-[#262626] pt-4 space-y-2">
-        {isBlocked ? (
-          <>
-            <p className="text-sm text-red-600 dark:text-red-400 font-semibold">This account is blocked.</p>
-            <button type="button" onClick={() => setBlocked(false)} className="px-3 py-1.5 text-xs font-semibold rounded-[6px] bg-gray-100 dark:bg-[#242424]">
-              Unblock {name}
-            </button>
-          </>
-        ) : confirmingBlock ? (
-          <div className="space-y-2">
-            <p className="text-sm text-gray-700 dark:text-gray-200">
-              {name} will be signed out and can&apos;t sign in until you unblock them.
-            </p>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setConfirmingBlock(false)} className="px-3 py-1.5 text-xs font-semibold rounded-[6px] border border-gray-200 dark:border-[#383838]">
-                Keep active
-              </button>
-              <button type="button" onClick={() => setBlocked(true)} className="px-3 py-1.5 text-xs font-bold rounded-[6px] bg-red-600 text-white">
-                Yes, block
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setConfirmingBlock(true)}
-            className="px-3.5 py-1.5 text-xs font-bold rounded-[6px] bg-red-600 hover:bg-red-700 text-white shadow-xs hover:shadow-red-500/25 active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1.5"
-          >
-            <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-            </svg>
-            <span>Block {name}</span>
-          </button>
-        )}
-      </div>
+      {blockControls}
     </div>
   );
 }

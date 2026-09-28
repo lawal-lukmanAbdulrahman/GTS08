@@ -1,13 +1,7 @@
-export default async function CategoryPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  const { slug } = await params;
+import { redirect } from "next/navigation";
 
-  return (
-    <main>
-      <h1>Category: {slug}</h1>
-    </main>
-  );
+/** /shop/<category> opens the product listing filtered to that category. */
+export default async function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  redirect(`/search?category=${encodeURIComponent(decodeURIComponent(slug))}`);
 }

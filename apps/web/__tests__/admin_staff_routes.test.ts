@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockRequireAdmin = vi.fn();
+const mockRequireSuperAdmin = vi.fn();
+const mockAuthUpdate = vi.fn();
 vi.mock("../app/api/v1/_lib/staff-access", async (importActual) => ({
   ...(await importActual<typeof import("../app/api/v1/_lib/staff-access")>()),
   requireAdmin: (...a: unknown[]) => mockRequireAdmin(...a),
+  requireSuperAdmin: (...a: unknown[]) => mockRequireSuperAdmin(...a),
 }));
 
 const mockLog = vi.fn();
@@ -17,6 +20,7 @@ let results: Record<string, Result> = {};
 const calls: Array<{ table: string; method: string; args: unknown[] }> = [];
 vi.mock("@gts/database", () => ({
   createServiceClient: () => ({
+    auth: { admin: { updateUserById: (...a: unknown[]) => mockAuthUpdate(...a) } },
     from: (table: string) => {
       const stub: any = new Proxy(
         {},
@@ -40,7 +44,7 @@ vi.mock("@gts/database", () => ({
 }));
 
 import { NextRequest } from "next/server";
-import { GET, PATCH } from "../app/api/v1/users/[id]/route";
+import { GET, PATCH, DELETE } from "../app/api/v1/users/[id]/route";
 
 const ADMIN = { ok: true, user: { id: "ceb8447c-c4ab-48d2-8c34-cd9f11e4bed2", email: "boss@gts.ng" }, role: "admin", isAdmin: true, fullName: "Boss", phone: null, permissions: {} };
 const ctx = (id = "e4774cdd-a079-4f86-814e-8b9140bb6db4") => ({ params: Promise.resolve({ id }) });
@@ -114,6 +118,15 @@ describe("GET /api/v1/users/:id (admin views a staff member's record)", () => {
 
   it("rejects an unknown range", async () => {
     expect((await GET(get("?range=forever"), ctx())).status).toBe(400);
+  });
+});
+
+describe("GET /api/v1/users/:id says who the super admin is", () => {
+  it("so the dashboard never offers to block or remove them", async () => {
+    mockRequireAdmin.mockReset().mockResolvedValue({ ...ADMIN, isDemo: false });
+    results = { users: { data: { ...CASHIER_ROW, role: "admin", is_super_admin: true, is_demo: false }, error: null } };
+    const { data } = await (await GET(get(), ctx())).json();
+    expect(data.profile.is_super_admin).toBe(true);
   });
 });
 
@@ -229,5 +242,100 @@ describe("PATCH /api/v1/users/:id (grant, revoke, block)", () => {
     const res = await PATCH(patch({ permissions: { can_void_orders: true } }), ctx());
     expect(res.status).toBe(500);
     expect(mockLog).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("super admin: other admins' access", () => {
+  const SUPER = { ...ADMIN, isSuperAdmin: true };
+  const OTHER_ADMIN = { ...CASHIER_ROW, id: "e4774cdd-a079-4f86-814e-8b9140bb6db4", role: "admin", is_super_admin: false, is_demo: false };
+  beforeEach(() => {
+    mockRequireAdmin.mockReset();
+    mockRequireSuperAdmin.mockReset();
+    mockLog.mockReset();
+    mockAuthUpdate.mockReset().mockResolvedValue({ error: null });
+    results = {};
+    calls.length = 0;
+  });
+
+  it("the super admin can block another admin", async () => {
+    mockRequireAdmin.mockResolvedValue(SUPER);
+    results.users = { data: OTHER_ADMIN, error: null };
+    const res = await PATCH(patch({ is_blocked: true }), ctx());
+    expect(res.status).toBe(200);
+    expect(calls.find((c) => c.table === "users" && c.method === "update")?.args[0]).toMatchObject({ is_blocked: true });
+    expect(mockLog).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ action: "staff.block", changes: { blocked: true } }));
+  });
+
+  it("an ordinary admin can't block another admin", async () => {
+    mockRequireAdmin.mockResolvedValue({ ...ADMIN, isSuperAdmin: false });
+    results.users = { data: OTHER_ADMIN, error: null };
+    const res = await PATCH(patch({ is_blocked: true }), ctx());
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("SUPER_ADMIN_ONLY");
+  });
+
+  it("nobody can block the super admin", async () => {
+    mockRequireAdmin.mockResolvedValue(SUPER);
+    results.users = { data: { ...OTHER_ADMIN, is_super_admin: true }, error: null };
+    const res = await PATCH(patch({ is_blocked: true }), ctx());
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("CANNOT_BLOCK_SUPER_ADMIN");
+  });
+
+  it("an admin's permissions still can't be edited (admins hold every one)", async () => {
+    mockRequireAdmin.mockResolvedValue(SUPER);
+    results.users = { data: OTHER_ADMIN, error: null };
+    expect((await PATCH(patch({ permissions: { can_void_orders: false } }), ctx())).status).toBe(400);
+  });
+});
+
+describe("DELETE /api/v1/users/:id (remove a staff member)", () => {
+  const SUPER = { ...ADMIN, isSuperAdmin: true };
+  const del = () => DELETE(new NextRequest("http://localhost:3000/api/v1/users/u1", { method: "DELETE" }), ctx());
+  const OTHER_ADMIN = { ...CASHIER_ROW, role: "admin", is_super_admin: false, is_demo: false };
+  beforeEach(() => {
+    mockRequireSuperAdmin.mockReset().mockResolvedValue(SUPER);
+    mockLog.mockReset();
+    mockAuthUpdate.mockReset().mockResolvedValue({ error: null });
+    results = { users: { data: OTHER_ADMIN, error: null } };
+    calls.length = 0;
+  });
+
+  it("is for the super admin only", async () => {
+    const { NextResponse } = await import("next/server");
+    mockRequireSuperAdmin.mockResolvedValue({ ok: false, response: NextResponse.json({ code: "SUPER_ADMIN_ONLY" }, { status: 403 }) });
+    expect((await del()).status).toBe(403);
+    expect(mockAuthUpdate).not.toHaveBeenCalled();
+  });
+
+  it("disables the login for good but keeps the account row, so their history keeps their name", async () => {
+    const res = await del();
+    expect(res.status).toBe(200);
+    const update = calls.find((c) => c.table === "users" && c.method === "update")!.args[0] as Record<string, unknown>;
+    expect(update).toMatchObject({ is_blocked: true });
+    expect(typeof update.removed_at).toBe("string");
+    expect(calls.some((c) => c.table === "users" && c.method === "delete")).toBe(false);
+    expect(mockAuthUpdate).toHaveBeenCalledWith("e4774cdd-a079-4f86-814e-8b9140bb6db4", { ban_duration: "876000h" });
+    expect(mockLog).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ action: "staff.remove", targetId: "e4774cdd-a079-4f86-814e-8b9140bb6db4" }));
+  });
+
+  it("can remove a cashier too", async () => {
+    results.users = { data: { ...CASHIER_ROW, is_demo: false }, error: null };
+    expect((await del()).status).toBe(200);
+  });
+
+  it("won't remove the super admin or the caller themself", async () => {
+    results.users = { data: { ...OTHER_ADMIN, is_super_admin: true }, error: null };
+    expect((await del()).status).toBe(400);
+    results.users = { data: OTHER_ADMIN, error: null };
+    mockRequireSuperAdmin.mockResolvedValue({ ...SUPER, user: { id: "e4774cdd-a079-4f86-814e-8b9140bb6db4" } });
+    expect((await del()).status).toBe(400);
+    expect(mockAuthUpdate).not.toHaveBeenCalled();
+  });
+
+  it("404s someone who isn't staff or was already removed", async () => {
+    results.users = { data: { ...OTHER_ADMIN, removed_at: "2026-09-01T00:00:00Z" }, error: null };
+    expect((await del()).status).toBe(404);
   });
 });

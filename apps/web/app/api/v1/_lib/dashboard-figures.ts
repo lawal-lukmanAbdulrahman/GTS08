@@ -104,7 +104,8 @@ export function buildDashboard(input: DashboardInput) {
   // ── Storefront funnel and visits
   const visitors = distinctSessions(input.views);
   const carts = distinctSessions(input.views, "cart_add");
-  const online = input.orders.filter((o) => o.channel === "online");
+  // Storefront checkouts: paid online, or held for pay-on-pickup.
+  const online = input.orders.filter((o) => o.channel === "online" || o.channel === "pickup");
   const onlinePaid = online.filter((o) => isPaid(o.status)).length;
   const previousVisitors = distinctSessions(input.previousViews).size;
   const visitSeries = dailySeries([], period.from, period.to).map((d) => ({

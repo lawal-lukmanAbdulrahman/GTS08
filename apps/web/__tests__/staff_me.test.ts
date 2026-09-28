@@ -111,6 +111,57 @@ describe("GET /api/v1/staff/me", () => {
   });
 });
 
+describe("PATCH /api/v1/staff/me: an admin's own name and photo", () => {
+  const ADMIN = { ...STAFF, role: "admin", isAdmin: true, fullName: "Old Name" };
+  beforeEach(() => {
+    mockRequireStaff.mockReset().mockResolvedValue(ADMIN);
+    mockLog.mockReset();
+    calls.length = 0;
+    results = {};
+  });
+
+  it("changes the name alone, without needing the phone", async () => {
+    results.users = { data: { full_name: "Olareign Lawal", phone: "0803 123 4567", avatar_cloudinary_id: null }, error: null };
+    const res = await PATCH(json("PATCH", { full_name: "  Olareign   Lawal " }));
+    expect(res.status).toBe(200);
+    expect(calls.find((c) => c.method === "update")?.args[0]).toMatchObject({ full_name: "Olareign Lawal" });
+    expect((await res.json()).data).toMatchObject({ full_name: "Olareign Lawal" });
+    expect(mockLog).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ action: "profile.update", changes: { fields: ["full_name"] } }));
+  });
+
+  it("sets and clears the profile photo", async () => {
+    results.users = { data: { full_name: "A", phone: null, avatar_cloudinary_id: "gts/avatars/abc" }, error: null };
+    await PATCH(json("PATCH", { avatar_cloudinary_id: "gts/avatars/abc" }));
+    expect(calls.find((c) => c.method === "update")?.args[0]).toMatchObject({ avatar_cloudinary_id: "gts/avatars/abc" });
+    calls.length = 0;
+    await PATCH(json("PATCH", { avatar_cloudinary_id: null }));
+    expect(calls.find((c) => c.method === "update")?.args[0]).toMatchObject({ avatar_cloudinary_id: null });
+  });
+
+  it.each([{ full_name: "" }, { full_name: "x".repeat(101) }, { full_name: 5 }, { avatar_cloudinary_id: "javascript:alert(1)" }, { avatar_cloudinary_id: "a b" }])("rejects %j without writing", async (body) => {
+    const res = await PATCH(json("PATCH", body));
+    expect(res.status).toBe(400);
+    expect(calls.some((c) => c.method === "update")).toBe(false);
+  });
+
+  it("still can't change email or role", async () => {
+    results.users = { data: { full_name: "A" }, error: null };
+    await PATCH(json("PATCH", { full_name: "A B", email: "x@evil.com", role: "cashier" }));
+    const written = calls.find((c) => c.method === "update")!.args[0] as Record<string, unknown>;
+    expect(Object.keys(written).sort()).toEqual(["full_name", "updated_at"]);
+  });
+});
+
+describe("PATCH /api/v1/staff/me: other staff", () => {
+  it("can't change their own name: that's managed by an admin", async () => {
+    mockRequireStaff.mockReset().mockResolvedValue(STAFF);
+    calls.length = 0;
+    const res = await PATCH(json("PATCH", { full_name: "Boss" }));
+    expect(res.status).toBe(400);
+    expect(calls.some((c) => c.method === "update")).toBe(false);
+  });
+});
+
 describe("PATCH /api/v1/staff/me (phone only)", () => {
   it("passes through a refusal", async () => {
     mockRequireStaff.mockResolvedValue(await blocked());

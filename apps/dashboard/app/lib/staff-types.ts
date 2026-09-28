@@ -56,6 +56,7 @@ export interface StaffProfileView {
   email: string | null;
   full_name: string | null;
   phone: string | null;
+  avatar_cloudinary_id?: string | null;
   role: string;
   is_admin: boolean;
   /** The one admin who can add people. */

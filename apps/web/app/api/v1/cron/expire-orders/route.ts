@@ -16,7 +16,8 @@ function positiveNumber(name: string, fallback: number): number {
 /**
  * Cancels orders that were never paid, freeing whatever stock they hold:
  *  - WhatsApp orders after WHATSAPP_ORDER_EXPIRY_HOURS (default 24), since they reserve stock;
- *  - online orders after ONLINE_ORDER_EXPIRY_MINUTES (default 60).
+ *  - online orders after ONLINE_ORDER_EXPIRY_MINUTES (default 60);
+ *  - pay-on-pickup orders once their own pickup deadline passes.
  * Each order is claimed with a compare-and-swap, so an order paid or cancelled a
  * moment earlier is left alone, and running the job twice does nothing new.
  */
@@ -60,6 +61,31 @@ async function run(request: NextRequest) {
           console.error("[cron/expire-orders] could not expire", order.id, err);
           failed += 1;
         }
+      }
+    }
+
+    // Pay-on-pickup orders: each has its own deadline, set from the admin's hold time when it was placed.
+    const { data: overdue, error: overdueError } = await client
+      .from("orders")
+      .select("id, channel, internal_notes, items:order_items(variant_id, quantity)")
+      .eq("status", "pending_payment")
+      .eq("channel", "pickup")
+      .lt("pickup_deadline", new Date(now).toISOString())
+      .limit(BATCH);
+    if (overdueError) throw new Error(overdueError.message);
+    for (const order of (overdue || []) as unknown as Array<{ id: string; internal_notes: string | null; items: Array<{ variant_id: string | null; quantity: number }> | null }>) {
+      try {
+        const notes = [order.internal_notes, "Expired: not collected and paid by the pickup deadline."].filter(Boolean).join("\n");
+        const claimed = await transitionOrderStatus(client, order.id, "pending_payment", { status: "cancelled", internal_notes: notes });
+        if (!claimed) continue;
+        const release: InventoryChange[] = (order.items || [])
+          .filter((i) => i.variant_id)
+          .map((i) => ({ variantId: i.variant_id as string, deltaReserved: -i.quantity, clampReserved: true }));
+        if (release.length > 0) await adjustAll(client, release);
+        expired += 1;
+      } catch (err) {
+        console.error("[cron/expire-orders] could not expire pickup order", order.id, err);
+        failed += 1;
       }
     }
 

@@ -400,3 +400,11 @@ describe("the demo account is sandboxed", () => {
     expect(r.ok && r.isSuperAdmin).toBe(false);
   });
 });
+
+describe("removed staff", () => {
+  it("are refused on every request, so an open session stops working at once", async () => {
+    mockGetUser.mockReset().mockResolvedValue({ id: "u1", email: "gone@gts.ng" });
+    profile({ role: "admin", removed_at: "2026-09-28T10:00:00Z" }, null);
+    await denied(requireStaff(req()), 403, "ACCOUNT_REMOVED");
+  });
+});

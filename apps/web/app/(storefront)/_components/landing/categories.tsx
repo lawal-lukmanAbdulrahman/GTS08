@@ -3,92 +3,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
+import { categoryTiles, useStoreCategories } from "../../_lib/categories";
 
-interface CategoryCard {
-  id: string;
-  subtitle: string;
-  titleMain: string;
-  titleItalic: string;
-  image: string;
-  href: string;
-}
-
-const CATEGORIES: CategoryCard[] = [
-  {
-    id: "1",
-    subtitle: "Explore",
-    titleMain: "Home &",
-    titleItalic: "Office",
-    image: "/products/home_and_office_section.jpg",
-    href: "/search?category=Home%20%26%20Office",
-  },
-  {
-    id: "2",
-    subtitle: "Explore",
-    titleMain: "Smart",
-    titleItalic: "Appliances",
-    image: "/products/appliance_section.webp",
-    href: "/search?category=Appliances",
-  },
-  {
-    id: "3",
-    subtitle: "Explore",
-    titleMain: "Computing",
-    titleItalic: "Gear",
-    image: "/products/computing_section.jpg",
-    href: "/search?category=Computing",
-  },
-  {
-    id: "4",
-    subtitle: "Explore",
-    titleMain: "Gaming",
-    titleItalic: "Zone",
-    image: "/products/gaming_section.jpg",
-    href: "/search?category=Gaming",
-  },
-  {
-    id: "5",
-    subtitle: "Explore",
-    titleMain: "Phones &",
-    titleItalic: "Tablets",
-    image: "/products/phones_section.jpg",
-    href: "/search?category=Phones%20%26%20Tablets",
-  },
-  {
-    id: "6",
-    subtitle: "Explore",
-    titleMain: "Health &",
-    titleItalic: "Beauty",
-    image: "/products/health_and_beauty_section.jpg",
-    href: "/search?category=Health%20%26%20Beauty",
-  },
-  {
-    id: "7",
-    subtitle: "Explore",
-    titleMain: "Fashion &",
-    titleItalic: "Apparel",
-    image: "/products/fashion_section.jpg",
-    href: "/search?category=Fashion",
-  },
-  {
-    id: "8",
-    subtitle: "Explore",
-    titleMain: "Baby",
-    titleItalic: "Essentials",
-    image: "/products/baby_products_section.jpg",
-    href: "/search?category=Baby%20Products",
-  },
-  {
-    id: "9",
-    subtitle: "Explore",
-    titleMain: "Fresh",
-    titleItalic: "Groceries",
-    image: "/products/groceries_section.jpg",
-    href: "/search?category=Supermarket",
-  },
-];
-
+/** The landing page's category tiles: the shop's own top-level categories, hidden when there are none yet. */
 export function Categories() {
+  const rows = useStoreCategories();
+  const tiles = categoryTiles(rows ?? [], process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -125,6 +45,8 @@ export function Categories() {
       scrollContainerRef.current.scrollBy({ left: 220, behavior: "smooth" });
     }
   };
+
+  if (tiles.length === 0) return null;
 
   return (
     <section className="w-full px-3 md:px-4 pt-3 sm:pt-4 md:pt-5 pb-2 sm:pb-3 md:pb-4">
@@ -177,20 +99,24 @@ export function Categories() {
             className="flex gap-4 sm:gap-5 overflow-x-auto scroll-smooth no-scrollbar py-1"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
-            {CATEGORIES.map((cat) => (
+            {tiles.map((cat) => (
               <Link
                 key={cat.id}
                 href={cat.href}
                 className="relative w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] aspect-[3/4.4] shrink-0 rounded-[14px] overflow-hidden flex flex-col justify-end p-3.5 sm:p-4 group/card transition-all duration-300 hover:shadow-lg border border-gray-200/80"
               >
-                {/* Full-bleed Category Image */}
-                <Image
-                  src={cat.image}
-                  alt={`${cat.titleMain} ${cat.titleItalic}`}
-                  fill
-                  className="object-cover object-center group-hover/card:scale-105 transition-transform duration-700"
-                  sizes="(max-width: 640px) 160px, (max-width: 768px) 175px, 185px"
-                />
+                {/* Full-bleed Category Image (the banner the admin uploaded), else a plain dark tile */}
+                {cat.image ? (
+                  <Image
+                    src={cat.image}
+                    alt={cat.title}
+                    fill
+                    className="object-cover object-center group-hover/card:scale-105 transition-transform duration-700"
+                    sizes="(max-width: 640px) 160px, (max-width: 768px) 175px, 185px"
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#3A3A3A] via-[#1C1C1C] to-[#0A0A0A]" />
+                )}
 
                 {/* Dark Gradient Overlay for Readability */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent rounded-[14px]" />
@@ -198,15 +124,10 @@ export function Categories() {
                 {/* Card Content - Centered Bottom */}
                 <div className="relative z-10 flex flex-col items-center text-center">
                   <span className="text-[10px] sm:text-xs text-white/80 font-light tracking-wider uppercase mb-0.5">
-                    {cat.subtitle}
+                    Explore
                   </span>
 
-                  <h3 className="text-sm sm:text-base font-semibold text-white tracking-tight mb-2 leading-snug">
-                    {cat.titleMain}{" "}
-                    <span className="font-serif italic font-normal">
-                      {cat.titleItalic}
-                    </span>
-                  </h3>
+                  <h3 className="text-sm sm:text-base font-semibold text-white tracking-tight mb-2 leading-snug">{cat.title}</h3>
 
                   <span className="inline-flex items-center gap-1 bg-[#F2F0EA] text-[#010101] text-[11px] sm:text-xs font-semibold px-3 py-1 rounded-full hover:bg-[#EDCF5D] hover:text-[#010101] transition-all shadow-xs group-hover/card:scale-105">
                     Shop

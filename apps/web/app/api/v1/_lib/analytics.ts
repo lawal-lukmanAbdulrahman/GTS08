@@ -61,7 +61,8 @@ export function summarize(orders: OrderLike[]) {
   const revenue = { total: 0, online: 0, walkin: 0, whatsapp: 0 };
   const count = { total: 0, online: 0, walkin: 0, whatsapp: 0 };
   for (const o of orders) {
-    const bucket = o.channel === "online" ? "online" : o.channel === "whatsapp" ? "whatsapp" : "walkin";
+    // Pay-on-pickup orders are placed on the storefront, so they count as online.
+    const bucket = o.channel === "online" || o.channel === "pickup" ? "online" : o.channel === "whatsapp" ? "whatsapp" : "walkin";
     revenue.total += o.total;
     revenue[bucket] += o.total;
     count.total += 1;
