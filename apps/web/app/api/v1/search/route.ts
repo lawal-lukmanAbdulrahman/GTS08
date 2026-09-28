@@ -35,6 +35,8 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = createServiceClient();
+    const dataMode = await getRequestDataMode();
+    const isTest = dataMode === "test";
 
     // 1. Run the unified search function
     const { data: searchResults, error: searchError } = await supabase.rpc(
@@ -46,14 +48,14 @@ export async function GET(request: NextRequest) {
         category_filter: category,
         active_only: true,
         // The function runs with the server key (RLS doesn't apply), so it is told which catalogue to search.
-        data_is_test: (await getRequestDataMode()) === "test",
+        data_is_test: isTest,
       }
     );
 
     if (searchError) {
       console.error("[search] search_products RPC error:", searchError.message);
       // Fallback to ilike search if the RPC function doesn't exist yet
-      return await fallbackSearch(supabase, q, limit, offset, page);
+      return await fallbackSearch(supabase, q, limit, offset, page, isTest);
     }
 
     const results = (searchResults as any[]) || [];
@@ -79,6 +81,7 @@ export async function GET(request: NextRequest) {
           category:categories(name, slug),
           images:product_images(cloudinary_public_id, alt_text, is_primary)
         `)
+        .eq("is_test", isTest)
         .in("id", productIds);
 
       if (productsData) {
@@ -117,6 +120,7 @@ export async function GET(request: NextRequest) {
       const { data: sugData } = await supabase
         .from("search_queries")
         .select("query")
+        .eq("is_test", isTest)
         .gt("results_count", 0)
         .order("created_at", { ascending: false })
         .limit(500);
@@ -154,7 +158,9 @@ export async function GET(request: NextRequest) {
       meta: { total, page, limit, pages, query: q },
     }, {
       headers: {
-        "Cache-Control": await publicCache("public, s-maxage=30, stale-while-revalidate=120"),
+        "Cache-Control": isTest
+          ? "private, no-store"
+          : await publicCache("public, s-maxage=30, stale-while-revalidate=120"),
       },
     });
   } catch (err) {
@@ -163,7 +169,7 @@ export async function GET(request: NextRequest) {
 }
 
 // ─── Fallback: ilike search (before migration is run) ───────────────────────
-async function fallbackSearch(supabase: any, q: string, limit: number, offset: number, page: number) {
+async function fallbackSearch(supabase: any, q: string, limit: number, offset: number, page: number, isTest = false) {
   // Clean query for PostgREST
   const clean = q.replace(/[,()%*\\";]|--/g, " ").replace(/\s+/g, " ").trim();
   if (!clean) {
@@ -179,6 +185,7 @@ async function fallbackSearch(supabase: any, q: string, limit: number, offset: n
       { count: "exact" }
     )
     .eq("status", "active")
+    .eq("is_test", isTest)
     .or(`name.ilike.%${clean}%,description.ilike.%${clean}%,short_description.ilike.%${clean}%,material.ilike.%${clean}%,sku.ilike.%${clean}%`)
     .order("total_sold", { ascending: false })
     .range(offset, offset + limit - 1);

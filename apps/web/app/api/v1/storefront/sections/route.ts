@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { createServiceClient } from "@gts/database";
+import { createServiceClient, getRequestDataMode } from "@gts/database";
 import { requireAdmin } from "../../_lib/staff-access";
 
 export interface StorefrontSectionConfig {
@@ -39,27 +39,37 @@ const DEFAULT_HERO_PRODUCT_IDS = [
   "nexus-washing-machine",
 ];
 
-// In-memory fallback cache
-let cachedConfig: StorefrontLayoutConfig = {
-  sections: DEFAULT_STOREFRONT_SECTIONS,
-  heroProductIds: DEFAULT_HERO_PRODUCT_IDS,
-  updatedAt: new Date().toISOString(),
+// In-memory fallback cache per data mode
+const cachedConfigByMode: Record<string, StorefrontLayoutConfig> = {
+  live: {
+    sections: DEFAULT_STOREFRONT_SECTIONS,
+    heroProductIds: DEFAULT_HERO_PRODUCT_IDS,
+    updatedAt: new Date().toISOString(),
+  },
+  test: {
+    sections: DEFAULT_STOREFRONT_SECTIONS,
+    heroProductIds: DEFAULT_HERO_PRODUCT_IDS,
+    updatedAt: new Date().toISOString(),
+  },
 };
 
 export async function GET() {
   try {
+    const dataMode = typeof getRequestDataMode === "function" ? await getRequestDataMode() : "live";
+    const isTest = dataMode === "test";
     const supabase = createServiceClient();
     const { data, error } = await supabase
       .from("content_slots")
       .select("*")
       .eq("slot_key", "hero_1")
+      .eq("is_test", isTest)
       .maybeSingle();
 
     if (!error && data && data.headline) {
       try {
         const parsed = JSON.parse(data.headline);
         if (parsed.sections && Array.isArray(parsed.sections)) {
-          cachedConfig = parsed;
+          cachedConfigByMode[dataMode] = parsed;
         }
       } catch {
         // use cached config
@@ -68,12 +78,12 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      data: cachedConfig,
+      data: cachedConfigByMode[dataMode] || cachedConfigByMode.live,
     });
   } catch {
     return NextResponse.json({
       success: true,
-      data: cachedConfig,
+      data: cachedConfigByMode.live,
     });
   }
 }
@@ -121,9 +131,13 @@ export async function PUT(request: NextRequest) {
     const check = validateLayout(body);
     if (!check.ok) return NextResponse.json({ success: false, error: check.message }, { status: 400 });
 
+    const dataMode = typeof getRequestDataMode === "function" ? await getRequestDataMode() : "live";
+    const isTest = dataMode === "test";
+    const currentModeConfig = cachedConfigByMode[dataMode] ?? cachedConfigByMode.live;
+
     const updatedConfig: StorefrontLayoutConfig = {
       sections: check.sections,
-      heroProductIds: check.heroProductIds ?? cachedConfig.heroProductIds,
+      heroProductIds: check.heroProductIds ?? currentModeConfig?.heroProductIds ?? DEFAULT_HERO_PRODUCT_IDS,
       updatedAt: new Date().toISOString(),
     };
 
@@ -134,13 +148,14 @@ export async function PUT(request: NextRequest) {
       headline: JSON.stringify(updatedConfig),
       subheadline: "Storefront Sections Layout Configuration",
       is_active: true,
+      is_test: isTest,
       updated_at: new Date().toISOString(),
     }, { onConflict: "slot_key,is_test" });
     if (error) {
       return NextResponse.json({ success: false, error: "Could not save the layout. Try again." }, { status: 500 });
     }
 
-    cachedConfig = updatedConfig;
+    cachedConfigByMode[dataMode] = updatedConfig;
     return NextResponse.json({ success: true, data: updatedConfig });
   } catch (err) {
     return NextResponse.json(

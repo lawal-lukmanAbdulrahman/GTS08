@@ -227,14 +227,6 @@ function LoginForm() {
               </span>
             </div>
 
-            {/* Form Title */}
-            <h2 className="font-sans text-2xl sm:text-3xl font-extrabold text-[#010101] tracking-tight mb-2">
-              Welcome Back!
-            </h2>
-            <p className="text-xs text-gray-500 mb-6">
-              Sign in with your staff account credentials to access your terminal.
-            </p>
-
             {/* General Server/Network Error Banner (No Emojis) */}
             {generalError && (
               <div className="mb-4 p-3.5 rounded-2xl bg-red-50 border border-red-200/80 text-red-700 text-xs font-semibold text-center flex items-center justify-center gap-2">
@@ -369,7 +361,6 @@ function LoginForm() {
                 >
                   {demoLoading ? "Opening the demo..." : "Try the demo"}
                 </button>
-                <p className="text-[11px] text-gray-500 text-center">Explore the app with sample products, orders and customers. Nothing you do affects the real shop.</p>
               </div>
             )}
           </div>

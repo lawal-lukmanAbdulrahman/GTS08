@@ -12,7 +12,7 @@ const WarpText = dynamic(() => import("./_components/ui/WarpText"), {
 });
 
 export default function NotFound() {
-  const { products } = useCatalogue();
+  const { products, loading } = useCatalogue();
   const recommendedProducts = products.slice(0, 4);
 
   return (
@@ -81,43 +81,49 @@ export default function NotFound() {
           </div>
 
           {/* ── Featured Recommendations Grid ── */}
-          <div className="w-full text-left pt-10 border-t border-gray-200/80">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <span className="text-[10px] uppercase tracking-wider font-extrabold text-[#A4A4A4] block">
-                  RECOMMENDED FOR YOU
-                </span>
-                <h2 className="text-xl sm:text-2xl font-serif font-bold text-[#010101]">
-                  Explore Popular GTS Products
-                </h2>
+          {(loading || recommendedProducts.length > 0) && (
+            <div className="w-full text-left pt-10 border-t border-gray-200/80">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider font-extrabold text-[#A4A4A4] block">
+                    RECOMMENDED FOR YOU
+                  </span>
+                  <h2 className="text-xl sm:text-2xl font-serif font-bold text-[#010101]">
+                    Explore Popular GTS Products
+                  </h2>
+                </div>
+
+                <Link
+                  href="/search"
+                  className="text-xs sm:text-sm font-semibold text-[#010101] hover:underline flex items-center gap-1"
+                >
+                  View all <span className="text-base">→</span>
+                </Link>
               </div>
 
-              <Link
-                href="/search"
-                className="text-xs sm:text-sm font-semibold text-[#010101] hover:underline flex items-center gap-1"
-              >
-                View all <span className="text-base">→</span>
-              </Link>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                {loading && products.length === 0
+                  ? Array.from({ length: 4 }).map((_, idx) => (
+                      <div key={idx} className="w-full h-64 rounded-xl bg-gray-100 animate-pulse" />
+                    ))
+                  : recommendedProducts.map((product) => (
+                      <ProductCard
+                        key={product.id}
+                        id={product.id}
+                        title={product.title}
+                        price={product.price}
+                        originalPrice={product.originalPrice}
+                        badge={product.badge}
+                        rating={product.rating}
+                        reviews={product.reviews}
+                        image={product.image}
+                        hasTransparentBg={product.hasTransparentBg}
+                        className="w-full"
+                      />
+                    ))}
+              </div>
             </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-              {recommendedProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  id={product.id}
-                  title={product.title}
-                  price={product.price}
-                  originalPrice={product.originalPrice}
-                  badge={product.badge}
-                  rating={product.rating}
-                  reviews={product.reviews}
-                  image={product.image}
-                  hasTransparentBg={product.hasTransparentBg}
-                  className="w-full"
-                />
-              ))}
-            </div>
-          </div>
+          )}
 
         </div>
       </main>

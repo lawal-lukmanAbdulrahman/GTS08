@@ -1136,7 +1136,7 @@ export default function AdminInventoryPage() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-gray-200/80 dark:border-[#262626] bg-gray-50/60 dark:bg-[#161616] text-[11px] font-semibold text-gray-500 dark:text-gray-400">
-                  <th className="py-3 pl-4 pr-2 w-8">
+                  <th className="py-3 pl-4 pr-2 w-10">
                     <input
                       type="checkbox"
                       checked={
@@ -1144,7 +1144,7 @@ export default function AdminInventoryPage() {
                         paginatedInventory.every((i) => selectedItems.includes(i.id))
                       }
                       onChange={handleSelectAll}
-                      className="rounded border-gray-300 dark:border-[#444] text-[#EDCF5D] focus:ring-0 cursor-pointer"
+                      className="w-[18px] h-[18px] min-w-[18px] min-h-[18px] rounded-[4px] border border-gray-300 dark:border-[#555] bg-white dark:bg-[#1E1E1E] accent-[#010101] dark:accent-[#EDCF5D] [color-scheme:light] dark:[color-scheme:dark] focus:ring-2 focus:ring-[#EDCF5D]/50 focus:ring-offset-0 cursor-pointer transition-colors shadow-2xs"
                     />
                   </th>
                   <th className="py-3 px-3">Product / Variant</th>
@@ -1197,18 +1197,28 @@ export default function AdminInventoryPage() {
                         ? item.total_valuation
                         : (item.unit_price > 100000 ? item.unit_price / 100 : item.unit_price) * item.available_quantity;
 
+                    const isSelected = selectedItems.includes(item.id);
                     return (
                       <tr
                         key={item.id}
-                        className="hover:bg-gray-50/80 dark:hover:bg-[#1E1E1E] transition-colors group"
+                        onClick={(e) => {
+                          const target = e.target as HTMLElement | null;
+                          if (target?.closest("button, a, input, select, textarea, [role='button'], [data-no-row-toggle]")) {
+                            return;
+                          }
+                          handleToggleSelect(item.id);
+                        }}
+                        className={`hover:bg-gray-50/80 dark:hover:bg-[#1E1E1E] transition-colors cursor-pointer select-none group ${
+                          isSelected ? "bg-amber-500/5 dark:bg-[#EDCF5D]/5" : ""
+                        }`}
                       >
                         {/* Checkbox */}
-                        <td className="py-3 pl-4 pr-2">
+                        <td className="py-3 pl-4 pr-2 w-10">
                           <input
                             type="checkbox"
-                            checked={selectedItems.includes(item.id)}
+                            checked={isSelected}
                             onChange={() => handleToggleSelect(item.id)}
-                            className="rounded border-gray-300 dark:border-[#444] text-[#EDCF5D] focus:ring-0 cursor-pointer"
+                            className="w-[18px] h-[18px] min-w-[18px] min-h-[18px] rounded-[4px] border border-gray-300 dark:border-[#555] bg-white dark:bg-[#1E1E1E] accent-[#010101] dark:accent-[#EDCF5D] [color-scheme:light] dark:[color-scheme:dark] focus:ring-2 focus:ring-[#EDCF5D]/50 focus:ring-offset-0 cursor-pointer transition-colors shadow-2xs"
                           />
                         </td>
 

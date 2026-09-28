@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, use, useRef, useEffect, useMemo } from "react";
+import { useState, use, useRef, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@gts/database/client";
 import { Footer } from "../../_components/landing/footer";
@@ -150,6 +150,19 @@ export default function ProductDetailPage({
     if (typeof window !== "undefined") {
       setCurrentUrl(window.location.href);
     }
+  }, []);
+
+  const handleReviewsUpdated = useCallback((count: number, avgRating: number) => {
+    setProduct((prev) => {
+      if (!prev) return prev;
+      if (prev.reviewsCount === count && prev.rating === avgRating) return prev;
+      return {
+        ...prev,
+        reviewsCount: count,
+        rating: avgRating,
+        reviews: `${count}`,
+      };
+    });
   }, []);
 
   // Track product view in recently viewed items
@@ -456,9 +469,9 @@ export default function ProductDetailPage({
               origPriceNaira && origPriceNaira > priceNaira
                 ? `${Math.round(((origPriceNaira - priceNaira) / origPriceNaira) * 100)}% OFF`
                 : (localFallback?.badge && localFallback.badge !== "HOT" ? localFallback.badge : undefined),
-            rating: Number(matched.average_rating || localFallback?.rating || 4.8),
-            reviewsCount: Number(matched.review_count || localFallback?.reviewsCount || 42),
-            reviews: `${matched.review_count || localFallback?.reviews || 42}`,
+            rating: Number(matched.average_rating || (matched.review_count ? 5 : 0)),
+            reviewsCount: Number(matched.review_count || 0),
+            reviews: `${matched.review_count || 0}`,
             shortDescription: shortDesc || matched.description || localFallback?.description || "",
             description: matched.description || localFallback?.description || "",
             category: matched.category?.name || localFallback?.category || "General",
@@ -680,14 +693,11 @@ export default function ProductDetailPage({
   const now = new Date();
   const pickupStart = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
   const pickupEnd = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000);
-  const doorStart = new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000);
-  const doorEnd = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
   const formatShortDate = (d: Date) =>
     d.toLocaleDateString("en-NG", { day: "2-digit", month: "long" });
 
   const pickupDateStr = `${formatShortDate(pickupStart)} and ${formatShortDate(pickupEnd)}`;
-  const doorDateStr = `${formatShortDate(doorStart)} and ${formatShortDate(doorEnd)}`;
 
   const availableAreas = NIGERIAN_LOCATIONS[selectedState] || NIGERIAN_LOCATIONS["Lagos"] || [];
 
@@ -695,7 +705,7 @@ export default function ProductDetailPage({
     <div className="min-h-screen bg-white text-[#010101] pb-24 md:pb-0">
 
       {/* ── Top Section (Breadcrumb, Image Showcase, Details, Delivery & Returns) ── */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 pt-3 pb-2 max-w-[1440px] mx-auto">
+      <div className="w-full px-3 md:px-4 pt-3 pb-2 max-w-[1240px] mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
 
           {/* ════════ LEFT SECTION (9 cols): Breadcrumb + (Image & Details) ════════ */}
@@ -959,7 +969,7 @@ export default function ProductDetailPage({
             </h1>
 
             {/* Price Display (Above Ratings on mobile & desktop) */}
-            <div className="flex items-baseline gap-2.5 sm:gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
               <span className="font-sans text-2xl sm:text-3xl font-extrabold text-[#010101] tracking-tight">
                 {product.price}
               </span>
@@ -968,10 +978,34 @@ export default function ProductDetailPage({
                   {product.originalPrice}
                 </span>
               )}
-              {product.badge && (
-                <span className="bg-rose-50 text-rose-600 border border-rose-200 text-[11px] font-bold px-2 py-0.5 rounded-full">
-                  {product.badge}
-                </span>
+              {(product.badge || (product.discountPercent && product.discountPercent > 0 ? `${product.discountPercent}% OFF` : undefined)) && (
+                <div className="relative inline-flex items-center self-center select-none text-[#010101]">
+                  <div
+                    className="relative flex items-center h-[22px] bg-[#EDCF5D] rounded-[2px] shadow-2xs overflow-hidden"
+                    title={product.badge || `${product.discountPercent}% OFF`}
+                  >
+                    {/* Left Cutout */}
+                    <span className="w-2.5 h-2.5 rounded-full bg-white dark:bg-[#1A201B] -ml-1.5 shrink-0" />
+
+                    {/* Main Badge Text */}
+                    <span className="px-2 font-black text-[10.5px] sm:text-[11px] tracking-wider leading-none whitespace-nowrap font-mono text-[#010101]">
+                      {product.badge || `${product.discountPercent}% OFF`}
+                    </span>
+
+                    {/* Stub Divider Line + Top/Bottom Notches */}
+                    <div className="relative flex flex-col items-center justify-between h-full w-2 shrink-0">
+                      <span className="w-2 h-2 rounded-full bg-white dark:bg-[#1A201B] -mt-1 shrink-0" />
+                      <span className="w-[1.5px] h-2.5 bg-white dark:bg-[#1A201B] rounded-full shrink-0" />
+                      <span className="w-2 h-2 rounded-full bg-white dark:bg-[#1A201B] -mb-1 shrink-0" />
+                    </div>
+
+                    {/* Stub Area */}
+                    <div className="w-2 h-full shrink-0" />
+
+                    {/* Right Cutout */}
+                    <span className="w-2.5 h-2.5 rounded-full bg-white dark:bg-[#1A201B] -mr-1.5 shrink-0" />
+                  </div>
+                </div>
               )}
             </div>
 
@@ -983,7 +1017,9 @@ export default function ProductDetailPage({
                     <svg
                       key={i}
                       className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${
-                        i < Math.floor(product.rating) ? "fill-current" : "fill-gray-200"
+                        product.rating > 0 && i < Math.floor(product.rating)
+                          ? "fill-current"
+                          : "fill-gray-200"
                       }`}
                       viewBox="0 0 20 20"
                     >
@@ -991,17 +1027,39 @@ export default function ProductDetailPage({
                     </svg>
                   ))}
                 </div>
-                <span className="font-bold text-[#010101] text-xs">{product.rating}</span>
-                <span className="text-gray-300">•</span>
-                <button
-                  onClick={() => {
-                    const revTab = document.getElementById("reviews-section");
-                    revTab?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                  className="text-gray-500 hover:text-[#010101] underline cursor-pointer text-xs"
-                >
-                  {product.reviewsCount || 2300} reviews
-                </button>
+                {product.reviewsCount && product.reviewsCount > 0 ? (
+                  <>
+                    <span className="font-bold text-[#010101] text-xs">
+                      {product.rating > 0 ? product.rating.toFixed(1) : "0.0"}
+                    </span>
+                    <span className="text-gray-300">•</span>
+                    <button
+                      onClick={() => {
+                        const revTab = document.getElementById("product-tabs-section");
+                        revTab?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        window.dispatchEvent(new CustomEvent("gts-switch-tab", { detail: "reviews" }));
+                      }}
+                      className="text-gray-500 hover:text-[#010101] underline cursor-pointer text-xs"
+                    >
+                      {product.reviewsCount} {product.reviewsCount === 1 ? "review" : "reviews"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium text-gray-500 text-xs">No reviews yet</span>
+                    <span className="text-gray-300">•</span>
+                    <button
+                      onClick={() => {
+                        const revTab = document.getElementById("product-tabs-section");
+                        revTab?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        window.dispatchEvent(new CustomEvent("gts-switch-tab", { detail: "reviews" }));
+                      }}
+                      className="text-gray-500 hover:text-[#010101] underline cursor-pointer text-xs"
+                    >
+                      Be the first to review
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* Anchored Share Icon Button for Mobile */}
@@ -1034,22 +1092,19 @@ export default function ProductDetailPage({
             {/* Live Stock Status Indicator */}
             <div className="pt-1">
               {isOutOfStock ? (
-                <div className="inline-flex items-center gap-2 py-1 px-3 rounded-lg bg-red-50 border border-red-200">
-                  <span className="w-2 h-2 rounded-full bg-red-500" />
+                <div className="inline-flex items-center gap-2 py-1 px-3.5 rounded-lg border border-red-300 bg-red-50/50 text-red-700">
                   <span className="text-xs font-bold text-red-700">Out of Stock</span>
-                  <span className="text-[11px] text-red-600">Currently unavailable for order</span>
+                  <span className="text-[11px] text-red-600 font-mono">(Currently unavailable for order)</span>
                 </div>
               ) : currentAvailableStock <= 5 ? (
-                <div className="inline-flex items-center gap-2 py-1 px-3 rounded-lg bg-amber-50 border border-amber-200">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  <span className="text-xs font-bold text-amber-800">Only {currentAvailableStock} left in stock!</span>
-                  <span className="text-[11px] text-amber-700">Order soon to secure yours</span>
+                <div className="inline-flex items-center gap-2 py-1 px-3.5 rounded-lg border border-[#010101] bg-transparent text-[#010101]">
+                  <span className="text-xs font-bold text-amber-700">Only {currentAvailableStock} left in stock!</span>
+                  <span className="text-[11px] text-gray-500 font-mono">(Order soon to secure yours)</span>
                 </div>
               ) : (
-                <div className="inline-flex items-center gap-2 py-1 px-3 rounded-lg bg-emerald-50 border border-emerald-200">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span className="text-xs font-semibold text-emerald-800">In Stock</span>
-                  <span className="text-[11px] text-emerald-700 font-mono">({currentAvailableStock} units available)</span>
+                <div className="inline-flex items-center gap-2 py-1 px-3.5 rounded-lg border border-[#010101] bg-transparent text-[#010101]">
+                  <span className="text-xs font-semibold text-[#010101]">In Stock</span>
+                  <span className="text-[11px] text-gray-500 font-mono">({currentAvailableStock} units available)</span>
                 </div>
               )}
             </div>
@@ -1322,28 +1377,9 @@ export default function ProductDetailPage({
                   <div className="space-y-0.5 flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-gray-900 text-xs">Pickup Station</span>
-                      <span className="font-bold text-gray-900 text-xs font-mono">₦1,000</span>
                     </div>
                     <p className="text-[11px] text-gray-500 leading-snug">
                       Ready for pickup between <span className="font-semibold text-gray-800">{pickupDateStr}</span> if you order now.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Door Delivery */}
-                <div className="flex gap-3 items-start">
-                  <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 text-gray-700 mt-0.5">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
-                    </svg>
-                  </div>
-                  <div className="space-y-0.5 flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-gray-900 text-xs">Door Delivery</span>
-                      <span className="font-bold text-gray-900 text-xs font-mono">₦1,600</span>
-                    </div>
-                    <p className="text-[11px] text-gray-500 leading-snug">
-                      Ready for delivery between <span className="font-semibold text-gray-800">{doorDateStr}</span> to your address.
                     </p>
                   </div>
                 </div>
@@ -1388,6 +1424,7 @@ export default function ProductDetailPage({
         product={product}
         rating={product.rating}
         reviewsCount={product.reviewsCount}
+        onReviewsUpdated={handleReviewsUpdated}
         onOpenZoom={(imgUrl) => {
           const idx = allThumbnails.indexOf(imgUrl);
           if (idx !== -1) {
@@ -1692,25 +1729,23 @@ function ProductBentoGallery({
     const isSquare = meta0.orientation === "square";
 
     return (
-      <div className="pt-2 w-full">
+      <div className="pt-2 w-full flex justify-start">
         <div
           onClick={() => onImageClick?.(meta0.url, 0)}
-          className={`group relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200 ${
+          className={`group relative rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 ${
             isPortrait
-              ? "max-w-sm sm:max-w-md mx-auto aspect-[3/4] sm:aspect-[4/5] max-h-[500px]"
+              ? "max-w-[260px] sm:max-w-[300px] max-h-[380px]"
               : isSquare
-              ? "max-w-md sm:max-w-lg mx-auto aspect-square max-h-[440px]"
-              : "w-full aspect-[16/9] sm:aspect-[21/9] max-h-[380px]"
+              ? "max-w-[260px] sm:max-w-[300px] aspect-square"
+              : "max-w-sm sm:max-w-md aspect-[16/10] max-h-[280px]"
           }`}
         >
           <img
             src={meta0.url}
             alt={`${productTitle} showcase 1`}
-            className={`w-full h-full transition-transform duration-300 group-hover:scale-103 ${
-              isPortrait ? "object-contain p-2 sm:p-4" : "object-cover"
-            }`}
+            className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
           />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200 rounded-xl sm:rounded-2xl flex items-center justify-center">
             <div className="w-8 h-8 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
@@ -1733,42 +1768,32 @@ function ProductBentoGallery({
     // Scenario 1: One landscape, one portrait
     if (!is0Portrait && is1Portrait) {
       return (
-        <div className="pt-2 w-full">
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3 items-center">
+        <div className="pt-2 w-full flex justify-start">
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center max-w-xl">
             {/* Landscape (wide) Left */}
             <div
               onClick={() => onImageClick?.(meta0.url, 0)}
-              className="sm:col-span-7 group relative aspect-[4/3] sm:aspect-[16/11] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
+              className="sm:col-span-7 group relative aspect-[4/3] sm:aspect-[16/11] rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200"
             >
               <img
                 src={meta0.url}
                 alt={`${productTitle} showcase 1`}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-103"
+                className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
-              <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
-                </svg>
-              </div>
             </div>
 
             {/* Portrait (vertical) Right */}
             <div
               onClick={() => onImageClick?.(meta1.url, 1)}
-              className="sm:col-span-5 group relative aspect-[3/4] sm:aspect-[4/5] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
+              className="sm:col-span-5 group relative aspect-[3/4] sm:aspect-[4/5] rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200"
             >
               <img
                 src={meta1.url}
                 alt={`${productTitle} showcase 2`}
-                className="w-full h-full object-cover sm:object-contain p-0 sm:p-2 transition-transform duration-300 group-hover:scale-103"
+                className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
-              <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
-                </svg>
-              </div>
             </div>
           </div>
         </div>
@@ -1778,42 +1803,32 @@ function ProductBentoGallery({
     // Scenario 2: Portrait left, landscape right
     if (is0Portrait && !is1Portrait) {
       return (
-        <div className="pt-2 w-full">
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3 items-center">
+        <div className="pt-2 w-full flex justify-start">
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center max-w-xl">
             {/* Portrait (vertical) Left */}
             <div
               onClick={() => onImageClick?.(meta0.url, 0)}
-              className="sm:col-span-5 group relative aspect-[3/4] sm:aspect-[4/5] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
+              className="sm:col-span-5 group relative aspect-[3/4] sm:aspect-[4/5] rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200"
             >
               <img
                 src={meta0.url}
                 alt={`${productTitle} showcase 1`}
-                className="w-full h-full object-cover sm:object-contain p-0 sm:p-2 transition-transform duration-300 group-hover:scale-103"
+                className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
-              <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
-                </svg>
-              </div>
             </div>
 
             {/* Landscape (wide) Right */}
             <div
               onClick={() => onImageClick?.(meta1.url, 1)}
-              className="sm:col-span-7 group relative aspect-[4/3] sm:aspect-[16/11] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
+              className="sm:col-span-7 group relative aspect-[4/3] sm:aspect-[16/11] rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200"
             >
               <img
                 src={meta1.url}
                 alt={`${productTitle} showcase 2`}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-103"
+                className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
-              <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
-                </svg>
-              </div>
             </div>
           </div>
         </div>
@@ -1823,25 +1838,20 @@ function ProductBentoGallery({
     // Scenario 3: Both are portrait
     if (is0Portrait && is1Portrait) {
       return (
-        <div className="pt-2 w-full">
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-4 max-w-2xl">
+        <div className="pt-2 w-full flex justify-start">
+          <div className="grid grid-cols-2 gap-3 max-w-md sm:max-w-lg">
             {[meta0, meta1].map((m, idx) => (
               <div
                 key={idx}
                 onClick={() => onImageClick?.(m.url, idx)}
-                className="group relative aspect-[3/4] sm:aspect-[4/5] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
+                className="group relative aspect-[3/4] sm:aspect-[4/5] rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200"
               >
                 <img
                   src={m.url}
                   alt={`${productTitle} showcase ${idx + 1}`}
-                  className="w-full h-full object-cover sm:object-contain p-0 sm:p-2 transition-transform duration-300 group-hover:scale-103"
+                  className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
                 />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
-                <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
-                  </svg>
-                </div>
               </div>
             ))}
           </div>
@@ -1851,39 +1861,29 @@ function ProductBentoGallery({
 
     // Scenario 4: Both are landscape or square
     return (
-      <div className="pt-2 w-full">
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3">
+      <div className="pt-2 w-full flex justify-start">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 max-w-xl">
           <div
             onClick={() => onImageClick?.(meta0.url, 0)}
-            className="sm:col-span-7 group relative aspect-[4/3] sm:aspect-[16/11] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
+            className="sm:col-span-7 group relative aspect-[4/3] sm:aspect-[16/11] rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200"
           >
             <img
               src={meta0.url}
               alt={`${productTitle} showcase 1`}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-103"
+              className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
-            <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
-              </svg>
-            </div>
           </div>
           <div
             onClick={() => onImageClick?.(meta1.url, 1)}
-            className="sm:col-span-5 group relative aspect-[4/3] sm:aspect-[16/11] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
+            className="sm:col-span-5 group relative aspect-[4/3] sm:aspect-[16/11] rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200"
           >
             <img
               src={meta1.url}
               alt={`${productTitle} showcase 2`}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-103"
+              className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
-            <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
-              </svg>
-            </div>
           </div>
         </div>
       </div>
@@ -1898,45 +1898,40 @@ function ProductBentoGallery({
 
     if (meta0.orientation === "portrait" && meta1.orientation !== "portrait") {
       return (
-        <div className="pt-2 w-full">
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3">
+        <div className="pt-2 w-full flex justify-start">
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 max-w-2xl">
             <div
               onClick={() => onImageClick?.(meta0.url, 0)}
-              className="sm:col-span-5 sm:row-span-2 group relative aspect-[3/4] sm:aspect-auto sm:min-h-[300px] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
+              className="sm:col-span-5 sm:row-span-2 group relative aspect-[3/4] sm:aspect-auto sm:min-h-[240px] rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200"
             >
               <img
                 src={meta0.url}
                 alt={`${productTitle} showcase 1`}
-                className="w-full h-full object-cover sm:object-contain p-0 sm:p-2 transition-transform duration-300 group-hover:scale-103"
+                className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
-              <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
-                </svg>
-              </div>
             </div>
 
             <div
               onClick={() => onImageClick?.(meta1.url, 1)}
-              className="sm:col-span-7 group relative aspect-[16/10] sm:h-[145px] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
+              className="sm:col-span-7 group relative aspect-[16/10] sm:h-[120px] rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200"
             >
               <img
                 src={meta1.url}
                 alt={`${productTitle} showcase 2`}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-103"
+                className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
             </div>
 
             <div
               onClick={() => onImageClick?.(meta2.url, 2)}
-              className="sm:col-span-7 group relative aspect-[16/10] sm:h-[145px] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
+              className="sm:col-span-7 group relative aspect-[16/10] sm:h-[120px] rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200"
             >
               <img
                 src={meta2.url}
                 alt={`${productTitle} showcase 3`}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-103"
+                className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
             </div>
@@ -1946,37 +1941,30 @@ function ProductBentoGallery({
     }
 
     return (
-      <div className="pt-2 w-full">
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3">
+      <div className="pt-2 w-full flex justify-start">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 max-w-2xl">
           <div
             onClick={() => onImageClick?.(meta0.url, 0)}
-            className="sm:col-span-7 sm:row-span-2 group relative aspect-[4/3] sm:aspect-auto sm:min-h-[295px] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200"
+            className="sm:col-span-7 sm:row-span-2 group relative aspect-[4/3] sm:aspect-auto sm:min-h-[240px] rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200"
           >
             <img
               src={meta0.url}
               alt={`${productTitle} showcase 1`}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-103"
+              className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
-            <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
-              </svg>
-            </div>
           </div>
 
           <div
             onClick={() => onImageClick?.(meta1.url, 1)}
             className={`sm:col-span-5 group relative ${
-              meta1.orientation === "portrait" ? "aspect-[3/4] sm:h-[145px]" : "aspect-[16/10] sm:h-[145px]"
-            } rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200`}
+              meta1.orientation === "portrait" ? "aspect-[3/4] sm:h-[120px]" : "aspect-[16/10] sm:h-[120px]"
+            } rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200`}
           >
             <img
               src={meta1.url}
               alt={`${productTitle} showcase 2`}
-              className={`w-full h-full transition-transform duration-300 group-hover:scale-103 ${
-                meta1.orientation === "portrait" ? "object-contain p-1" : "object-cover"
-              }`}
+              className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
           </div>
@@ -1984,15 +1972,13 @@ function ProductBentoGallery({
           <div
             onClick={() => onImageClick?.(meta2.url, 2)}
             className={`sm:col-span-5 group relative ${
-              meta2.orientation === "portrait" ? "aspect-[3/4] sm:h-[145px]" : "aspect-[16/10] sm:h-[145px]"
-            } rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200`}
+              meta2.orientation === "portrait" ? "aspect-[3/4] sm:h-[120px]" : "aspect-[16/10] sm:h-[120px]"
+            } rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200`}
           >
             <img
               src={meta2.url}
               alt={`${productTitle} showcase 3`}
-              className={`w-full h-full transition-transform duration-300 group-hover:scale-103 ${
-                meta2.orientation === "portrait" ? "object-contain p-1" : "object-cover"
-              }`}
+              className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
           </div>
@@ -2003,9 +1989,9 @@ function ProductBentoGallery({
 
   // 4+ Images Case (Dimension & Orientation Aware Grid with 3-Row Clamp & Smooth Fade)
   return (
-    <div className="pt-2 w-full space-y-3">
+    <div className="pt-2 w-full space-y-3 flex flex-col items-start">
       <div
-        className={`relative transition-[max-height] duration-500 ease-in-out ${
+        className={`relative transition-[max-height] duration-500 ease-in-out w-full max-w-2xl ${
           hasMoreThan3Rows && !isExpanded ? "overflow-hidden" : ""
         }`}
         style={
@@ -2014,7 +2000,7 @@ function ProductBentoGallery({
             : undefined
         }
       >
-        <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3">
+        <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
           {uniqueImages.map((imgUrl, idx) => {
             const meta = imageMetas[idx] || { url: imgUrl, orientation: "landscape", aspect: 1.33 };
             const isPortrait = meta.orientation === "portrait";
@@ -2026,16 +2012,16 @@ function ProductBentoGallery({
             if (uniqueImages.length === 4) {
               if (idx === 0 && !isPortrait) {
                 colSpan = "sm:col-span-8 sm:row-span-2";
-                aspectClass = "aspect-[4/3] sm:aspect-auto sm:min-h-[295px]";
+                aspectClass = "aspect-[4/3] sm:aspect-auto sm:min-h-[240px]";
               } else if (isPortrait) {
                 colSpan = "sm:col-span-4";
-                aspectClass = "aspect-[3/4] sm:h-[145px]";
+                aspectClass = "aspect-[3/4] sm:h-[120px]";
               } else if (idx === 3) {
                 colSpan = "sm:col-span-12";
-                aspectClass = "aspect-[21/9] sm:aspect-[24/8] max-h-[190px]";
+                aspectClass = "aspect-[21/9] sm:aspect-[24/8] max-h-[160px]";
               } else {
                 colSpan = "sm:col-span-4";
-                aspectClass = "aspect-square sm:h-[145px]";
+                aspectClass = "aspect-square sm:h-[120px]";
               }
             } else {
               // 5+ images
@@ -2056,21 +2042,14 @@ function ProductBentoGallery({
               <div
                 key={`${imgUrl}-${idx}`}
                 onClick={() => onImageClick?.(imgUrl, idx)}
-                className={`${colSpan} ${aspectClass} group relative rounded-2xl sm:rounded-3xl overflow-hidden bg-[#F9F8F5] border border-gray-200/80 cursor-pointer shadow-2xs hover:shadow-md transition-all duration-200`}
+                className={`${colSpan} ${aspectClass} group relative rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer transition-all duration-200`}
               >
                 <img
                   src={imgUrl}
                   alt={`${productTitle} showcase ${idx + 1}`}
-                  className={`w-full h-full transition-transform duration-300 group-hover:scale-103 ${
-                    isPortrait ? "object-contain p-2" : "object-cover"
-                  }`}
+                  className="w-full h-full object-cover rounded-xl sm:rounded-2xl transition-transform duration-300 group-hover:scale-102"
                 />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
-                <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
-                  </svg>
-                </div>
               </div>
             );
           })}
@@ -2167,11 +2146,13 @@ function ProductTabs({
   product,
   rating: initialRating,
   reviewsCount: _initialReviewsCount,
+  onReviewsUpdated,
   onOpenZoom,
 }: {
   product?: ProductItem;
   rating: number;
   reviewsCount: number;
+  onReviewsUpdated?: (count: number, avgRating: number) => void;
   onOpenZoom?: (imgUrl: string) => void;
 }) {
   const { user, customer } = useAuth();
@@ -2195,67 +2176,96 @@ function ProductTabs({
     }
   }, [searchParams]);
 
-  // Initial reviews with replies and verified tags
-  const [reviews, setReviews] = useState<ReviewItem[]>([
-    {
-      id: "r1",
-      name: "Helen M.",
-      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80",
-      date: "Yesterday",
-      rating: 5,
-      comment: "Excellent running shoes. It turns very sharply on the foot.",
-      likes: 42,
-      dislikes: 0,
-      isVerified: true,
-      replies: [],
-    },
-    {
-      id: "r2",
-      name: "Ann D.",
-      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80",
-      date: "2 days ago",
-      rating: 4,
-      comment: "Good shoes",
-      likes: 35,
-      dislikes: 2,
-      isVerified: true,
-      replies: [],
-    },
-    {
-      id: "r3",
-      name: "Andrew G.",
-      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80",
-      date: "2 days ago",
-      rating: 5,
-      comment: "Is it suitable for running?",
-      likes: 18,
-      dislikes: 1,
-      isVerified: true,
-      replies: [],
-    },
-  ]);
+  // Listen for tab switch events from parent (e.g. clicking top reviews count link)
+  useEffect(() => {
+    const handleSwitch = (e: any) => {
+      if (e.detail === "reviews" || e.detail === "details" || e.detail === "discussion") {
+        setActiveTab(e.detail);
+      }
+    };
+    window.addEventListener("gts-switch-tab", handleSwitch);
+    return () => window.removeEventListener("gts-switch-tab", handleSwitch);
+  }, []);
+
+  // Real reviews state (starts empty, populated from API and verified submissions)
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+
+  // Compute live average rating and breakdown
+  const currentReviewsCount = reviews.length;
+  const currentAverageRating = useMemo(() => {
+    if (reviews.length === 0) {
+      return initialRating > 0 ? Number(initialRating.toFixed(1)) : 0;
+    }
+    const sum = reviews.reduce((acc, r) => acc + (r.rating || 5), 0);
+    return Number((sum / reviews.length).toFixed(1));
+  }, [reviews, initialRating]);
+
+  const ratingCounts = useMemo(() => {
+    const total = reviews.length;
+    return [5, 4, 3, 2, 1].map((stars) => {
+      const count = reviews.filter((r) => Math.round(r.rating) === stars).length;
+      const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+      return { stars, count, percentage };
+    });
+  }, [reviews]);
+
+  // Notify parent of updated reviews count & rating
+  useEffect(() => {
+    if (reviews.length > 0) {
+      onReviewsUpdated?.(currentReviewsCount, currentAverageRating);
+    }
+  }, [currentReviewsCount, currentAverageRating, onReviewsUpdated, reviews.length]);
 
   // Load reviews from localStorage & fetch approved reviews from API
   useEffect(() => {
     if (!product?.id) return;
+
+    // 1. Clean localStorage from any previous mock reviews
+    let localSubmissions: ReviewItem[] = [];
     try {
-      const saved = localStorage.getItem(`gts_reviews_${product.id}`);
+      const savedKey = `gts_reviews_${product.id}`;
+      const saved = localStorage.getItem(savedKey);
       if (saved) {
-        setReviews(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          // Remove old mock reviews (r1, r2, r3, or running shoes comment)
+          localSubmissions = parsed.filter(
+            (r: any) =>
+              r.id !== "r1" &&
+              r.id !== "r2" &&
+              r.id !== "r3" &&
+              !r.comment?.toLowerCase().includes("running shoes")
+          );
+          if (localSubmissions.length !== parsed.length) {
+            localStorage.setItem(savedKey, JSON.stringify(localSubmissions));
+          }
+          if (localSubmissions.length > 0) {
+            setReviews(localSubmissions);
+          }
+        }
       }
     } catch {}
 
+    // 2. Fetch approved live reviews from DB
     const fetchLiveReviews = async () => {
+      setIsLoadingReviews(true);
       try {
         const res = await fetch(`/api/v1/reviews?productId=${encodeURIComponent(product.id)}`);
         if (res.ok) {
           const json = await res.json();
-          if (json.data && json.data.length > 0) {
+          if (json.data && Array.isArray(json.data)) {
             const mapped: ReviewItem[] = json.data.map((r: any) => ({
               id: r.id,
               name: r.user?.full_name || "Verified Customer",
-              avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80",
-              date: new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+              avatar:
+                r.user?.avatar_url ||
+                "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80",
+              date: new Date(r.created_at).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              }),
               rating: r.rating || 5,
               comment: r.body || r.title || "",
               likes: 0,
@@ -2263,40 +2273,28 @@ function ProductTabs({
               isVerified: true,
               replies: [],
             }));
+
             setReviews((prev) => {
-              const existingIds = new Set(prev.map((p) => p.id));
-              const newItems = mapped.filter((m) => !existingIds.has(m.id));
-              return [...newItems, ...prev];
+              // Retain local client-created reviews (rev-*) that haven't synced yet
+              const localOnly = prev.filter((p) => p.id.startsWith("rev-"));
+              const dbIds = new Set(mapped.map((m) => m.id));
+              return [...localOnly.filter((l) => !dbIds.has(l.id)), ...mapped];
             });
           }
         }
       } catch {
-        // Silently fallback to mock / local state
+        // Silently fallback
+      } finally {
+        setIsLoadingReviews(false);
       }
     };
     fetchLiveReviews();
   }, [product?.id]);
 
-  const ratingCounts = [
-    { stars: 5, count: 28, percentage: 65 },
-    { stars: 4, count: 9, percentage: 21 },
-    { stars: 3, count: 4, percentage: 9 },
-    { stars: 2, count: 1, percentage: 2 },
-    { stars: 1, count: 1, percentage: 2 },
-  ];
-
   // Reactions state with localStorage persistence
   const [reactions, setReactions] = useState<Record<string, "like" | "dislike" | null>>({});
-  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({
-    r1: 42,
-    r2: 35,
-    r3: 18,
-  });
-  const [dislikeCounts, setDislikeCounts] = useState<Record<string, number>>({
-    r1: 0,
-    r2: 2,
-    r3: 1,
-  });
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+  const [dislikeCounts, setDislikeCounts] = useState<Record<string, number>>({});
 
   // Discussion / Private Chat state
   const [discussionMessages, setDiscussionMessages] = useState<DiscussionMessage[]>([]);
@@ -2756,7 +2754,7 @@ function ProductTabs({
   });
 
   return (
-    <section id="product-tabs-section" className="w-full px-4 sm:px-6 lg:px-8 pt-5 sm:pt-6 pb-4 mt-4 sm:mt-6 border-t border-gray-200/90 max-w-[1440px] mx-auto relative">
+    <section id="product-tabs-section" className="w-full px-3 md:px-4 pt-5 sm:pt-6 pb-4 mt-4 sm:mt-6 border-t border-gray-200/90 max-w-[1240px] mx-auto relative">
       {/* Toast message banner */}
       {toastMessage && (
         <div className="fixed top-20 right-4 sm:right-8 z-50 bg-[#010101] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 font-sans text-xs sm:text-sm font-semibold border border-white/10">
@@ -2793,7 +2791,11 @@ function ProductTabs({
             <div className="space-y-6">
               {/* Reviews Controls: Sort Pill & Write Review Action */}
               <div className="flex items-center justify-between gap-3 flex-wrap">
-                <ReviewsSortDropdown value={sortOption} onChange={setSortOption} />
+                {reviews.length > 1 ? (
+                  <ReviewsSortDropdown value={sortOption} onChange={setSortOption} />
+                ) : (
+                  <div />
+                )}
 
                 <button
                   type="button"
@@ -2812,9 +2814,42 @@ function ProductTabs({
                 </button>
               </div>
 
-              {/* User Reviews List */}
-              <div className="space-y-6 divide-y divide-gray-100">
-                {sortedReviews.map((rev, i) => (
+              {/* User Reviews List or Empty State */}
+              {isLoadingReviews ? (
+                <div className="py-16 text-center space-y-3">
+                  <span className="inline-block w-6 h-6 border-2 border-[#010101] border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-gray-400 font-medium">Loading reviews...</p>
+                </div>
+              ) : sortedReviews.length === 0 ? (
+                <div className="border border-gray-200/80 rounded-3xl p-8 sm:p-12 text-center space-y-4 bg-[#FDFCF9]">
+                  <div className="w-14 h-14 rounded-2xl bg-[#010101] text-[#EDCF5D] flex items-center justify-center mx-auto shadow-xs">
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                    </svg>
+                  </div>
+                  <div className="space-y-1.5 max-w-sm mx-auto">
+                    <h4 className="text-base sm:text-lg font-bold text-[#010101]">No Reviews Yet</h4>
+                    <p className="text-xs sm:text-sm text-gray-500 leading-relaxed">
+                      Be the first to share your thoughts on this product with the GTS community.
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleWriteReviewClick}
+                      disabled={isCheckingEligibility}
+                      className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#010101] hover:bg-[#EDCF5D] hover:text-[#010101] text-white text-xs font-bold rounded-full transition-all cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                      </svg>
+                      <span>Write the First Review</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6 divide-y divide-gray-100">
+                  {sortedReviews.map((rev, i) => (
                   <div key={rev.id} className={`${i > 0 ? "pt-6" : ""} flex gap-3.5 items-start`}>
                     {/* Avatar */}
                     {rev.avatar ? (
@@ -3060,6 +3095,7 @@ function ProductTabs({
                   </div>
                 ))}
               </div>
+            )}
             </div>
           )}
 
@@ -3234,10 +3270,18 @@ function ProductTabs({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center text-[#EDCF5D] text-xl tracking-wider">
-                {"★".repeat(Math.floor(initialRating))}
-                {"☆".repeat(5 - Math.floor(initialRating))}
+                {currentAverageRating > 0 ? (
+                  <>
+                    {"★".repeat(Math.min(5, Math.max(0, Math.floor(currentAverageRating))))}
+                    {"☆".repeat(Math.min(5, Math.max(0, 5 - Math.floor(currentAverageRating))))}
+                  </>
+                ) : (
+                  <span className="text-gray-300">☆☆☆☆☆</span>
+                )}
               </div>
-              <span className="text-2xl sm:text-3xl font-extrabold text-[#010101]">{initialRating}</span>
+              <span className="text-2xl sm:text-3xl font-extrabold text-[#010101]">
+                {currentAverageRating > 0 ? currentAverageRating.toFixed(1) : "0.0"}
+              </span>
             </div>
 
             {/* Progress Bars */}
@@ -3247,7 +3291,7 @@ function ProductTabs({
                   <span className="w-3 font-semibold text-gray-700">{item.stars}</span>
                   <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
                     <div
-                      className="h-full bg-[#EDCF5D] rounded-full"
+                      className="h-full bg-[#EDCF5D] rounded-full transition-all duration-300"
                       style={{ width: `${item.percentage}%` }}
                     />
                   </div>
@@ -3255,6 +3299,14 @@ function ProductTabs({
                 </div>
               ))}
             </div>
+
+            <p className="text-[11px] text-gray-400 text-right">
+              {currentReviewsCount === 0
+                ? "No reviews yet"
+                : currentReviewsCount === 1
+                ? "Based on 1 review"
+                : `Based on ${currentReviewsCount} reviews`}
+            </p>
           </div>
 
           {/* Popular Brands Promo Card */}
@@ -3595,7 +3647,7 @@ function SimilarFinds({ currentProduct }: SimilarFindsProps) {
     : "/search";
 
   return (
-    <section className="w-full px-5 md:px-8 pt-10 sm:pt-14 pb-10">
+    <section className="w-full px-3 md:px-4 pt-10 sm:pt-14 pb-10 max-w-[1240px] mx-auto">
       {/* ── Section Header — matches landing page style ── */}
       <div className="flex justify-between items-end mb-6 sm:mb-8">
         <div>
@@ -3699,7 +3751,7 @@ function ProductDetailSkeleton() {
   return (
     <div className="min-h-screen bg-white text-[#010101]">
       {/* Top 3-Pane Section Skeleton */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 pt-3 pb-6 max-w-[1440px] mx-auto">
+      <div className="w-full px-3 md:px-4 pt-3 pb-6 max-w-[1240px] mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           {/* Left 9-col container */}
           <div className="lg:col-span-9 flex flex-col gap-3">
@@ -3864,7 +3916,7 @@ function ProductDetailSkeleton() {
       </div>
 
       {/* Tabs Skeleton */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 pt-5 sm:pt-6 pb-6 mt-4 sm:mt-6 max-w-[1440px] mx-auto border-t border-gray-200/90">
+      <div className="w-full px-3 md:px-4 pt-5 sm:pt-6 pb-6 mt-4 sm:mt-6 max-w-[1240px] mx-auto border-t border-gray-200/90">
         <div className="flex items-center gap-8 mb-4">
           <div className="w-20 h-6 bg-gray-300 rounded-md animate-pulse" />
           <div className="w-20 h-6 bg-gray-200 rounded-md animate-pulse" />
@@ -3892,7 +3944,7 @@ function ProductDetailSkeleton() {
       </div>
 
       {/* Similar Finds Skeleton */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-12 max-w-[1440px] mx-auto border-t border-gray-100">
+      <div className="w-full px-3 md:px-4 py-12 max-w-[1240px] mx-auto border-t border-gray-100">
         <div className="flex items-center justify-between mb-8">
           <div className="w-48 h-7 bg-gray-200 rounded-lg animate-pulse" />
           <div className="flex gap-2">

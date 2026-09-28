@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { makeDbStub } from "./_helpers/db-stub";
 
 const db = makeDbStub();
-vi.mock("@gts/database", () => ({ createServiceClient: () => db.client }));
+vi.mock("@gts/database", () => ({ createServiceClient: () => db.client, getRequestDataMode: async () => "live" }));
 
 const mockRequireAdmin = vi.fn();
 vi.mock("../app/api/v1/_lib/staff-access", async (orig) => ({

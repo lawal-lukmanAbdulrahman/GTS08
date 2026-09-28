@@ -7,7 +7,7 @@ import { useAuthModal } from "./auth-modal-context";
 import { useAuth } from "./auth-context";
 import { authenticateWithPasskey } from "./auth/passkey-client";
 import { checkPasskeySupport } from "./auth/webauthn-utils";
-import { PinInput } from "./auth/pin-input";
+import { createClient } from "@gts/database/client";
 import DemoStoreButton from "./demo-store-button";
 
 // ── 4 Auto-advancing Story Items for GTS (E-Commerce Marketplace) ──
@@ -58,10 +58,7 @@ const slideVariants = {
 
 export function AuthModal() {
   const { isOpen, mode, closeAuthModal, setMode } = useAuthModal();
-  const { signInWithPassword, signInWithOtp, signUp } = useAuth();
-
-  const [authMethod, setAuthMethod] = useState<"password" | "magic_link" | "pin">("password");
-  const [loginPin, setLoginPin] = useState("");
+  const { signInWithPassword, signUp } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -105,6 +102,29 @@ export function AuthModal() {
       setStatusMessage({ text: err.message || "Failed to authenticate with passkey.", type: "error" });
     } finally {
       setPasskeyLoading(false);
+    }
+  };
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    setStatusMessage(null);
+    try {
+      const supabase = createClient() as any;
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${origin}/account`,
+        },
+      });
+      if (error) {
+        setStatusMessage({ text: error.message, type: "error" });
+      }
+    } catch (err: any) {
+      setStatusMessage({ text: err.message || "Failed to sign in with Google.", type: "error" });
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -240,39 +260,7 @@ export function AuthModal() {
     setIsSubmitting(true);
 
     try {
-      if (authMethod === "magic_link") {
-        const res = await signInWithOtp(cleanEmail);
-        if (res.error) {
-          setStatusMessage({ text: res.error, type: "error" });
-        } else {
-          setStatusMessage({
-            text: "Magic login link sent! Check your inbox to sign in instantly.",
-            type: "success",
-          });
-        }
-      } else if (mode === "login" && authMethod === "pin") {
-        if (loginPin.length !== 6 || !/^\d{6}$/.test(loginPin)) {
-          setStatusMessage({ text: "Please enter your complete 6-digit PIN.", type: "error" });
-          setIsSubmitting(false);
-          return;
-        }
-
-        const pinRes = await fetch("/api/v1/auth/pin-login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: cleanEmail, pin: loginPin }),
-        });
-        const pinData = await pinRes.json();
-        if (!pinRes.ok || !pinData.success) {
-          setStatusMessage({ text: pinData.error || "Incorrect PIN. Please try again.", type: "error" });
-        } else {
-          setStatusMessage({ text: "Signed in successfully with PIN!", type: "success" });
-          setTimeout(() => {
-            closeAuthModal();
-            window.location.reload();
-          }, 600);
-        }
-      } else if (mode === "login") {
+      if (mode === "login") {
         if (!password) {
           setPasswordError("Please enter your password.");
           triggerFieldShake("password");
@@ -408,11 +396,11 @@ export function AuthModal() {
             {/* ────── RIGHT COLUMN: Auth Form Panel ────── */}
             <div className="md:col-span-6 flex flex-col justify-between p-3 sm:p-5 text-[#010101]">
               <div>
-                {/* Header Row: Brand Name & Close Button with Jiggle Feedback */}
+                {/* Header Row: Title & Close Button with Jiggle Feedback */}
                 <div className="flex items-center justify-between mb-4">
-                  <span className="font-sans text-base sm:text-lg font-black tracking-tight text-[#010101]">
-                    GTS Marketplace
-                  </span>
+                  <h2 className="font-sans text-xl sm:text-2xl font-extrabold text-[#010101] tracking-tight">
+                    {mode === "login" ? "Welcome Back!" : "Create Your Account!"}
+                  </h2>
 
                   {/* ONLY THIS BUTTON CAN CLOSE THE MODAL */}
                   <motion.button
@@ -437,39 +425,6 @@ export function AuthModal() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </motion.button>
-                </div>
-
-                {/* Form Title & Auth Method Selector */}
-                <div className="flex items-center justify-between gap-2 mb-4">
-                  <h2 className="font-sans text-xl sm:text-2xl font-extrabold text-[#010101] tracking-tight">
-                    {mode === "login" ? "Welcome Back!" : "Create Your Account!"}
-                  </h2>
-
-                  {/* Method Pill Toggle */}
-                  <div className="flex items-center bg-gray-100 p-0.5 rounded-full text-[11px] font-bold">
-                    <button
-                      type="button"
-                      onClick={() => setAuthMethod("password")}
-                      className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
-                        authMethod === "password"
-                          ? "bg-white text-[#010101] shadow-xs"
-                          : "text-gray-500 hover:text-gray-800"
-                      }`}
-                    >
-                      Password
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAuthMethod("magic_link")}
-                      className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
-                        authMethod === "magic_link"
-                          ? "bg-[#010101] text-white shadow-xs"
-                          : "text-gray-500 hover:text-gray-800"
-                      }`}
-                    >
-                      Link
-                    </button>
-                  </div>
                 </div>
 
                 {/* Status Notice Banner */}
@@ -497,7 +452,7 @@ export function AuthModal() {
                 {/* Interactive Form */}
                 <form onSubmit={handleFormSubmit} className="space-y-3">
                   {/* Signup Specific: Full Name & Phone */}
-                  {mode === "signup" && authMethod === "password" && (
+                  {mode === "signup" && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <div>
                         <label className="block text-xs font-bold text-gray-700 mb-1 font-sans">
@@ -555,116 +510,69 @@ export function AuthModal() {
                     )}
                   </div>
 
-                  {/* Password Field (Only shown in Password mode) */}
-                  {authMethod === "password" && (
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1 font-sans">
-                        Password
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showPassword ? "text" : "password"}
-                          placeholder="Type your password"
-                          value={password}
-                          onChange={(e) => {
-                            setPassword(e.target.value);
-                            if (passwordError) setPasswordError(null);
-                          }}
-                          className={`w-full rounded-full border px-4 py-2.5 sm:py-3 pr-10 text-xs sm:text-sm font-medium text-[#010101] placeholder-gray-400 outline-none transition-all shadow-2xs ${
-                            passwordError
-                              ? "border-red-500 ring-2 ring-red-500/20 bg-red-50/20"
-                              : "border-gray-200/90 bg-white focus:border-[#010101] focus:ring-1 focus:ring-[#010101]"
-                          }`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword((prev) => !prev)}
-                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition-colors p-1"
-                        >
-                          {showPassword ? (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
-                            </svg>
-                          ) : (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12c1.349-3.638 5.02-6.5 9.964-6.5 4.944 0 8.615 2.862 9.964 6.5-1.349 3.638-5.02 6.5-9.964 6.5-4.944 0-8.615-2.862-9.964-6.5z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                          )}
-                        </button>
-                      </div>
-                      {passwordError && (
-                        <p className="text-red-600 text-[11px] font-semibold mt-1 px-2 flex items-center gap-1 font-sans">
-                          <svg className="w-3.5 h-3.5 shrink-0 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-                          </svg>
-                          <span>{passwordError}</span>
-                        </p>
-                      )}
-
-                      {/* Alternate Login Links */}
-                      {mode === "login" && (
-                        <div className="flex items-center justify-between text-[11px] font-semibold text-gray-500 mt-1.5 px-1">
-                          <button
-                            type="button"
-                            onClick={() => setAuthMethod("pin")}
-                            className="hover:text-[#010101] hover:underline transition-colors"
-                          >
-                            Sign in with 6-digit PIN?
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setAuthMethod("magic_link")}
-                            className="hover:text-[#010101] hover:underline transition-colors"
-                          >
-                            Sign in with Link?
-                          </button>
-                        </div>
-                      )}
-                      {mode === "login" && (
-                        <div className="text-right text-[11px] font-semibold text-gray-500 mt-1 px-1">
-                          <button type="button" onClick={handleForgotPassword} disabled={isSubmitting} className="hover:text-[#010101] hover:underline transition-colors disabled:opacity-50">
-                            Forgot password?
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* PIN Field (Only shown in PIN mode) */}
-                  {authMethod === "pin" && (
-                    <div className="space-y-3 pt-1 text-center">
-                      <label className="block text-xs font-bold text-gray-700 font-sans">
-                        Enter your 6-Digit PIN
-                      </label>
-                      <PinInput
-                        value={loginPin}
-                        onChange={setLoginPin}
-                        length={6}
-                        autoFocus
-                        idPrefix="modal-pin"
+                  {/* Password Field */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 font-sans">
+                      Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Type your password"
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          if (passwordError) setPasswordError(null);
+                        }}
+                        className={`w-full rounded-full border px-4 py-2.5 sm:py-3 pr-10 text-xs sm:text-sm font-medium text-[#010101] placeholder-gray-400 outline-none transition-all shadow-2xs ${
+                          passwordError
+                            ? "border-red-500 ring-2 ring-red-500/20 bg-red-50/20"
+                            : "border-gray-200/90 bg-white focus:border-[#010101] focus:ring-1 focus:ring-[#010101]"
+                        }`}
                       />
-                      <div className="flex items-center justify-between text-[11px] font-semibold text-gray-500 pt-2 px-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition-colors p-1"
+                      >
+                        {showPassword ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12c1.349-3.638 5.02-6.5 9.964-6.5 4.944 0 8.615 2.862 9.964 6.5-1.349 3.638-5.02 6.5-9.964 6.5-4.944 0-8.615-2.862-9.964-6.5z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    {passwordError && (
+                      <p className="text-red-600 text-[11px] font-semibold mt-1 px-2 flex items-center gap-1 font-sans">
+                        <svg className="w-3.5 h-3.5 shrink-0 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                        </svg>
+                        <span>{passwordError}</span>
+                      </p>
+                    )}
+
+                    {/* Forgot Password Link */}
+                    {mode === "login" && (
+                      <div className="text-right text-[11px] font-semibold text-gray-500 mt-1.5 px-1">
                         <button
                           type="button"
-                          onClick={() => setAuthMethod("password")}
-                          className="hover:text-[#010101] hover:underline"
+                          onClick={handleForgotPassword}
+                          disabled={isSubmitting}
+                          className="hover:text-[#010101] hover:underline transition-colors disabled:opacity-50 cursor-pointer"
                         >
-                          Sign in with Password?
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAuthMethod("magic_link")}
-                          className="hover:text-[#010101] hover:underline"
-                        >
-                          Sign in with Link?
+                          Forgot password?
                         </button>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   {/* Confirm Password (Signup Mode) */}
-                  {mode === "signup" && authMethod === "password" && (
+                  {mode === "signup" && (
                     <div>
                       <label className="block text-xs font-bold text-gray-700 mb-1 font-sans">
                         Confirm Password
@@ -705,10 +613,6 @@ export function AuthModal() {
                   >
                     {isSubmitting ? (
                       <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : authMethod === "magic_link" ? (
-                      "Send  Link"
-                    ) : authMethod === "pin" ? (
-                      "Sign In with PIN"
                     ) : mode === "login" ? (
                       "Sign In"
                     ) : (
@@ -755,51 +659,37 @@ export function AuthModal() {
                   </span>
                 </div>
 
-                {/* Social Button Pair */}
-                <div className="grid grid-cols-2 gap-2.5 pt-1">
-                  {/* Google Login Button */}
+                {/* Google Button */}
+                <div className="pt-1">
                   <button
                     type="button"
-                    onClick={() => {
-                      alert("Connecting to Google...");
-                      closeAuthModal();
-                    }}
-                    className="w-full py-2.5 rounded-full border border-gray-200 hover:border-gray-400 bg-white font-bold text-xs text-[#010101] flex items-center justify-center gap-2 transition-all shadow-2xs active:scale-95 cursor-pointer"
+                    onClick={handleGoogleLogin}
+                    disabled={googleLoading || isSubmitting}
+                    className="w-full py-2.5 sm:py-3 rounded-full border border-gray-200 hover:border-gray-400 bg-white font-bold text-xs sm:text-sm text-[#010101] flex items-center justify-center gap-2.5 transition-all shadow-2xs active:scale-[0.98] cursor-pointer disabled:opacity-50"
                   >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                      />
-                    </svg>
+                    {googleLoading ? (
+                      <span className="inline-block w-4 h-4 border-2 border-[#010101] border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-4 h-4" viewBox="0 0 24 24">
+                        <path
+                          fill="#4285F4"
+                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                        />
+                      </svg>
+                    )}
                     <span>Google</span>
-                  </button>
-
-                  {/* Apple ID Login Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      alert("Connecting to Apple ID...");
-                      closeAuthModal();
-                    }}
-                    className="w-full py-2.5 rounded-full border border-gray-200 hover:border-gray-400 bg-white font-bold text-xs text-[#010101] flex items-center justify-center gap-2 transition-all shadow-2xs active:scale-95 cursor-pointer"
-                  >
-                    <svg className="w-4 h-4 fill-current text-[#010101]" viewBox="0 0 24 24">
-                      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.09c.67-.82 1.13-1.96.99-3.09-1 .04-2.18.67-2.88 1.49-.6.7-1.12 1.86-.98 2.97 1.11.09 2.22-.55 2.87-1.37z" />
-                    </svg>
-                    <span>Apple ID</span>
                   </button>
                 </div>
 

@@ -12,7 +12,7 @@ import type { ProductItem } from "../../_data/products";
 export function Bestsellers() {
   const { products: catalogue } = useCatalogue();
   const [apiProducts, setApiProducts] = useState<ProductItem[]>([]);
-  const [_loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -39,10 +39,11 @@ export function Bestsellers() {
 
   const PRODUCTS = useMemo(() => {
     if (apiProducts.length > 0) return apiProducts;
+    if (loading) return [];
     return [...catalogue]
       .sort((a, b) => (b.totalSold ?? 0) - (a.totalSold ?? 0))
       .slice(0, 12);
-  }, [apiProducts, catalogue]);
+  }, [apiProducts, catalogue, loading]);
 
   const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -85,6 +86,8 @@ export function Bestsellers() {
       scrollContainerRef.current.scrollBy({ left: 290, behavior: "smooth" });
     }
   };
+
+  if (!loading && PRODUCTS.length === 0) return null;
 
   return (
     <section className="w-full px-3 md:px-4 pt-3 sm:pt-4 md:pt-5 pb-3 sm:pb-4 md:pb-5">
@@ -137,26 +140,33 @@ export function Bestsellers() {
             className="flex gap-4 sm:gap-5 overflow-x-auto scroll-smooth no-scrollbar py-1"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
-            {PRODUCTS.map((product) => {
-              const isWishlisted = wishlisted[product.id];
-              return (
-                <ProductCard
-                  key={product.id}
-                  id={product.id}
-                  title={product.title}
-                  price={product.price}
-                  originalPrice={product.originalPrice}
-                  badge={product.badge}
-                  rating={product.rating}
-                  reviews={product.reviews}
-                  image={product.image}
-                  hasTransparentBg={product.hasTransparentBg}
-                  isWishlisted={isWishlisted}
-                  onToggleWishlist={toggleWishlist}
-                  className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0"
-                />
-              );
-            })}
+            {PRODUCTS.length === 0 && loading
+              ? Array.from({ length: 6 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0 h-64 rounded-xl bg-gray-100 animate-pulse"
+                  />
+                ))
+              : PRODUCTS.map((product) => {
+                  const isWishlisted = wishlisted[product.id];
+                  return (
+                    <ProductCard
+                      key={product.id}
+                      id={product.id}
+                      title={product.title}
+                      price={product.price}
+                      originalPrice={product.originalPrice}
+                      badge={product.badge}
+                      rating={product.rating}
+                      reviews={product.reviews}
+                      image={product.image}
+                      hasTransparentBg={product.hasTransparentBg}
+                      isWishlisted={isWishlisted}
+                      onToggleWishlist={toggleWishlist}
+                      className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0"
+                    />
+                  );
+                })}
           </div>
 
           {/* Right Fade Overlay */}

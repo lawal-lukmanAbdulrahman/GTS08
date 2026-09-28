@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createServiceClient } from "@gts/database";
+import { createServiceClient, getRequestDataMode } from "@gts/database";
 import { requireAdmin } from "../../_lib/staff-access";
 import { serverError, dbError } from "../../_lib/http";
 
@@ -13,8 +13,11 @@ import { publicCache } from "../../_lib/public-cache";
  */
 export async function GET() {
   try {
+    const dataMode = await getRequestDataMode();
+    const isTest = dataMode === "test";
+
     const data = await getOrComputeCached(
-      "storefront:hero:active",
+      `storefront:hero:active_${dataMode}`,
       600, // 10 minutes
       async () => {
         const supabase = createServiceClient();
@@ -30,6 +33,7 @@ export async function GET() {
             )
           `)
           .eq("is_active", true)
+          .eq("is_test", isTest)
           .order("sort_order", { ascending: true });
 
         if (error) throw error;
@@ -40,7 +44,13 @@ export async function GET() {
 
     return NextResponse.json(
       { success: true, data },
-      { headers: { "Cache-Control": await publicCache("public, s-maxage=300, stale-while-revalidate=1200") } }
+      {
+        headers: {
+          "Cache-Control": isTest
+            ? "private, no-store"
+            : await publicCache("public, s-maxage=300, stale-while-revalidate=1200"),
+        },
+      }
     );
   } catch (err) {
     return serverError(err);
@@ -69,10 +79,12 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: "products array required (max 20)." }, { status: 400 });
     }
 
+    const dataMode = await getRequestDataMode();
+    const isTest = dataMode === "test";
     const supabase = createServiceClient();
 
-    // Clear existing entries
-    const { error: delErr } = await supabase.from("hero_carousel").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    // Clear existing entries for this mode
+    const { error: delErr } = await supabase.from("hero_carousel").delete().eq("is_test", isTest);
     if (delErr) return dbError(delErr);
 
     // Insert new entries
@@ -81,12 +93,14 @@ export async function PUT(request: NextRequest) {
         product_id: p.product_id,
         sort_order: p.sort_order ?? i,
         is_active: p.is_active !== false,
+        is_test: isTest,
       }));
 
       const { error: insErr } = await supabase.from("hero_carousel").insert(rows);
       if (insErr) return dbError(insErr);
     }
 
+    invalidateCache(`storefront:hero:active_${dataMode}`);
     invalidateCache("storefront:hero:active");
     return NextResponse.json({ success: true });
   } catch (err) {

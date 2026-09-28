@@ -8,7 +8,7 @@ import { formatKobo, formatWAT, idempotentFetch } from "@gts/utils";
 import { useCart } from "../_components/cart-context";
 import { useAuth } from "../_components/auth-context";
 import { Footer } from "../_components/landing/footer";
-import { toCheckoutLines, checkPromo } from "../_lib/checkout-client";
+import { toCheckoutLines } from "../_lib/checkout-client";
 import { useCheckoutQuote } from "../_lib/use-checkout-quote";
 import { useStoreInfo } from "../_lib/store-info";
 
@@ -52,16 +52,12 @@ export default function CheckoutPage() {
   const { cartItems, clearCart, hydrated } = useCart();
   const { user, customer } = useAuth();
   const store = useStoreInfo();
-  const { quote, error: quoteError } = useCheckoutQuote(cartItems);
+  const { quote, error: quoteError, loading: quoteLoading } = useCheckoutQuote(cartItems);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-
-  const [promoCode, setPromoCode] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number } | null>(null); // kobo, from the server
-  const [promoError, setPromoError] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -87,49 +83,14 @@ export default function CheckoutPage() {
     if (hydrated && cartItems.length === 0 && !placed) router.replace(PRODUCT_LISTING);
   }, [hydrated, cartItems.length, placed, router]);
 
-  // The discount follows the cart: if the subtotal changes, ask the server again, and drop the code if it no longer fits.
-  useEffect(() => {
-    if (!appliedPromo || !quote) return;
-    let cancelled = false;
-    checkPromo(appliedPromo.code, quote.subtotal).then((r) => {
-      if (cancelled) return;
-      if (!r.ok) {
-        setAppliedPromo(null);
-        setPromoError(r.message);
-      } else if (r.discount !== appliedPromo.discount) {
-        setAppliedPromo({ code: r.code, discount: r.discount });
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [quote?.subtotal]);
-
-  const handleApplyPromo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPromoError("");
-    if (!quote) {
-      setPromoError("Please wait while we check your cart.");
-      return;
-    }
-    const result = await checkPromo(promoCode, quote.subtotal);
-    if (result.ok) {
-      setAppliedPromo({ code: result.code, discount: result.discount });
-      setPromoCode("");
-    } else {
-      setPromoError(result.message);
-    }
-  };
-
   // The server prices the cart; until it answers, the page shows its own estimate (kobo throughout).
   const estimatedSubtotal = cartItems.reduce((sum, i) => sum + Math.round(i.product.priceNum * 100) * i.quantity, 0);
   const subtotal = quote ? quote.subtotal : estimatedSubtotal;
-  const discount = appliedPromo?.discount ?? 0;
-  const total = Math.max(0, subtotal - discount);
+  const total = Math.max(0, subtotal);
   const holdHours = store?.pickup_hold_hours ?? 48;
 
   const detailsReady = firstName.trim().length > 0 && lastName.trim().length > 0 && EMAIL.test(email.trim()) && phone.replace(/\D/g, "").length >= 7;
-  const canPlaceOrder = cartItems.length > 0 && quote?.all_available === true && detailsReady && !isSubmitting;
+  const canPlaceOrder = cartItems.length > 0 && !quoteLoading && quote?.all_available !== false && detailsReady && !isSubmitting;
 
   const placeOrder = async () => {
     if (!canPlaceOrder) return;
@@ -145,7 +106,6 @@ export default function CheckoutPage() {
           items: toCheckoutLines(cartItems),
           fulfilment: "pickup",
           paymentMethod: "pay_on_pickup",
-          promoCode: appliedPromo?.code,
         }),
       });
       const body = await res.json().catch(() => null);
@@ -283,43 +243,11 @@ export default function CheckoutPage() {
                 ))}
               </div>
 
-              {appliedPromo ? (
-                <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 mb-4">
-                  <span className="text-xs font-bold text-emerald-700">
-                    Code <strong>{appliedPromo.code}</strong> applied: -{formatKobo(appliedPromo.discount)}
-                  </span>
-                  <button type="button" onClick={() => setAppliedPromo(null)} className="text-[11px] font-bold text-gray-400 hover:text-red-500 underline">
-                    Remove
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleApplyPromo} className="flex gap-2 mb-4">
-                  <input
-                    type="text"
-                    aria-label="Promo code"
-                    value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value)}
-                    placeholder="Promo code"
-                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-semibold bg-white outline-none focus:border-[#010101]"
-                  />
-                  <button type="submit" className="text-xs font-bold px-3 hover:text-[#EDCF5D]">
-                    APPLY
-                  </button>
-                </form>
-              )}
-              {promoError && <p className="text-xs text-red-500 font-semibold -mt-2 mb-3">{promoError}</p>}
-
               <div className="space-y-2.5 border-t border-gray-200 pt-4 text-sm">
                 <div className="flex justify-between text-gray-600 font-medium">
                   <span>Items ({cartItems.reduce((s, i) => s + i.quantity, 0)})</span>
                   <span className="font-bold text-[#010101]">{formatKobo(subtotal)}</span>
                 </div>
-                {appliedPromo && (
-                  <div className="flex justify-between text-emerald-700 font-medium">
-                    <span>Promo ({appliedPromo.code})</span>
-                    <span className="font-bold">-{formatKobo(discount)}</span>
-                  </div>
-                )}
                 <div className="flex justify-between text-gray-600 font-medium">
                   <span>Pickup</span>
                   <span className="font-bold text-[#010101]">Free</span>
@@ -344,8 +272,9 @@ export default function CheckoutPage() {
                   canPlaceOrder ? "bg-[#EDCF5D] hover:bg-[#010101] text-[#010101] hover:text-white shadow-md" : "bg-gray-200 text-gray-400 cursor-not-allowed"
                 }`}
               >
-                {isSubmitting ? "Placing your order..." : "Place order"}
+                {isSubmitting ? "Placing your order..." : quoteLoading ? "Checking stock..." : "Place order"}
               </button>
+              {quoteLoading && <p className="text-[11px] text-gray-500 text-center mt-2">Verifying stock availability...</p>}
               {!detailsReady && <p className="text-[11px] text-gray-500 text-center mt-2">Fill in your details to place the order.</p>}
 
               <p className="text-[11px] text-gray-400 text-center mt-4 leading-relaxed">

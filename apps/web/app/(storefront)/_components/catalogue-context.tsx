@@ -26,8 +26,17 @@ function readCache(): ApiProduct[] | null {
   try {
     const raw = sessionStorage.getItem(CACHE_KEY);
     if (!raw) return null;
-    const saved = JSON.parse(raw) as { at?: number; products?: ApiProduct[] };
-    return Array.isArray(saved.products) && typeof saved.at === "number" && Date.now() - saved.at < CACHE_TTL_MS ? saved.products : null;
+    const saved = JSON.parse(raw) as { at?: number; mode?: string; products?: ApiProduct[] };
+    if (!Array.isArray(saved.products) || typeof saved.at !== "number" || Date.now() - saved.at >= CACHE_TTL_MS) {
+      return null;
+    }
+    // Discard cache if it contains test/mock products
+    const hasTestItems = saved.products.some((p) => (p as { is_test?: boolean }).is_test === true);
+    if (hasTestItems) {
+      sessionStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+    return saved.products;
   } catch {
     return null;
   }
@@ -60,7 +69,7 @@ export function CatalogueProvider({ children }: { children: React.ReactNode }) {
         setApi(body.data as ApiProduct[]);
         setError(null);
         try {
-          sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), products: body.data }));
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), mode: body.meta?.mode || "live", products: body.data }));
         } catch {
           // storage full or blocked: the list just isn't kept for next time
         }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createServiceClient } from "@gts/database";
+import { createServiceClient, getRequestDataMode } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../_lib/staff-access";
@@ -23,6 +23,9 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = Math.min(parseInt(searchParams.get("limit") || "100", 10), 100);
     const offset = (page - 1) * limit;
+
+    const dataMode = await getRequestDataMode();
+    const isTest = dataMode === "test";
 
     const serviceClient = createServiceClient();
     const user = await getAuthenticatedUser(request);
@@ -62,7 +65,8 @@ export async function GET(request: NextRequest) {
         variants:product_variants(id, size, color, color_hex, sku, price_modifier, is_active, inventory(quantity, reserved_quantity))
       `,
         { count: "exact" }
-      );
+      )
+      .eq("is_test", isTest);
 
     if (!includeAllStatus) {
       query = query.eq("status", "active");
@@ -243,11 +247,12 @@ export async function GET(request: NextRequest) {
         page,
         limit,
         pages,
+        mode: dataMode,
       },
     }, {
       // The public list is the same for everyone, so a shared cache may keep it briefly. An answer given to a
-      // signed-in caller can differ (staff see cost prices) and must never be shared.
-      headers: { "Cache-Control": user ? "private, no-store" : await publicCache("public, s-maxage=30, stale-while-revalidate=120") },
+      // signed-in caller can differ (staff see cost prices) and must never be shared. Demo data must never enter shared caches.
+      headers: { "Cache-Control": user || isTest ? "private, no-store" : await publicCache("public, s-maxage=30, stale-while-revalidate=120") },
     });
   } catch (err: any) {
     return serverError(err);
@@ -338,6 +343,9 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     if (cleanBrand && !finalTags.includes(cleanBrand)) finalTags.push(cleanBrand);
     if (has_transparent_bg && !finalTags.includes("transparent-bg")) finalTags.push("transparent-bg");
 
+    const dataMode = await getRequestDataMode();
+    const isTest = dataMode === "test";
+
     // Create Product
     const { data: product, error: prodErr } = await serviceClient
       .from("products")
@@ -357,6 +365,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
         status: ["active", "draft", "archived"].includes(status) ? status : "active",
         is_featured: Boolean(is_featured),
         tags: finalTags,
+        is_test: isTest,
         created_by: user.id,
       })
       .select()

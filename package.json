@@ -2,10 +2,10 @@
   "name": "gts",
   "private": true,
   "scripts": {
-    "dev": "npx concurrently \"npm --prefix apps/web run dev\" \"npm --prefix apps/dashboard run dev\"",
+    "dev": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" concurrently \"npm --prefix apps/web run dev\" \"npm --prefix apps/dashboard run dev\"",
     "dev:turbo": "turbo run dev",
-    "build": "turbo run build",
-    "typecheck": "npm --prefix apps/web run typecheck && npm --prefix apps/dashboard run typecheck",
+    "build": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" turbo run build",
+    "typecheck": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" npm --prefix apps/web run typecheck && cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" npm --prefix apps/dashboard run typecheck",
     "lint": "turbo run lint",
     "test": "npm --prefix apps/web run test && npm --prefix apps/dashboard run test",
     "test:watch": "turbo run test:watch",
@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
+    "cross-env": "^10.1.0",
     "turbo": "^2.4.0",
     "typescript": "^5.7.0"
   },

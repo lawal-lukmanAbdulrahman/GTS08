@@ -41,15 +41,14 @@ function pruneMemoryStore() {
 /**
  * Computes a deterministic SHA-256 hash of the request body or parameters
  */
-async function computeRequestHash(req: NextRequest): Promise<{ hash: string; clonedReq: NextRequest }> {
+async function computeRequestHash(req: NextRequest): Promise<{ hash: string; bodyText: string }> {
   try {
-    const cloned = req.clone();
-    const text = await cloned.text();
+    const text = await req.text();
     const hash = crypto.createHash("sha256").update(text || req.nextUrl.search).digest("hex");
-    return { hash, clonedReq: req };
+    return { hash, bodyText: text };
   } catch {
     const hash = crypto.createHash("sha256").update(req.nextUrl.search || "").digest("hex");
-    return { hash, clonedReq: req };
+    return { hash, bodyText: "" };
   }
 }
 
@@ -80,7 +79,14 @@ export function withIdempotency(handler: RouteHandler): RouteHandler {
 
     const idempotencyKey = rawKey.trim().slice(0, 255);
     const endpoint = req.nextUrl.pathname;
-    const { hash: requestHash } = await computeRequestHash(req);
+    const { hash: requestHash, bodyText } = await computeRequestHash(req);
+
+    // Reconstruct request so the handler can read the body (.json(), .text(), etc.)
+    const freshReq = new NextRequest(req.url, {
+      method: req.method,
+      headers: req.headers,
+      body: bodyText || undefined,
+    });
 
     // ── STEP 1: Check In-Memory / Database for Existing Key ──
     const now = Date.now();
@@ -198,7 +204,7 @@ export function withIdempotency(handler: RouteHandler): RouteHandler {
 
     // ── STEP 4: Execute Handler ──
     try {
-      const response = await handler(req, context);
+      const response = await handler(freshReq, context);
 
       // Clone response to capture status code and body for caching
       const statusCode = response.status;

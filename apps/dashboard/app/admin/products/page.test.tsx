@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => "/admin/products", useSearchParams: () => new URLSearchParams() }));
@@ -50,5 +50,23 @@ describe("Products list", () => {
     serve([product({ base_price: 4_800_000, total_quantity: 10 })]);
     render(<ProductsPage />);
     expect(await screen.findByTestId("card-stock-value")).toHaveTextContent("₦480,000");
+  });
+
+  it("checks the product checkbox when clicking any non-button part of the row", async () => {
+    serve([product({ id: "p1", name: "Classic Tuxedo" })]);
+    render(<ProductsPage />);
+
+    await screen.findByText("Classic Tuxedo");
+    const checkboxes = screen.getAllByRole("checkbox");
+    const rowCheckbox = checkboxes[1]!;
+    expect(rowCheckbox).not.toBeChecked();
+
+    // Clicking the product title on the row toggles the checkbox
+    fireEvent.click(screen.getByText("Classic Tuxedo"));
+    expect(rowCheckbox).toBeChecked();
+
+    // Clicking again untoggles it
+    fireEvent.click(screen.getByText("Classic Tuxedo"));
+    expect(rowCheckbox).not.toBeChecked();
   });
 });

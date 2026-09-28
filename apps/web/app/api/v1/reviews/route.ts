@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { filterEmail } from "../_lib/filter";
 import type { NextRequest } from "next/server";
-import { createServiceClient } from "@gts/database";
+import { createServiceClient, getRequestDataMode } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
-import { sanitizeSafeText, sanitizeXss } from "@gts/utils";
+import { sanitizeSafeText, sanitizeXss, isUuid } from "@gts/utils";
 import { serverError, dbError } from "../_lib/http";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const productId = searchParams.get("productId");
+    const productId = searchParams.get("productId")?.trim();
 
     if (!productId) {
       return NextResponse.json(
@@ -19,12 +19,32 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const dataMode = await getRequestDataMode();
+    const isTest = dataMode === "test";
     const serviceClient = createServiceClient();
+    let resolvedProductId = productId;
+
+    // If client passed a product slug (e.g. "shirt") instead of UUID, resolve to product UUID
+    if (!isUuid(productId)) {
+      const { data: prod } = await serviceClient
+        .from("products")
+        .select("id")
+        .eq("slug", productId)
+        .eq("is_test", isTest)
+        .maybeSingle();
+
+      if (!prod?.id) {
+        return NextResponse.json({ data: [] });
+      }
+      resolvedProductId = prod.id;
+    }
+
     const { data: reviews, error } = await serviceClient
       .from("reviews")
       .select("id, product_id, user_id, rating, title, body, is_approved, created_at, user:users!reviews_user_id_fkey(full_name)")
-      .eq("product_id", productId)
+      .eq("product_id", resolvedProductId)
       .eq("is_approved", true)
+      .eq("is_test", isTest)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -63,6 +83,23 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
 
     const serviceClient = createServiceClient();
 
+    let resolvedProductId = sanitizedProductId;
+    if (!isUuid(sanitizedProductId)) {
+      const { data: prod } = await serviceClient
+        .from("products")
+        .select("id")
+        .eq("slug", sanitizedProductId)
+        .maybeSingle();
+
+      if (!prod?.id) {
+        return NextResponse.json(
+          { error: "Product not found.", code: "NOT_FOUND" },
+          { status: 404 }
+        );
+      }
+      resolvedProductId = prod.id;
+    }
+
     // 1. Verify customer record
     const { data: customer } = await serviceClient
       .from("customers")
@@ -91,9 +128,12 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       ord.order_items?.some((item: any) => {
         const snap = item.product_snapshot || {};
         return (
-          snap.id === productId ||
-          item.variant_id === productId ||
-          (snap.sku && snap.sku.toLowerCase() === productId.toLowerCase())
+          snap.id === sanitizedProductId ||
+          snap.id === resolvedProductId ||
+          item.variant_id === sanitizedProductId ||
+          item.variant_id === resolvedProductId ||
+          (snap.slug && (snap.slug === sanitizedProductId || snap.slug === resolvedProductId)) ||
+          (snap.sku && snap.sku.toLowerCase() === sanitizedProductId.toLowerCase())
         );
       })
     );
@@ -110,17 +150,21 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       );
     }
 
+    const dataMode = await getRequestDataMode();
+    const isTest = dataMode === "test";
+
     // 3. Insert review
     const { data: review, error: insertErr } = await serviceClient
       .from("reviews")
       .insert({
-        product_id: sanitizedProductId,
+        product_id: resolvedProductId,
         user_id: authUser.id,
         order_id: verifiedOrderId,
         rating: Math.min(5, Math.max(1, Math.round(rating))),
         title: sanitizedTitle,
         body: sanitizedBody.trim(),
         is_approved: true, // Auto-approve verified buyer reviews
+        is_test: isTest,
       })
       .select("id, product_id, rating, title, body, created_at")
       .single();
