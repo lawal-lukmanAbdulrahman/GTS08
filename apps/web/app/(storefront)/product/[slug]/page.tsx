@@ -693,14 +693,11 @@ export default function ProductDetailPage({
   const now = new Date();
   const pickupStart = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
   const pickupEnd = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000);
-  const doorStart = new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000);
-  const doorEnd = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
   const formatShortDate = (d: Date) =>
     d.toLocaleDateString("en-NG", { day: "2-digit", month: "long" });
 
   const pickupDateStr = `${formatShortDate(pickupStart)} and ${formatShortDate(pickupEnd)}`;
-  const doorDateStr = `${formatShortDate(doorStart)} and ${formatShortDate(doorEnd)}`;
 
   const availableAreas = NIGERIAN_LOCATIONS[selectedState] || NIGERIAN_LOCATIONS["Lagos"] || [];
 

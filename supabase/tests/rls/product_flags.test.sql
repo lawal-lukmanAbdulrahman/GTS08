@@ -3,6 +3,14 @@
 BEGIN;
 SELECT plan(6);
 
+DO $$
+BEGIN
+  EXECUTE format('GRANT USAGE ON SCHEMA %I TO anon, authenticated, service_role', pg_my_temp_schema()::regnamespace::text);
+  EXECUTE format('GRANT ALL ON ALL TABLES IN SCHEMA %I TO anon, authenticated, service_role', pg_my_temp_schema()::regnamespace::text);
+  EXECUTE format('GRANT ALL ON ALL SEQUENCES IN SCHEMA %I TO anon, authenticated, service_role', pg_my_temp_schema()::regnamespace::text);
+END $$;
+GRANT USAGE ON SCHEMA extensions TO anon, authenticated, service_role;
+
 -- fixtures
 INSERT INTO auth.users (id, email) VALUES
   ('aaaaaaaa-0000-0000-0000-000000000001', 'cashier1@test.gts'),
@@ -19,6 +27,7 @@ INSERT INTO products (id, name, slug, base_price, status)
 
 -- 1. a POS cashier can flag a product as themselves
 SET LOCAL ROLE authenticated;
+SET LOCAL search_path = pg_temp, public, extensions;
 SET LOCAL request.jwt.claims = '{"sub":"aaaaaaaa-0000-0000-0000-000000000001","role":"authenticated","app_metadata":{"role":"cashier"}}';
 SELECT lives_ok(
   $$INSERT INTO product_flags (product_id, raised_by, reason)

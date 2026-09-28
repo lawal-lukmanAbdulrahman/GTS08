@@ -3,6 +3,14 @@
 BEGIN;
 SELECT plan(10);
 
+DO $$
+BEGIN
+  EXECUTE format('GRANT USAGE ON SCHEMA %I TO anon, authenticated, service_role', pg_my_temp_schema()::regnamespace::text);
+  EXECUTE format('GRANT ALL ON ALL TABLES IN SCHEMA %I TO anon, authenticated, service_role', pg_my_temp_schema()::regnamespace::text);
+  EXECUTE format('GRANT ALL ON ALL SEQUENCES IN SCHEMA %I TO anon, authenticated, service_role', pg_my_temp_schema()::regnamespace::text);
+END $$;
+GRANT USAGE ON SCHEMA extensions TO anon, authenticated, service_role;
+
 INSERT INTO auth.users (id, email) VALUES
   ('cccccccc-0000-0000-0000-000000000001', 'customer@test.gts'),
   ('cccccccc-0000-0000-0000-000000000002', 'boss@test.gts');
@@ -10,6 +18,7 @@ UPDATE users SET role = 'admin', is_super_admin = true WHERE id = 'cccccccc-0000
 
 -- A customer editing themselves, as the REST API would
 SET LOCAL ROLE authenticated;
+SET LOCAL search_path = pg_temp, public, extensions;
 SET LOCAL request.jwt.claims = '{"sub":"cccccccc-0000-0000-0000-000000000001","role":"authenticated","app_metadata":{"role":"customer"}}';
 
 SELECT lives_ok(
@@ -51,6 +60,7 @@ SELECT throws_ok(
 -- The server (service role) can
 RESET ROLE;
 SET LOCAL ROLE service_role;
+SET LOCAL search_path = pg_temp, public, extensions;
 SET LOCAL request.jwt.claims = '{"role":"service_role"}';
 SELECT lives_ok(
   $$UPDATE users SET role = 'cashier' WHERE id = 'cccccccc-0000-0000-0000-000000000001'$$,

@@ -2,9 +2,18 @@
 BEGIN;
 SELECT plan(10);
 
+DO $$
+BEGIN
+  EXECUTE format('GRANT USAGE ON SCHEMA %I TO anon, authenticated, service_role', pg_my_temp_schema()::regnamespace::text);
+  EXECUTE format('GRANT ALL ON ALL TABLES IN SCHEMA %I TO anon, authenticated, service_role', pg_my_temp_schema()::regnamespace::text);
+  EXECUTE format('GRANT ALL ON ALL SEQUENCES IN SCHEMA %I TO anon, authenticated, service_role', pg_my_temp_schema()::regnamespace::text);
+END $$;
+GRANT USAGE ON SCHEMA extensions TO anon, authenticated, service_role;
+
 SELECT is((SELECT count(*)::int FROM pg_policies WHERE schemaname = 'public' AND tablename IN ('product_views', 'search_queries', 'hero_carousel', 'storefront_sections') AND policyname LIKE '%_service_all'), 0, 'the open-to-everyone policies are gone');
 
 SET LOCAL ROLE anon;
+SET LOCAL search_path = pg_temp, public, extensions;
 SELECT throws_ok($$SELECT count(*) FROM product_views$$, '42501', NULL, 'the public key cannot read shopper activity');
 SELECT throws_ok($$SELECT count(*) FROM search_queries$$, '42501', NULL, 'the public key cannot read search history');
 SELECT lives_ok($$SELECT count(*) FROM storefront_sections$$, 'the public key can still read storefront sections');
@@ -15,6 +24,7 @@ SELECT throws_ok($$INSERT INTO product_views DEFAULT VALUES$$, '42501', NULL, 't
 RESET ROLE;
 
 SET LOCAL ROLE authenticated;
+SET LOCAL search_path = pg_temp, public, extensions;
 SELECT throws_ok($$SELECT count(*) FROM product_views$$, '42501', NULL, 'a signed-in shopper cannot read everyone''s activity');
 SELECT throws_ok($$INSERT INTO storefront_sections DEFAULT VALUES$$, '42501', NULL, 'a signed-in shopper cannot add a storefront section');
 RESET ROLE;

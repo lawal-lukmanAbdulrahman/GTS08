@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ProductCard } from "../_components/ui/product-card";
 import { useCheckoutQuote } from "../_lib/use-checkout-quote";
@@ -41,7 +41,6 @@ export default function CartPage() {
     if (quote?.lines && quote.lines.length > 0) {
       syncCartLimits(quote.lines);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quoteLinesKey, syncCartLimits]);
 
   // Check if any cart item exceeds live inventory or is out of stock

@@ -2,6 +2,14 @@
 BEGIN;
 SELECT plan(14);
 
+DO $$
+BEGIN
+  EXECUTE format('GRANT USAGE ON SCHEMA %I TO anon, authenticated, service_role', pg_my_temp_schema()::regnamespace::text);
+  EXECUTE format('GRANT ALL ON ALL TABLES IN SCHEMA %I TO anon, authenticated, service_role', pg_my_temp_schema()::regnamespace::text);
+  EXECUTE format('GRANT ALL ON ALL SEQUENCES IN SCHEMA %I TO anon, authenticated, service_role', pg_my_temp_schema()::regnamespace::text);
+END $$;
+GRANT USAGE ON SCHEMA extensions TO anon, authenticated, service_role;
+
 INSERT INTO auth.users (id, email) VALUES
   ('dddddddd-0000-0000-0000-000000000001', 'demo@test.gts'),
   ('dddddddd-0000-0000-0000-000000000002', 'real@test.gts');
@@ -21,16 +29,19 @@ INSERT INTO products (name, slug, base_price) VALUES ('Server default', 'server-
 SELECT is((SELECT is_test FROM products WHERE slug = 'server-default'), false, 'the server writes live rows by default');
 
 SET LOCAL ROLE anon;
+SET LOCAL search_path = pg_temp, public, extensions;
 SELECT is((SELECT count(*)::int FROM products WHERE slug = 'shirt'), 1, 'an anonymous visitor sees one shirt...');
 SELECT is((SELECT name FROM products WHERE slug = 'shirt'), 'Real Shirt', '...the live one');
 RESET ROLE;
 
 SET LOCAL ROLE authenticated;
+SET LOCAL search_path = pg_temp, public, extensions;
 SET LOCAL request.jwt.claims = '{"sub":"dddddddd-0000-0000-0000-000000000002","role":"authenticated"}';
 SELECT is((SELECT name FROM products WHERE slug = 'shirt'), 'Real Shirt', 'a real signed-in user sees the live shirt');
 RESET ROLE;
 
 SET LOCAL ROLE authenticated;
+SET LOCAL search_path = pg_temp, public, extensions;
 SET LOCAL request.jwt.claims = '{"sub":"dddddddd-0000-0000-0000-000000000001","role":"authenticated"}';
 SELECT is(public.gts_is_test_mode(), true, 'the demo account is in demo mode');
 SELECT is((SELECT name FROM products WHERE slug = 'shirt'), 'Demo Shirt', 'the demo account sees the demo shirt only');
