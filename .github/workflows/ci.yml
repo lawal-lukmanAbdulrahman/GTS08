@@ -72,8 +72,12 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      - name: Start local Supabase (applies every migration)
-        run: supabase start
+      - name: Free host ports and stop background services
+        run: |
+          sudo systemctl stop postgresql || true
+          docker kill $(docker ps -q) || true
+      - name: Start local Supabase (database only)
+        run: supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
       - name: pgTAP policy tests
         run: supabase test db
 
