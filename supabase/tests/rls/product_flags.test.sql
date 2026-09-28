@@ -73,6 +73,9 @@ INSERT INTO auth.users (id, email) VALUES
   ('aaaaaaaa-0000-0000-0000-000000000003', 'nopos@test.gts');
 UPDATE users SET role = 'cashier' WHERE id IN
   ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000003');
+DROP POLICY IF EXISTS "staff_read_own_permissions" ON public.employee_permissions;
+CREATE POLICY "staff_read_own_permissions" ON public.employee_permissions FOR SELECT
+  USING (user_id = auth.uid());
 INSERT INTO employee_permissions (user_id, can_process_pos) VALUES
   ('aaaaaaaa-0000-0000-0000-000000000001', true),
   ('aaaaaaaa-0000-0000-0000-000000000002', true),

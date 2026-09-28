@@ -75,12 +75,12 @@ SELECT is((SELECT count(*)::int FROM pg_policies WHERE schemaname = 'public' AND
 SELECT is(public.gts_is_test_mode(), false, 'with no signed-in user the mode is live');
 
 -- One demo and one live product and order, written by the server.
-INSERT INTO products (id, name, slug, base_price, is_test) VALUES
-  ('eeeeeeee-0000-0000-0000-000000000001', 'Demo Shirt', 'shirt', 1000, true),
-  ('eeeeeeee-0000-0000-0000-000000000002', 'Real Shirt', 'shirt', 1000, false);
+INSERT INTO products (id, name, slug, base_price, status, is_test) VALUES
+  ('eeeeeeee-0000-0000-0000-000000000001', 'Demo Shirt', 'shirt', 1000, 'active', true),
+  ('eeeeeeee-0000-0000-0000-000000000002', 'Real Shirt', 'shirt', 1000, 'active', false);
 SELECT pass('the same slug can exist once in demo and once in live');
-SELECT throws_ok($$INSERT INTO products (name, slug, base_price, is_test) VALUES ('Dup', 'shirt', 1000, false)$$, '23505', NULL, 'but not twice in the same data set');
-INSERT INTO products (name, slug, base_price) VALUES ('Server default', 'server-default', 1000);
+SELECT throws_ok($$INSERT INTO products (name, slug, base_price, status, is_test) VALUES ('Dup', 'shirt', 1000, 'active', false)$$, '23505', NULL, 'but not twice in the same data set');
+INSERT INTO products (name, slug, base_price, status) VALUES ('Server default', 'server-default', 1000, 'active');
 SELECT is((SELECT is_test FROM products WHERE slug = 'server-default'), false, 'the server writes live rows by default');
 
 SELECT is(tests_eval('anon', NULL, $q$SELECT count(*)::text FROM products WHERE slug = 'shirt'$q$), '1', 'an anonymous visitor sees one shirt...');

@@ -76,7 +76,7 @@ SELECT throws_ok(
   $$SELECT tests_run(
     'authenticated',
     '{"sub":"cccccccc-0000-0000-0000-000000000001","role":"authenticated","app_metadata":{"role":"customer"}}',
-    $q$UPDATE users SET total_spent = 0, total_orders = 0 WHERE id = 'cccccccc-0000-0000-0000-000000000001'$q$
+    $q$UPDATE users SET total_spent = 50000, total_orders = 5 WHERE id = 'cccccccc-0000-0000-0000-000000000001'$q$
   )$$,
   '42501', NULL, 'nor edit their order statistics'
 );
