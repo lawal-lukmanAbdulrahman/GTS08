@@ -17,16 +17,18 @@ const EMPTY: CatalogueContextType = { products: [], loading: false, error: null,
 const CatalogueContext = createContext<CatalogueContextType>(EMPTY);
 
 /** The tab's cached copy of the catalogue. Cleared when the signed-in data set changes (demo sign-in, sign-out). */
-export const CATALOGUE_CACHE_KEY = "gts_catalogue_v1";
+export const CATALOGUE_CACHE_KEY = "gts_catalogue_v2";
 const CACHE_KEY = CATALOGUE_CACHE_KEY;
+const OLD_CACHE_KEY = "gts_catalogue_v1";
 const CACHE_TTL_MS = 10 * 60_000;
 const CATALOGUE_URL = "/api/v1/products?limit=100";
 
 function readCache(): ApiProduct[] | null {
   try {
+    sessionStorage.removeItem(OLD_CACHE_KEY);
     const raw = sessionStorage.getItem(CACHE_KEY);
     if (!raw) return null;
-    const saved = JSON.parse(raw) as { at?: number; products?: ApiProduct[] };
+    const saved = JSON.parse(raw) as { at?: number; mode?: string; products?: ApiProduct[] };
     return Array.isArray(saved.products) && typeof saved.at === "number" && Date.now() - saved.at < CACHE_TTL_MS ? saved.products : null;
   } catch {
     return null;
@@ -60,7 +62,7 @@ export function CatalogueProvider({ children }: { children: React.ReactNode }) {
         setApi(body.data as ApiProduct[]);
         setError(null);
         try {
-          sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), products: body.data }));
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), mode: body.meta?.mode || "live", products: body.data }));
         } catch {
           // storage full or blocked: the list just isn't kept for next time
         }

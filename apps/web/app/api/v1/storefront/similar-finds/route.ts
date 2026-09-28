@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createServiceClient } from "@gts/database";
+import { createServiceClient, getRequestDataMode } from "@gts/database";
 import { getAuthenticatedUser } from "../../auth/utils";
 import { serverError } from "../../_lib/http";
 import { getOrComputeCached } from "../../_lib/storefront-cache";
@@ -49,8 +49,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "product_id is required" }, { status: 400 });
     }
 
+    const dataMode = await getRequestDataMode();
+    const isTest = dataMode === "test";
     const user = await getAuthenticatedUser(request);
-    const cacheKey = `storefront:similar:${productIdOrSlug}:${user?.id || sessionId || "anon"}:${limit}`;
+    const cacheKey = `storefront:similar:${dataMode}:${productIdOrSlug}:${user?.id || sessionId || "anon"}:${limit}`;
 
     const result = await getOrComputeCached(
       cacheKey,
@@ -62,7 +64,8 @@ export async function GET(request: NextRequest) {
         const isUuid = UUID_RE.test(productIdOrSlug);
         let baseProductQuery = supabase
           .from("products")
-          .select("id, slug, name, brand, category_id, sub_category, tags, base_price");
+          .select("id, slug, name, brand, category_id, sub_category, tags, base_price")
+          .eq("is_test", isTest);
 
         if (isUuid) {
           baseProductQuery = baseProductQuery.eq("id", productIdOrSlug);
@@ -99,6 +102,7 @@ export async function GET(request: NextRequest) {
             const { data: containingOrders } = await supabase
               .from("order_items")
               .select("order_id")
+              .eq("is_test", isTest)
               .or(orderFilter)
               .order("created_at", { ascending: false })
               .limit(40);
@@ -109,6 +113,7 @@ export async function GET(request: NextRequest) {
               const { data: coOrderItems } = await supabase
                 .from("order_items")
                 .select("product_snapshot")
+                .eq("is_test", isTest)
                 .in("order_id", orderIds.slice(0, 25))
                 .limit(100);
 
@@ -132,6 +137,7 @@ export async function GET(request: NextRequest) {
             const { data: cartSessions } = await supabase
               .from("product_views")
               .select("session_id")
+              .eq("is_test", isTest)
               .eq("product_id", currentId)
               .eq("event_type", "cart_add")
               .limit(30);
@@ -141,6 +147,7 @@ export async function GET(request: NextRequest) {
               const { data: coCartItems } = await supabase
                 .from("product_views")
                 .select("product_id")
+                .eq("is_test", isTest)
                 .in("session_id", coSessions.slice(0, 15))
                 .eq("event_type", "cart_add")
                 .limit(50);
@@ -182,6 +189,7 @@ export async function GET(request: NextRequest) {
             let viewQ = supabase
               .from("product_views")
               .select("duration_seconds, event_type, products:product_id(category_id, brand)")
+              .eq("is_test", isTest)
               .order("created_at", { ascending: false })
               .limit(20);
 
@@ -203,6 +211,7 @@ export async function GET(request: NextRequest) {
               supabase
                 .from("search_queries")
                 .select("query")
+                .eq("is_test", isTest)
                 .eq("session_id", sessionId)
                 .order("created_at", { ascending: false })
                 .limit(6)
@@ -245,6 +254,7 @@ export async function GET(request: NextRequest) {
             variants:product_variants(id, size, color, color_hex, is_active)
           `)
           .eq("status", "active")
+          .eq("is_test", isTest)
           .limit(80);
 
         if (currentCategoryId) {
@@ -268,6 +278,7 @@ export async function GET(request: NextRequest) {
               variants:product_variants(id, size, color, color_hex, is_active)
             `)
             .eq("status", "active")
+            .eq("is_test", isTest)
             .order("average_rating", { ascending: false })
             .limit(50);
 

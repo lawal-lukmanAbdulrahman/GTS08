@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createServiceClient } from "@gts/database";
+import { createServiceClient, getRequestDataMode } from "@gts/database";
 import { serverError } from "../../_lib/http";
 import { getOrComputeCached } from "../../_lib/storefront-cache";
 import { publicCache } from "../../_lib/public-cache";
@@ -17,14 +17,16 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get("limit") || "12", 10), 100);
+    const dataMode = await getRequestDataMode();
+    const isTest = dataMode === "test";
 
     const masterBestselling = await getOrComputeCached(
-      "storefront:bestselling:master_pool",
+      `storefront:bestselling:master_pool_${dataMode}`,
       300, // fresh for 5 minutes
       async () => {
         const supabase = createServiceClient();
 
-        // 1. Fetch top candidate active products by total_sold
+        // 1. Fetch top candidate active products by total_sold scoped to data mode
         const { data: products, error } = await supabase
           .from("products")
           .select(`
@@ -35,6 +37,7 @@ export async function GET(request: NextRequest) {
             variants:product_variants(id, size, color, color_hex, is_active)
           `)
           .eq("status", "active")
+          .eq("is_test", isTest)
           .order("total_sold", { ascending: false })
           .limit(150);
 
@@ -107,7 +110,9 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: {
-          "Cache-Control": await publicCache("public, s-maxage=300, stale-while-revalidate=900"),
+          "Cache-Control": isTest
+            ? "private, no-store"
+            : await publicCache("public, s-maxage=300, stale-while-revalidate=900"),
         },
       }
     );

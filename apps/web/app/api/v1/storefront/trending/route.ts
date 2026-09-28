@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createServiceClient } from "@gts/database";
+import { createServiceClient, getRequestDataMode } from "@gts/database";
 import { getAuthenticatedUser } from "../../auth/utils";
 import { serverError } from "../../_lib/http";
 import { getOrComputeCached } from "../../_lib/storefront-cache";
@@ -47,10 +47,12 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get("limit") || "12", 10), 100);
     const sessionId = searchParams.get("session_id") || request.headers.get("x-session-id");
     const user = await getAuthenticatedUser(request);
+    const dataMode = await getRequestDataMode();
+    const isTest = dataMode === "test";
 
     // ── STEP 1: Compute / Retrieve Global Trending Pool (Across All Users) ──
     const globalTrending = await getOrComputeCached<{ products: ScoredProduct[] }>(
-      "storefront:trending:global_pool_v2",
+      `storefront:trending:global_pool_v3_${dataMode}`,
       180, // fresh for 3 minutes
       async () => {
         const supabase = createServiceClient();
@@ -59,11 +61,12 @@ export async function GET(request: NextRequest) {
         const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
         const threeDaysAgo = new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString();
 
-        // Concurrently fetch global activity signals
+        // Concurrently fetch global activity signals scoped to data mode
         const [viewsRes, wishlistsRes, searchesRes, productsRes] = await Promise.all([
           supabase
             .from("product_views")
             .select("product_id, event_type, duration_seconds, scroll_depth, created_at, session_id, user_id")
+            .eq("is_test", isTest)
             .gte("created_at", fourteenDaysAgo),
           supabase
             .from("wishlists")
@@ -72,6 +75,7 @@ export async function GET(request: NextRequest) {
           supabase
             .from("search_queries")
             .select("query")
+            .eq("is_test", isTest)
             .gte("created_at", fourteenDaysAgo)
             .limit(100),
           supabase
@@ -84,6 +88,7 @@ export async function GET(request: NextRequest) {
               variants:product_variants(id, size, color, color_hex, is_active, inventory(quantity, reserved_quantity))
             `)
             .eq("status", "active")
+            .eq("is_test", isTest)
             .limit(200),
         ]);
 
@@ -186,7 +191,13 @@ export async function GET(request: NextRequest) {
       const data = pool.slice(0, limit).map((s) => formatProduct(s.product));
       return NextResponse.json(
         { success: true, data, source: "global_trending" },
-        { headers: { "Cache-Control": await publicCache("public, s-maxage=120, stale-while-revalidate=600") } }
+        {
+          headers: {
+            "Cache-Control": isTest
+              ? "private, no-store"
+              : await publicCache("public, s-maxage=120, stale-while-revalidate=600"),
+          },
+        }
       );
     }
 
@@ -197,18 +208,21 @@ export async function GET(request: NextRequest) {
         ? supabase
             .from("product_views")
             .select("product_id, event_type, duration_seconds")
+            .eq("is_test", isTest)
             .or(`user_id.eq.${user.id},session_id.eq.${sessionId}`)
             .limit(40)
         : user?.id
         ? supabase
             .from("product_views")
             .select("product_id, event_type, duration_seconds")
+            .eq("is_test", isTest)
             .eq("user_id", user.id)
             .limit(40)
         : sessionId && UUID_RE.test(sessionId)
         ? supabase
             .from("product_views")
             .select("product_id, event_type, duration_seconds")
+            .eq("is_test", isTest)
             .eq("session_id", sessionId)
             .limit(40)
         : Promise.resolve({ data: [] }),

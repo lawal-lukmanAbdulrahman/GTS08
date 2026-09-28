@@ -708,7 +708,7 @@ export default function ProductDetailPage({
     <div className="min-h-screen bg-white text-[#010101] pb-24 md:pb-0">
 
       {/* ── Top Section (Breadcrumb, Image Showcase, Details, Delivery & Returns) ── */}
-      <div className="w-full px-3 md:px-4 pt-3 pb-2 max-w-[1440px] mx-auto">
+      <div className="w-full px-3 md:px-4 pt-3 pb-2 max-w-[1240px] mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
 
           {/* ════════ LEFT SECTION (9 cols): Breadcrumb + (Image & Details) ════════ */}
@@ -1380,7 +1380,6 @@ export default function ProductDetailPage({
                   <div className="space-y-0.5 flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-gray-900 text-xs">Pickup Station</span>
-                      <span className="font-bold text-gray-900 text-xs font-mono">₦1,000</span>
                     </div>
                     <p className="text-[11px] text-gray-500 leading-snug">
                       Ready for pickup between <span className="font-semibold text-gray-800">{pickupDateStr}</span> if you order now.
@@ -2758,7 +2757,7 @@ function ProductTabs({
   });
 
   return (
-    <section id="product-tabs-section" className="w-full px-3 md:px-4 pt-5 sm:pt-6 pb-4 mt-4 sm:mt-6 border-t border-gray-200/90 max-w-[1440px] mx-auto relative">
+    <section id="product-tabs-section" className="w-full px-3 md:px-4 pt-5 sm:pt-6 pb-4 mt-4 sm:mt-6 border-t border-gray-200/90 max-w-[1240px] mx-auto relative">
       {/* Toast message banner */}
       {toastMessage && (
         <div className="fixed top-20 right-4 sm:right-8 z-50 bg-[#010101] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 font-sans text-xs sm:text-sm font-semibold border border-white/10">
@@ -3651,7 +3650,7 @@ function SimilarFinds({ currentProduct }: SimilarFindsProps) {
     : "/search";
 
   return (
-    <section className="w-full px-3 md:px-4 pt-10 sm:pt-14 pb-10 max-w-[1440px] mx-auto">
+    <section className="w-full px-3 md:px-4 pt-10 sm:pt-14 pb-10 max-w-[1240px] mx-auto">
       {/* ── Section Header — matches landing page style ── */}
       <div className="flex justify-between items-end mb-6 sm:mb-8">
         <div>
@@ -3755,7 +3754,7 @@ function ProductDetailSkeleton() {
   return (
     <div className="min-h-screen bg-white text-[#010101]">
       {/* Top 3-Pane Section Skeleton */}
-      <div className="w-full px-3 md:px-4 pt-3 pb-6 max-w-[1440px] mx-auto">
+      <div className="w-full px-3 md:px-4 pt-3 pb-6 max-w-[1240px] mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           {/* Left 9-col container */}
           <div className="lg:col-span-9 flex flex-col gap-3">
@@ -3920,7 +3919,7 @@ function ProductDetailSkeleton() {
       </div>
 
       {/* Tabs Skeleton */}
-      <div className="w-full px-3 md:px-4 pt-5 sm:pt-6 pb-6 mt-4 sm:mt-6 max-w-[1440px] mx-auto border-t border-gray-200/90">
+      <div className="w-full px-3 md:px-4 pt-5 sm:pt-6 pb-6 mt-4 sm:mt-6 max-w-[1240px] mx-auto border-t border-gray-200/90">
         <div className="flex items-center gap-8 mb-4">
           <div className="w-20 h-6 bg-gray-300 rounded-md animate-pulse" />
           <div className="w-20 h-6 bg-gray-200 rounded-md animate-pulse" />
@@ -3948,7 +3947,7 @@ function ProductDetailSkeleton() {
       </div>
 
       {/* Similar Finds Skeleton */}
-      <div className="w-full px-3 md:px-4 py-12 max-w-[1440px] mx-auto border-t border-gray-100">
+      <div className="w-full px-3 md:px-4 py-12 max-w-[1240px] mx-auto border-t border-gray-100">
         <div className="flex items-center justify-between mb-8">
           <div className="w-48 h-7 bg-gray-200 rounded-lg animate-pulse" />
           <div className="flex gap-2">

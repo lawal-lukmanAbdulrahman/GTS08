@@ -60,6 +60,7 @@ export function Trending() {
         });
       return [...apiProducts, ...filler].slice(0, 12);
     }
+    if (loading) return [];
     return [...catalogue]
       .sort((a, b) => {
         const scoreB = (Number(b.rating) || 0) * 10 + (Number(b.reviews) || 0);
@@ -67,7 +68,7 @@ export function Trending() {
         return scoreB - scoreA;
       })
       .slice(0, 12);
-  }, [apiProducts, catalogue]);
+  }, [apiProducts, catalogue, loading]);
 
   const updateScrollState = () => {
     if (scrollContainerRef.current) {

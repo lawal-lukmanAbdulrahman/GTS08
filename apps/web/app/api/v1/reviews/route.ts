@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { filterEmail } from "../_lib/filter";
 import type { NextRequest } from "next/server";
-import { createServiceClient } from "@gts/database";
+import { createServiceClient, getRequestDataMode } from "@gts/database";
 import { getAuthenticatedUser } from "../auth/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { sanitizeSafeText, sanitizeXss, isUuid } from "@gts/utils";
@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const dataMode = await getRequestDataMode();
+    const isTest = dataMode === "test";
     const serviceClient = createServiceClient();
     let resolvedProductId = productId;
 
@@ -28,6 +30,7 @@ export async function GET(request: NextRequest) {
         .from("products")
         .select("id")
         .eq("slug", productId)
+        .eq("is_test", isTest)
         .maybeSingle();
 
       if (!prod?.id) {
@@ -41,6 +44,7 @@ export async function GET(request: NextRequest) {
       .select("id, product_id, user_id, rating, title, body, is_approved, created_at, user:users!reviews_user_id_fkey(full_name)")
       .eq("product_id", resolvedProductId)
       .eq("is_approved", true)
+      .eq("is_test", isTest)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -146,6 +150,9 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       );
     }
 
+    const dataMode = await getRequestDataMode();
+    const isTest = dataMode === "test";
+
     // 3. Insert review
     const { data: review, error: insertErr } = await serviceClient
       .from("reviews")
@@ -157,6 +164,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
         title: sanitizedTitle,
         body: sanitizedBody.trim(),
         is_approved: true, // Auto-approve verified buyer reviews
+        is_test: isTest,
       })
       .select("id, product_id, rating, title, body, created_at")
       .single();
