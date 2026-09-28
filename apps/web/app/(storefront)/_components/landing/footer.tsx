@@ -3,8 +3,40 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { useStoreInfo, whatsappLink } from "../../_lib/store-info";
+
+/** Small monochrome icons for the social links the admin sets in Store Details. */
+const SOCIAL_ICONS: Record<string, React.ReactNode> = {
+  Instagram: <path d="M7.5 2h9A5.5 5.5 0 0122 7.5v9a5.5 5.5 0 01-5.5 5.5h-9A5.5 5.5 0 012 16.5v-9A5.5 5.5 0 017.5 2zm4.5 5a5 5 0 100 10 5 5 0 000-10zm0 2a3 3 0 110 6 3 3 0 010-6zm5.25-3.5a1.25 1.25 0 100 2.5 1.25 1.25 0 000-2.5z" />,
+  Facebook: <path d="M14 8h3V4h-3a4 4 0 00-4 4v2H8v4h2v8h4v-8h3l1-4h-4V8z" />,
+  TikTok: <path d="M16.5 3a5 5 0 004 4v3.2a8.2 8.2 0 01-4-1.2V15a6 6 0 11-6-6c.3 0 .7 0 1 .1v3.3a2.8 2.8 0 102 2.6V3h3z" />,
+  X: <path d="M4 3h4.5l4 5.6L17.2 3H20l-6.2 7.3L21 21h-4.5l-4.4-6.1L6.7 21H4l6.9-8.1L4 3z" />,
+  LinkedIn: <path d="M4 3a2 2 0 110 4 2 2 0 010-4zM2.5 9h3v12h-3V9zm6 0h2.9v1.7h.1c.4-.8 1.4-1.7 3-1.7 3.2 0 3.8 2.1 3.8 4.8V21h-3v-6.2c0-1.5 0-3.3-2-3.3s-2.3 1.6-2.3 3.2V21h-3V9z" />,
+  WhatsApp: <path d="M12 2a10 10 0 00-8.6 15.1L2 22l5-1.3A10 10 0 1012 2zm0 2a8 8 0 11-4.1 14.9l-.3-.2-3 .8.8-2.9-.2-.3A8 8 0 0112 4zm-3.2 4c-.2 0-.6.1-.8.4-.3.3-1 1-1 2.4s1 2.8 1.2 3c.1.2 2 3.1 4.9 4.3 2.4 1 2.9.8 3.4.7.5 0 1.7-.7 1.9-1.4.2-.7.2-1.3.2-1.4-.1-.1-.3-.2-.6-.3l-2-1c-.3-.1-.5-.1-.7.2l-.9 1.1c-.2.2-.3.2-.6.1-.3-.1-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.6.3-.5c.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6z" />,
+};
+
+function SocialLink({ label, href }: { label: string; href: string }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" aria-label={label} className="w-8 h-8 rounded-full bg-[#010101] text-white flex items-center justify-center hover:opacity-80 transition-opacity">
+      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        {SOCIAL_ICONS[label]}
+      </svg>
+    </a>
+  );
+}
 
 export function Footer() {
+  const store = useStoreInfo();
+  const storeName = store?.store_name || "GTS";
+  const whatsapp = whatsappLink(store?.whatsapp_number);
+  const socials = [
+    { label: "Instagram", href: store?.instagram_url },
+    { label: "Facebook", href: store?.facebook_url },
+    { label: "TikTok", href: store?.tiktok_url },
+    { label: "X", href: store?.x_url },
+    { label: "LinkedIn", href: store?.linkedin_url },
+    { label: "WhatsApp", href: whatsapp },
+  ].filter((s): s is { label: string; href: string } => !!s.href);
   const [searchQuery, setSearchQuery] = useState("");
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
@@ -101,11 +133,11 @@ export function Footer() {
           {/* Column 1: Brand Logo & Newsletter Subscribe */}
           <div className="md:col-span-5 space-y-4">
             <Link href="/" className="text-2xl sm:text-3xl font-black text-[#010101] tracking-tighter inline-flex items-center gap-2 font-moara">
-              <span>GTS</span>
+              <span>{storeName}</span>
             </Link>
-            <p className="text-xs sm:text-sm text-gray-500 font-normal leading-relaxed max-w-sm">
-              Luxury in Every Detail, Crafted for Timeless Style.
-            </p>
+            {store?.footer_about && (
+              <p className="text-xs sm:text-sm text-gray-500 font-normal leading-relaxed max-w-sm">{store.footer_about}</p>
+            )}
 
             {/* Newsletter Input + Subscribe Button */}
             <form onSubmit={handleSubscribe} className="pt-2 flex items-center gap-2 max-w-sm">
@@ -169,6 +201,11 @@ export function Footer() {
             </h4>
             <ul className="space-y-2 text-xs sm:text-sm text-gray-600 font-normal">
               <li>
+                <Link href="/shop" className="hover:text-[#010101] transition-colors">
+                  All Products
+                </Link>
+              </li>
+              <li>
                 <Link href="#categories" className="hover:text-[#010101] transition-colors">
                   All Categories
                 </Link>
@@ -202,30 +239,29 @@ export function Footer() {
               Contact
             </h4>
             <div className="space-y-1.5 text-xs sm:text-sm text-gray-600 font-normal">
-              <p>
-                Email:{" "}
-                <a href="mailto:support@gts.com" className="text-[#010101] underline underline-offset-2 hover:opacity-80">
-                  support@gts.com
-                </a>
-              </p>
-              <p>Phone: +234 (0) 800 111 1111</p>
+              {store?.support_email && (
+                <p>
+                  Email:{" "}
+                  <a href={`mailto:${store.support_email}`} className="text-[#010101] underline underline-offset-2 hover:opacity-80">
+                    {store.support_email}
+                  </a>
+                </p>
+              )}
+              {store?.support_phone && (
+                <p>
+                  Phone: <a href={`tel:${store.support_phone.replace(/[^\d+]/g, "")}`} className="hover:text-[#010101]">{store.support_phone}</a>
+                </p>
+              )}
+              {store?.store_address && <p>Address: {store.store_address}</p>}
             </div>
 
-            {/* Social Icons Row */}
-            <div className="flex items-center gap-2.5 pt-3">
-              <a href="#linkedin" aria-label="LinkedIn" className="w-8 h-8 rounded-full bg-[#010101] text-white flex items-center justify-center hover:opacity-80 transition-opacity">
-                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" /></svg>
-              </a>
-              <a href="#producthunt" aria-label="Community" className="w-8 h-8 rounded-full bg-[#010101] text-white flex items-center justify-center hover:opacity-80 transition-opacity">
-                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M13.601 2.002C7.942 2.002 3.348 6.596 3.348 12.255c0 5.659 4.594 10.253 10.253 10.253 5.659 0 10.253-4.594 10.253-10.253 0-5.659-4.594-10.253-10.253-10.253zm-.25 15.753h-2.502v-5.253H8.347V7.25h5.004c1.448 0 2.626 1.178 2.626 2.626v2.253c0 1.448-1.178 2.626-2.626 2.626zm0-5.253v-2.5h-2.502v2.5h2.502z" /></svg>
-              </a>
-              <a href="#instagram" aria-label="Instagram" className="w-8 h-8 rounded-full bg-[#010101] text-white flex items-center justify-center hover:opacity-80 transition-opacity">
-                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" /></svg>
-              </a>
-              <a href="#facebook" aria-label="Facebook" className="w-8 h-8 rounded-full bg-[#010101] text-white flex items-center justify-center hover:opacity-80 transition-opacity">
-                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" /></svg>
-              </a>
-            </div>
+            {socials.length > 0 && (
+              <div className="flex items-center gap-2.5 pt-3">
+                {socials.map((s) => (
+                  <SocialLink key={s.label} label={s.label} href={s.href} />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -234,7 +270,7 @@ export function Footer() {
       {/* ── Full Width Bottom Bar with Centered Grid Content ── */}
       <div className="-mx-3 md:-mx-4 border-t border-gray-200/80 pt-5 pb-3">
         <div className="max-w-[1240px] mx-auto px-3 md:px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500 font-medium">
-          <p>© {new Date().getFullYear()} GTS. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} {storeName}. All rights reserved.</p>
           <div className="flex items-center gap-6">
             <Link href="/privacy" className="hover:text-[#010101] transition-colors">
               Privacy Policy

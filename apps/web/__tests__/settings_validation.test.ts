@@ -118,3 +118,28 @@ describe("validateStoreSettings", () => {
     });
   });
 });
+
+describe("validateStoreSettings: pickup hold time and footer", () => {
+  it("accepts a pickup hold of 1 to 336 hours as a whole number", () => {
+    expect(validateStoreSettings({ pickup_hold_hours: 48 })).toEqual({ ok: true, value: { pickup_hold_hours: 48 } });
+    for (const bad of [0, 337, 1.5, "48", null, -3]) {
+      const r = validateStoreSettings({ pickup_hold_hours: bad });
+      expect(r.ok, String(bad)).toBe(false);
+    }
+  });
+
+  it("takes a short about line for the footer, trimmed, or clears it", () => {
+    expect(validateStoreSettings({ footer_about: "  Menswear   made in Lagos. " })).toEqual({ ok: true, value: { footer_about: "Menswear made in Lagos." } });
+    expect(validateStoreSettings({ footer_about: "" })).toEqual({ ok: true, value: { footer_about: null } });
+    expect(validateStoreSettings({ footer_about: "x".repeat(301) }).ok).toBe(false);
+  });
+
+  it("takes social links as secure web addresses only", () => {
+    expect(validateStoreSettings({ instagram_url: "https://instagram.com/gtswears" })).toEqual({ ok: true, value: { instagram_url: "https://instagram.com/gtswears" } });
+    expect(validateStoreSettings({ tiktok_url: "", x_url: null })).toEqual({ ok: true, value: { tiktok_url: null, x_url: null } });
+    for (const bad of ["javascript:alert(1)", "http://facebook.com/x", "facebook.com/x", "https://", "data:text/html,hi"]) {
+      const r = validateStoreSettings({ facebook_url: bad });
+      expect(r.ok, bad).toBe(false);
+    }
+  });
+});

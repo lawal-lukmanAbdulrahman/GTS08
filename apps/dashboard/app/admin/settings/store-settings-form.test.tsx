@@ -139,6 +139,44 @@ describe("StoreSettingsForm", () => {
     expect(preview()).toContain("ACME STORES");
     expect(preview()).not.toContain("Allen Avenue");
   });
+
+  it("sets how long pay-on-pickup orders are held, as a number of hours", async () => {
+    const onSave = ok({ ...INITIAL, pickup_hold_hours: 72 });
+    render(<StoreSettingsForm initial={{ ...INITIAL, pickup_hold_hours: 48 }} onSave={onSave} />);
+    expect(field(/hold pickup orders/i).value).toBe("48");
+    type(/hold pickup orders/i, "72");
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0]![0]).toMatchObject({ pickup_hold_hours: 72 });
+  });
+
+  it("refuses a hold time outside 1 to 336 hours before calling the server", () => {
+    const onSave = ok(INITIAL);
+    render(<StoreSettingsForm initial={{ ...INITIAL, pickup_hold_hours: 48 }} onSave={onSave} />);
+    type(/hold pickup orders/i, "0");
+    fireEvent.click(saveButton());
+    expect(screen.getByText(/whole number of hours/i)).toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("edits the storefront footer: about text and social links", async () => {
+    const onSave = ok({ ...INITIAL, footer_about: "Menswear from Lagos.", instagram_url: "https://instagram.com/gts" });
+    render(<StoreSettingsForm initial={INITIAL} onSave={onSave} />);
+    type(/about the shop/i, "Menswear from Lagos.");
+    type(/instagram link/i, "https://instagram.com/gts");
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0]![0]).toMatchObject({ footer_about: "Menswear from Lagos.", instagram_url: "https://instagram.com/gts" });
+  });
+
+  it("rejects a social link that isn't a secure web address", () => {
+    const onSave = ok(INITIAL);
+    render(<StoreSettingsForm initial={INITIAL} onSave={onSave} />);
+    type(/facebook link/i, "javascript:alert(1)");
+    fireEvent.click(saveButton());
+    expect(screen.getByText(/full secure address/i)).toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+  });
 });
 
 function StoreDetailsForm({ onSave = ok(INITIAL) }: { onSave?: (v: StoreDetails) => Promise<never> } = {}) {

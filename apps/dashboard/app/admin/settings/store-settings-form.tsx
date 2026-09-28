@@ -11,6 +11,14 @@ export interface StoreDetails {
   whatsapp_number: string | null;
   support_email: string;
   store_website?: string | null;
+  /** Hours a pay-on-pickup order holds its items before it cancels itself. */
+  pickup_hold_hours?: number;
+  footer_about?: string | null;
+  instagram_url?: string | null;
+  facebook_url?: string | null;
+  tiktok_url?: string | null;
+  x_url?: string | null;
+  linkedin_url?: string | null;
 }
 
 export type SaveResult =
@@ -23,6 +31,7 @@ interface Props {
 }
 
 type FormValues = Record<keyof StoreDetails, string>;
+type FieldKey = keyof StoreDetails;
 
 const toForm = (d: StoreDetails): FormValues => ({
   store_name: d.store_name,
@@ -31,9 +40,42 @@ const toForm = (d: StoreDetails): FormValues => ({
   whatsapp_number: d.whatsapp_number ?? "",
   support_email: d.support_email,
   store_website: d.store_website ?? "",
+  pickup_hold_hours: String(d.pickup_hold_hours ?? 48),
+  footer_about: d.footer_about ?? "",
+  instagram_url: d.instagram_url ?? "",
+  facebook_url: d.facebook_url ?? "",
+  tiktok_url: d.tiktok_url ?? "",
+  x_url: d.x_url ?? "",
+  linkedin_url: d.linkedin_url ?? "",
 });
 
-const FIELDS: Array<{ key: keyof StoreDetails; label: string; hint?: string; type?: string }> = [
+/** What the form sends: the text fields as typed, the hold time as a number (validated like the server does). */
+function toPayload(values: FormValues): Record<string, unknown> {
+  const raw = values.pickup_hold_hours.trim();
+  return { ...values, pickup_hold_hours: raw === "" ? Number.NaN : Number(raw) };
+}
+
+type FieldDef = { key: FieldKey; label: string; hint?: string; type?: string; multiline?: boolean };
+
+const CHECKOUT_FIELDS: FieldDef[] = [
+  {
+    key: "pickup_hold_hours",
+    label: "Hold pickup orders for (hours)",
+    type: "number",
+    hint: "How long a pay-on-pickup order keeps its items before it cancels itself and they go back on sale. 1 to 336 (14 days).",
+  },
+];
+
+const FOOTER_FIELDS: FieldDef[] = [
+  { key: "footer_about", label: "About the shop", multiline: true, hint: "A line or two shown in the storefront footer. Leave blank to hide it." },
+  { key: "instagram_url", label: "Instagram link", type: "url", hint: "Full address, e.g. https://instagram.com/yourshop. Blank hides the icon." },
+  { key: "facebook_url", label: "Facebook link", type: "url" },
+  { key: "tiktok_url", label: "TikTok link", type: "url" },
+  { key: "x_url", label: "X (Twitter) link", type: "url" },
+  { key: "linkedin_url", label: "LinkedIn link", type: "url" },
+];
+
+const FIELDS: FieldDef[] = [
   { key: "store_name", label: "Store name", hint: "Printed at the top of every receipt." },
   { key: "store_address", label: "Address", hint: "Printed under the store name. Leave blank to omit." },
   { key: "support_phone", label: "Phone number", hint: "Printed under the store name on receipts." },
@@ -95,7 +137,7 @@ export default function StoreSettingsForm({ initial, onSave }: Props) {
     if (status === "saving" || !dirty) return;
 
     // Same rules the server enforces, so problems show up instantly.
-    const check = validateStoreSettings(values);
+    const check = validateStoreSettings(toPayload(values));
     if (!check.ok) {
       setErrors(check.errors);
       return;
@@ -118,34 +160,48 @@ export default function StoreSettingsForm({ initial, onSave }: Props) {
     }
   }
 
+  function renderField({ key, label, hint, type, multiline }: FieldDef) {
+    const common = {
+      id: `store-${key}`,
+      value: values[key],
+      "aria-invalid": !!errors[key],
+      "aria-describedby": errors[key] ? `store-${key}-error` : undefined,
+      className: `w-full px-3 py-2 text-sm rounded-[6px] border bg-white dark:bg-[#1C1C1C] ${errors[key] ? "border-red-500" : "border-gray-200 dark:border-[#383838]"}`,
+    };
+    return (
+      <div key={key} className="space-y-1">
+        <label htmlFor={`store-${key}`} className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+          {label}
+        </label>
+        {multiline ? (
+          <textarea {...common} rows={3} onChange={(e) => change(key, e.target.value)} />
+        ) : (
+          <input {...common} type={type ?? "text"} min={type === "number" ? 1 : undefined} max={type === "number" ? 336 : undefined} onChange={(e) => change(key, e.target.value)} />
+        )}
+        {errors[key] ? (
+          <p id={`store-${key}-error`} className="text-xs text-red-600 dark:text-red-400">
+            {errors[key]}
+          </p>
+        ) : (
+          hint && <p className="text-[11px] text-gray-500 dark:text-gray-400">{hint}</p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={submit} noValidate className="grid gap-6 lg:grid-cols-[minmax(0,32rem)_1fr] items-start">
       <div className="space-y-4">
-        {FIELDS.map(({ key, label, hint, type }) => (
-          <div key={key} className="space-y-1">
-            <label htmlFor={`store-${key}`} className="text-xs font-semibold text-gray-700 dark:text-gray-200">
-              {label}
-            </label>
-            <input
-              id={`store-${key}`}
-              type={type ?? "text"}
-              value={values[key]}
-              onChange={(e) => change(key, e.target.value)}
-              aria-invalid={!!errors[key]}
-              aria-describedby={errors[key] ? `store-${key}-error` : undefined}
-              className={`w-full px-3 py-2 text-sm rounded-[6px] border bg-white dark:bg-[#1C1C1C] ${
-                errors[key] ? "border-red-500" : "border-gray-200 dark:border-[#383838]"
-              }`}
-            />
-            {errors[key] ? (
-              <p id={`store-${key}-error`} className="text-xs text-red-600 dark:text-red-400">
-                {errors[key]}
-              </p>
-            ) : (
-              hint && <p className="text-[11px] text-gray-500 dark:text-gray-400">{hint}</p>
-            )}
-          </div>
-        ))}
+        {FIELDS.map(renderField)}
+
+        <h3 className="pt-2 text-sm font-bold text-gray-900 dark:text-white">Checkout</h3>
+        {CHECKOUT_FIELDS.map(renderField)}
+
+        <h3 className="pt-2 text-sm font-bold text-gray-900 dark:text-white">Storefront footer</h3>
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 -mt-2">
+          The footer also shows the address, phone, WhatsApp and support email above.
+        </p>
+        {FOOTER_FIELDS.map(renderField)}
 
         {formError && (
           <p role="alert" className="text-xs text-red-600 dark:text-red-400">

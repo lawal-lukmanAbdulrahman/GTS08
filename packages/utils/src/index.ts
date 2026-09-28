@@ -1,5 +1,5 @@
 export { formatKobo, koboToNaira, nairaToKobo, parseNairaInput } from "./money";
-export { validateStoreSettings, type StoreSettingsInput, type StoreSettingsValidation } from "./store-settings";
+export { validateStoreSettings, SOCIAL_LINK_FIELDS, PICKUP_HOLD_HOURS, type StoreSettingsInput, type StoreSettingsValidation } from "./store-settings";
 export { parseWhatsAppContact } from "./whatsapp-contact";
 export { checkManualDiscount, MAX_CASHIER_DISCOUNT_PERCENT, type ManualDiscountCheck } from "./manual-discount";
 export { validatePhoneNumber, validatePasswordChange, validateNewPassword, type PhoneResult, type PasswordChangeResult } from "./staff-input";

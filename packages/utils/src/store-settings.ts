@@ -5,7 +5,18 @@ export interface StoreSettingsInput {
   whatsapp_number?: string | null;
   support_email?: string;
   store_website?: string | null;
+  /** Hours a pay-on-pickup order holds its items before it cancels itself. */
+  pickup_hold_hours?: number;
+  footer_about?: string | null;
+  instagram_url?: string | null;
+  facebook_url?: string | null;
+  tiktok_url?: string | null;
+  x_url?: string | null;
+  linkedin_url?: string | null;
 }
+
+export const SOCIAL_LINK_FIELDS = ["instagram_url", "facebook_url", "tiktok_url", "x_url", "linkedin_url"] as const;
+export const PICKUP_HOLD_HOURS = { min: 1, max: 336 } as const;
 
 export type StoreSettingsValidation =
   | { ok: true; value: StoreSettingsInput }
@@ -15,6 +26,8 @@ const PHONE = /^[0-9+\-()\s]+$/;
 // A domain with a dot and a real ending, optionally with http(s):// and a path. No other schemes.
 const WEBSITE = /^(https?:\/\/)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(\/\S*)?$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Social links open from the storefront, so only secure web addresses: never javascript:, data: or plain http.
+const SECURE_URL = /^https:\/\/[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(\/\S*)?$/;
 
 // Collapsing whitespace also strips newlines, which would otherwise break the
 // fixed-width receipt layout when the value is printed.
@@ -78,6 +91,39 @@ export function validateStoreSettings(input: unknown): StoreSettingsValidation {
       if (!EMAIL.test(v)) errors.support_email = "Enter a valid email address.";
       else if (v.length > 255) errors.support_email = "Email must be 255 characters or fewer.";
       else value.support_email = v;
+    }
+  }
+
+  if ("pickup_hold_hours" in body) {
+    const h = body.pickup_hold_hours;
+    if (typeof h !== "number" || !Number.isInteger(h) || h < PICKUP_HOLD_HOURS.min || h > PICKUP_HOLD_HOURS.max) {
+      errors.pickup_hold_hours = `Enter a whole number of hours from ${PICKUP_HOLD_HOURS.min} to ${PICKUP_HOLD_HOURS.max} (14 days).`;
+    } else value.pickup_hold_hours = h;
+  }
+
+  if ("footer_about" in body) {
+    const raw = body.footer_about;
+    if (raw === null || raw === "") value.footer_about = null;
+    else if (typeof raw !== "string") errors.footer_about = "About text must be text.";
+    else {
+      const v = clean(raw);
+      if (v.length > 300) errors.footer_about = "Keep the about text to 300 characters or fewer.";
+      else value.footer_about = v || null;
+    }
+  }
+
+  for (const key of SOCIAL_LINK_FIELDS) {
+    if (!(key in body)) continue;
+    const raw = body[key];
+    if (raw === null || raw === "") {
+      value[key] = null;
+      continue;
+    }
+    if (typeof raw !== "string") errors[key] = "Must be a web address.";
+    else {
+      const v = raw.trim();
+      if (v.length > 255 || !SECURE_URL.test(v)) errors[key] = "Use a full secure address, like https://instagram.com/yourshop.";
+      else value[key] = v;
     }
   }
 
