@@ -65,10 +65,10 @@ describe("GET /api/v1/pos/whatsapp-orders (orders waiting for payment)", () => {
     expect((await GET(req())).status).toBe(403);
   });
 
-  it("lists only unpaid WhatsApp orders, newest first, capped", async () => {
+  it("lists unpaid WhatsApp and pay-on-pickup orders, newest first, capped", async () => {
     await GET(req());
     const eqs = log.filter((c) => c.method === "eq").map((c) => c.args);
-    expect(eqs).toContainEqual(["channel", "whatsapp"]);
+    expect(log.find((c) => c.method === "in")?.args).toEqual(["channel", ["whatsapp", "pickup"]]);
     expect(eqs).toContainEqual(["status", "pending_payment"]);
     expect(log.find((c) => c.method === "order")?.args).toEqual(["created_at", { ascending: false }]);
     expect(log.find((c) => c.method === "limit")?.args[0]).toBe(50);
@@ -86,8 +86,16 @@ describe("GET /api/v1/pos/whatsapp-orders (orders waiting for payment)", () => {
         item_count: 3,
         recorded_by: "u9",
         created_at: "2026-09-19T09:00:00Z",
+        channel: "whatsapp",
+        pickup_deadline: null,
       },
     ]);
+  });
+
+  it("names a pickup order's customer from their order, and says when it must be collected by", async () => {
+    result = { data: [{ id: "p1", order_number: "GTS-202609-000030", total: 500000, internal_notes: null, created_at: "2026-09-20T09:00:00Z", cashier_id: null, channel: "pickup", pickup_deadline: "2026-09-22T09:00:00Z", customer: { full_name: "Bola Buyer", phone: "08012345678" }, items: [{ quantity: 1 }] }], error: null };
+    const { data } = await (await GET(req())).json();
+    expect(data[0]).toMatchObject({ channel: "pickup", customer_name: "Bola Buyer", customer_phone: "08012345678", pickup_deadline: "2026-09-22T09:00:00Z" });
   });
 
   it("copes with an order that has no parsable contact note", async () => {

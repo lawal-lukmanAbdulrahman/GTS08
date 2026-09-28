@@ -251,6 +251,34 @@ export function orderPaidEmail(o: { store: StoreInfo; name: string; orderNumber:
   };
 }
 
+/** A pay-on-pickup order: where to collect, what to bring (the amount) and the deadline before it is cancelled. */
+export function pickupOrderEmail(o: { store: StoreInfo; name: string; orderNumber: string; items: Line[]; total: number; address: string | null; deadlineText: string; trackUrl: string }): Rendered {
+  const brand = receiptBrand({ name: o.store.name, phone: o.store.phone, website: o.store.website });
+  const store = { ...o.store, name: brand.name, phone: brand.phone };
+  const where = o.address ? `at ${o.address}` : `from ${brand.name} (call ${brand.phone} for directions)`;
+  return {
+    subject: `Order ${o.orderNumber} is held for pickup`,
+    html: shell(
+      store,
+      "Your order is held for pickup",
+      p(`Thank you, ${esc(o.name)}. We're holding order <strong>${esc(o.orderNumber)}</strong> for you. Collect it ${esc(where)} and pay when you collect.`) +
+        receiptTable(o.items) +
+        p(`<strong>To pay at pickup \u2192 ${esc(formatKobo(o.total))}</strong>`) +
+        p(`Please collect by <strong>${esc(o.deadlineText)}</strong>. After that the order is cancelled and the items go back on sale.`) +
+        button(o.trackUrl, "Check my order") +
+        receiptFooterHtml(brand)
+    ),
+    text: [
+      `Thank you, ${o.name}. We're holding order ${o.orderNumber} for you. Collect it ${where} and pay when you collect.`,
+      o.items.map(receiptLine).join("\n"),
+      `To pay at pickup -> ${formatKobo(o.total)}`,
+      `Please collect by ${o.deadlineText}. After that the order is cancelled and the items go back on sale.`,
+      `Check your order: ${o.trackUrl}`,
+      `${brand.thanks}\n${brand.orderAlso}`,
+    ].join("\n\n"),
+  };
+}
+
 const FLAG_WORDS: Record<string, { subject: string; line: string }> = {
   in_review: { subject: "is being looked at", line: "An admin is now reviewing" },
   resolved: { subject: "was resolved", line: "An admin marked as resolved" },

@@ -16,6 +16,10 @@ vi.mock("../app/api/v1/pos/_lib/inventory", () => ({
   rollback: (...a: unknown[]) => mockRollback(...a),
 }));
 
+const mockPickupMail = vi.fn();
+vi.mock("../app/api/v1/_lib/email/events", () => ({ notifyPickupOrder: (...a: unknown[]) => mockPickupMail(...a) }));
+vi.mock("../app/api/v1/_lib/email/after", () => ({ afterResponse: (task: () => Promise<unknown>) => void task() }));
+
 const mockInit = vi.fn();
 vi.mock("../app/api/v1/_lib/paystack", () => ({ initializePayment: (...a: unknown[]) => mockInit(...a) }));
 
@@ -40,6 +44,8 @@ const post = (body: unknown) => POST(new NextRequest("http://localhost:3000/api/
 const inserted = (table: string) => db.calls[table]?.filter((c) => c.method === "insert").map((c) => c.args[0] as Record<string, any>) ?? [];
 
 beforeEach(() => {
+  // These tests cover paying online with Paystack, which is switched off until the live account is ready.
+  process.env.PAYSTACK_ENABLED = "true";
   db.reset();
   mockAdjustAll.mockReset().mockResolvedValue({ ok: true });
   mockRollback.mockReset().mockResolvedValue(undefined);
@@ -281,5 +287,78 @@ describe("POST /api/v1/checkout is decided by the server, not the browser", () =
     expect((await (await post({ ...BASE, customer: { email: "a@b.co" } })).json()).code).toBe("INVALID_CUSTOMER");
     expect((await (await post({ ...BASE, address: { city: "x" } })).json()).code).toBe("INVALID_ADDRESS");
     expect((await (await post({ ...BASE, items: [] })).json()).code).toBe("EMPTY_CART");
+  });
+});
+
+
+describe("pay on pickup", () => {
+  const PICKUP = { customer: BASE.customer, fulfilment: "pickup", paymentMethod: "pay_on_pickup", items: BASE.items };
+  beforeEach(() => {
+    delete process.env.PAYSTACK_ENABLED;
+    db.results.settings = { data: { pickup_hold_hours: 24, store_name: "GTS Wears", store_address: "12 Allen Avenue, Ikeja" }, error: null };
+    db.results.orders = { data: { id: "order-2", order_number: "GTS-202609-000010", status: "pending_payment", subtotal: 3100000, delivery_fee: 0, discount_amount: 0, total: 3100000 }, error: null };
+  });
+
+  it("creates a pickup order that holds the items, with no address, delivery fee or online payment", async () => {
+    const before = Date.now();
+    const res = await post(PICKUP);
+    expect(res.status).toBe(200);
+    const order = inserted("orders")[0]!;
+    expect(order).toMatchObject({ channel: "pickup", status: "pending_payment", delivery_fee: 0, total: 3100000, address_id: null });
+    const deadline = Date.parse(order.pickup_deadline);
+    expect(deadline).toBeGreaterThanOrEqual(before + 24 * 3_600_000);
+    expect(deadline).toBeLessThan(before + 24 * 3_600_000 + 60_000);
+    expect(mockAdjustAll).toHaveBeenCalledWith(expect.anything(), [{ variantId: V1, deltaReserved: 2, requireAvailable: 2 }]);
+    expect(inserted("addresses")).toHaveLength(0);
+    expect(inserted("transactions")).toHaveLength(0);
+    expect(mockInit).not.toHaveBeenCalled();
+  });
+
+  it("emails the customer their pickup details", async () => {
+    await post(PICKUP);
+    expect(mockPickupMail).toHaveBeenCalledWith(expect.anything(), "order-2");
+  });
+
+  it("tells the customer where to collect and by when", async () => {
+    const { data } = await (await post(PICKUP)).json();
+    expect(data).toMatchObject({ order_number: "GTS-202609-000010", status: "pending_payment", total: 3100000 });
+    expect(data.pickup).toMatchObject({ hold_hours: 24, store_name: "GTS Wears", address: "12 Allen Avenue, Ikeja" });
+    expect(Date.parse(data.pickup.deadline)).toBeGreaterThan(Date.now());
+    expect(data.payment).toMatchObject({ method: "pay_on_pickup", status: "pending" });
+  });
+
+  it("holds for 48 hours when the admin hasn't set a time", async () => {
+    db.results.settings = { data: null, error: null };
+    const before = Date.now();
+    await post(PICKUP);
+    expect(Date.parse(inserted("orders")[0]!.pickup_deadline)).toBeGreaterThanOrEqual(before + 48 * 3_600_000);
+  });
+
+  it("frees the held items if the order can't be saved", async () => {
+    db.results.orders = { data: null, error: { message: "boom" } };
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await post(PICKUP)).status).toBe(500);
+    spy.mockRestore();
+    expect(mockRollback).toHaveBeenCalled();
+  });
+});
+
+describe("pay now (Paystack) while it is switched off", () => {
+  beforeEach(() => {
+    delete process.env.PAYSTACK_ENABLED;
+  });
+
+  it("is refused before anything is created or held", async () => {
+    const res = await post(BASE);
+    expect(res.status).toBe(503);
+    expect((await res.json()).code).toBe("PAYMENT_UNAVAILABLE");
+    expect(mockAdjustAll).not.toHaveBeenCalled();
+    expect(inserted("orders")).toHaveLength(0);
+    expect(mockInit).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unknown way to pay", async () => {
+    const res = await post({ ...BASE, paymentMethod: "bitcoin" });
+    expect(res.status).toBe(400);
   });
 });

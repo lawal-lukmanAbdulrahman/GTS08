@@ -217,3 +217,12 @@ describe("inventory, sizes, staff and promos", () => {
     ]);
   });
 });
+
+describe("pay-on-pickup orders", () => {
+  it("count as storefront checkouts in the funnel", () => {
+    const input = empty();
+    input.orders = [order({ channel: "pickup", status: "pending_payment" }), order({ channel: "pickup", status: "completed" }), order({ channel: "online", status: "paid" })];
+    const d = buildDashboard(input);
+    expect(d.funnel).toMatchObject({ checkouts: 3, paid: 2, abandoned: 1 });
+  });
+});

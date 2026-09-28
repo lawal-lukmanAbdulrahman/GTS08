@@ -5,7 +5,7 @@ import { makeDbStub } from "./_helpers/db-stub";
 const mockSend = vi.fn();
 vi.mock("../app/api/v1/_lib/email/send", () => ({ sendEmail: (...a: unknown[]) => mockSend(...a) }));
 
-import { notifyCustomerWelcome, notifyPasswordReset, notifyAccessChanged, notifyFlagUpdated, notifyOrderPaid, notifyPasswordChanged, notifyPosReceipt, notifyStaffWelcome } from "../app/api/v1/_lib/email/events";
+import { notifyPickupOrder, notifyCustomerWelcome, notifyPasswordReset, notifyAccessChanged, notifyFlagUpdated, notifyOrderPaid, notifyPasswordChanged, notifyPosReceipt, notifyStaffWelcome } from "../app/api/v1/_lib/email/events";
 
 const db = makeDbStub();
 const sent = () => mockSend.mock.calls.map((c) => c[0]) as Array<{ to: string; subject: string; html: string; text: string }>;
@@ -178,5 +178,23 @@ describe("delivery keys", () => {
     db.results.orders = { data: { order_number: "GTS-1", total: 1000, customer: { email: "c@example.com", full_name: "C" }, items: [] }, error: null };
     await notifyOrderPaid(db.client, "order-uuid-1");
     expect((mockSend.mock.calls[0]![0] as { idempotencyKey?: string }).idempotencyKey).toBe("order-paid/order-uuid-1");
+  });
+});
+
+describe("notifyPickupOrder", () => {
+  it("emails the customer their pickup details once, keyed to the order", async () => {
+    db.results.orders = { data: { order_number: "GTS-1", total: 5000, pickup_deadline: "2026-09-30T14:00:00Z", customer: { email: "c@example.com", full_name: "C" }, items: [{ quantity: 1, line_total: 5000, product_snapshot: { name: "Shirt", size: "M" } }] }, error: null };
+    db.results.settings = { data: { store_name: "GTS Wears", store_address: "12 Allen Ave", support_phone: null }, error: null };
+    await notifyPickupOrder(db.client, "order-9");
+    const m = mockSend.mock.calls[0]![0] as { to: string; text: string; idempotencyKey?: string };
+    expect(m.to).toBe("c@example.com");
+    expect(m.text).toContain("12 Allen Ave");
+    expect(m.idempotencyKey).toBe("pickup-order/order-9");
+  });
+
+  it("sends nothing when the order has no customer email", async () => {
+    db.results.orders = { data: { order_number: "GTS-1", total: 5000, pickup_deadline: null, customer: null, items: [] }, error: null };
+    await notifyPickupOrder(db.client, "order-9");
+    expect(mockSend).not.toHaveBeenCalled();
   });
 });

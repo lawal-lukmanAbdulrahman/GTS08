@@ -15,6 +15,7 @@ import {
   getCustomerInboxSeenAt,
   getCustomerNotifications,
 } from "../../../../lib/notifications";
+import { ShopAllLink } from "../shop-all-link";
 
 // ── Mobile Drawer Categories List (Matches Storefront Catalog) ──
 const DRAWER_CATEGORIES = [
@@ -405,6 +406,7 @@ export function Header() {
 
         {/* Right: About, FAQs, Cart Icon Button */}
         <div className="flex-1 flex justify-end items-center gap-4 sm:gap-6">
+          <ShopAllLink />
           <Link
             href="/about"
             className="hidden sm:inline text-xs sm:text-sm font-medium text-[#010101] hover:text-[#EDCF5D] transition-colors"

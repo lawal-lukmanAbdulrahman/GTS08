@@ -31,6 +31,8 @@ interface CartContextType {
   syncCartLimits: (limits: Array<{ product_slug: string; size?: string | null; color?: string | null; available: number }>) => void;
   clearCart: () => void;
   totalItemCount: number;
+  /** True once the saved cart has been read: until then an empty list doesn't mean an empty cart. */
+  hydrated: boolean;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -266,6 +268,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setQuantity,
         syncCartLimits,
         clearCart,
+        hydrated,
         totalItemCount,
       }}
     >

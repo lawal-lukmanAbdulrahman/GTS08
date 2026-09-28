@@ -36,8 +36,9 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await createServiceClient()
     .from("orders")
-    .select("id, order_number, total, internal_notes, created_at, cashier_id, items:order_items(quantity)")
-    .eq("channel", "whatsapp")
+    // Pay-on-pickup orders from the storefront wait here too: the customer pays at the till when they collect.
+    .select("id, order_number, total, internal_notes, created_at, cashier_id, channel, pickup_deadline, customer:customers(full_name, phone), items:order_items(quantity)")
+    .in("channel", ["whatsapp", "pickup"])
     .eq("status", "pending_payment")
     .order("created_at", { ascending: false })
     .limit(50);
@@ -53,6 +54,9 @@ export async function GET(request: NextRequest) {
     internal_notes: string | null;
     created_at: string;
     cashier_id: string | null;
+    channel?: string | null;
+    pickup_deadline?: string | null;
+    customer?: { full_name: string | null; phone: string | null } | null;
     items: Array<{ quantity: number }> | null;
   }>;
 
@@ -63,11 +67,13 @@ export async function GET(request: NextRequest) {
         id: o.id,
         order_number: o.order_number,
         total: o.total,
-        customer_name: contact?.name ?? null,
-        customer_phone: contact?.phone ?? null,
+        customer_name: contact?.name ?? o.customer?.full_name ?? null,
+        customer_phone: contact?.phone ?? o.customer?.phone ?? null,
         item_count: (o.items || []).reduce((sum, i) => sum + i.quantity, 0),
         recorded_by: o.cashier_id,
         created_at: o.created_at,
+        channel: o.channel ?? "whatsapp",
+        pickup_deadline: o.pickup_deadline ?? null,
       };
     }),
   });

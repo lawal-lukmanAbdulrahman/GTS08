@@ -8,10 +8,19 @@ import { serverError } from "../_lib/http";
 import { adjustAll, rollback, type InventoryChange } from "../pos/_lib/inventory";
 import { DELIVERY_FEE_KOBO, resolveCartLines } from "../_lib/checkout-cart";
 import { initializePayment } from "../_lib/paystack";
+import { afterResponse } from "../_lib/email/after";
+import { notifyPickupOrder } from "../_lib/email/events";
 import { computePromoDiscount, normalizePromoCode, type PromoRow } from "@gts/utils";
 
 /** Every one of these is paid through Paystack, whose webhook is the only thing that marks an order paid. */
 const PREPAID_METHODS = ["paystack", "card-transfer", "palmpay", "opay"];
+/** Collected and paid for at the store; the order holds its items until the pickup deadline. */
+const PAY_ON_PICKUP = "pay_on_pickup";
+const DEFAULT_PICKUP_HOLD_HOURS = 48;
+const SETTINGS_ID = "00000000-0000-0000-0000-000000000001";
+
+/** Paying online is switched off until the live Paystack account is ready (PAYSTACK_ENABLED=true turns it on). */
+const paystackEnabled = () => process.env.PAYSTACK_ENABLED?.trim().toLowerCase() === "true";
 
 interface VariantRow {
   id: string;
@@ -41,6 +50,17 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     }
     const { customer: customerInput, address: addressInput, items: rawItems, deliveryOption, paymentMethod, notes } = body;
 
+    // How the customer pays decides everything else, so it is checked first, before anything is read or held.
+    const isPickup = paymentMethod === PAY_ON_PICKUP;
+    if (!isPickup) {
+      if (typeof paymentMethod !== "string" || !PREPAID_METHODS.includes(paymentMethod)) {
+        return NextResponse.json({ error: "Choose how you'd like to pay.", code: "INVALID_PAYMENT_METHOD" }, { status: 400 });
+      }
+      if (!paystackEnabled()) {
+        return NextResponse.json({ error: "Paying online isn't available yet. Choose pay on pickup.", code: "PAYMENT_UNAVAILABLE" }, { status: 503 });
+      }
+    }
+
     if (!Array.isArray(rawItems) || rawItems.length === 0) {
       return NextResponse.json(
         { error: "Cart is empty. Please add items to checkout.", code: "EMPTY_CART" },
@@ -63,21 +83,14 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       );
     }
 
-    if (!addressInput?.addressLine1 || !addressInput?.city || !addressInput?.state) {
+    if (!isPickup && (!addressInput?.addressLine1 || !addressInput?.city || !addressInput?.state)) {
       return NextResponse.json(
         { error: "Missing required delivery address information.", code: "INVALID_ADDRESS" },
         { status: 400 }
       );
     }
 
-    if (typeof paymentMethod !== "string" || !PREPAID_METHODS.includes(paymentMethod)) {
-      return NextResponse.json(
-        { error: "Choose an online payment method.", code: "INVALID_PAYMENT_METHOD" },
-        { status: 400 }
-      );
-    }
-
-    const deliveryFeeKobo = typeof deliveryOption === "string" ? DELIVERY_FEE_KOBO[deliveryOption] : undefined;
+    const deliveryFeeKobo = isPickup ? 0 : typeof deliveryOption === "string" ? DELIVERY_FEE_KOBO[deliveryOption] : undefined;
     if (deliveryFeeKobo === undefined) {
       return NextResponse.json({ error: "Choose a delivery option.", code: "INVALID_DELIVERY_OPTION" }, { status: 400 });
     }
@@ -85,10 +98,10 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     const email = sanitizeEmail(customerInput.email);
     const fullName = sanitizeSqlInput(customerInput.fullName);
     const phone = sanitizeSqlInput(customerInput.phone);
-    const line1 = sanitizeSqlInput(addressInput.addressLine1);
-    const line2 = addressInput.addressLine2 ? sanitizeSqlInput(addressInput.addressLine2) : null;
-    const city = sanitizeSqlInput(addressInput.city);
-    const state = sanitizeSqlInput(addressInput.state);
+    const line1 = isPickup ? "" : sanitizeSqlInput(addressInput.addressLine1);
+    const line2 = !isPickup && addressInput.addressLine2 ? sanitizeSqlInput(addressInput.addressLine2) : null;
+    const city = isPickup ? "" : sanitizeSqlInput(addressInput.city);
+    const state = isPickup ? "" : sanitizeSqlInput(addressInput.state);
 
     const authUser = await getAuthenticatedUser(request);
 
@@ -136,23 +149,34 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Create or Link Address Record
-    const { data: addrRecord } = await serviceClient
-      .from("addresses")
-      .insert({
-        customer_id: customerId,
-        full_name: fullName,
-        phone,
-        address_line1: line1,
-        address_line2: line2,
-        city,
-        state,
-        is_default: addressInput.isDefault || false,
-      })
-      .select("id")
-      .single();
+    // 2. Create or Link Address Record (a pickup order has none: it is collected at the store)
+    let addressId: string | null = null;
+    if (!isPickup) {
+      const { data: addrRecord } = await serviceClient
+        .from("addresses")
+        .insert({
+          customer_id: customerId,
+          full_name: fullName,
+          phone,
+          address_line1: line1,
+          address_line2: line2,
+          city,
+          state,
+          is_default: addressInput.isDefault || false,
+        })
+        .select("id")
+        .single();
+      addressId = addrRecord?.id || null;
+    }
 
-    const addressId = addrRecord?.id || null;
+    // Where and by when a pickup order is collected (Store Details). "*" so a database without the newer columns still answers.
+    let pickup: { hold_hours: number; deadline: string; store_name: string; address: string | null } | null = null;
+    if (isPickup) {
+      const { data: settings } = await serviceClient.from("settings").select("*").eq("id", SETTINGS_ID).maybeSingle();
+      const row = (settings ?? {}) as { pickup_hold_hours?: number | null; store_name?: string | null; store_address?: string | null };
+      const holdHours = row.pickup_hold_hours && row.pickup_hold_hours > 0 ? row.pickup_hold_hours : DEFAULT_PICKUP_HOLD_HOURS;
+      pickup = { hold_hours: holdHours, deadline: new Date(Date.now() + holdHours * 3_600_000).toISOString(), store_name: row.store_name || "GTS", address: row.store_address ?? null };
+    }
 
     // 3. Price the cart from the database.
     const { data: variantRows, error: variantError } = await serviceClient
@@ -244,8 +268,9 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     const { data: order, error: orderErr } = await serviceClient
       .from("orders")
       .insert({
-        channel: "online",
+        channel: isPickup ? "pickup" : "online",
         status: "pending_payment",
+        ...(pickup ? { pickup_deadline: pickup.deadline } : {}),
         customer_id: customerId,
         address_id: addressId,
         promo_code: appliedCode,
@@ -272,6 +297,26 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       await serviceClient.from("orders").update({ status: "cancelled", internal_notes: "Cancelled: order lines could not be saved." }).eq("id", order.id);
       await releaseHolds();
       return serverError(new Error(itemsErr.message));
+    }
+
+    // A pickup order is paid at the till (POS), which confirms it; nothing is charged online.
+    if (isPickup && pickup) {
+      afterResponse(() => notifyPickupOrder(serviceClient, order.id));
+      return NextResponse.json({
+        success: true,
+        data: {
+          order_id: order.id,
+          order_number: order.order_number,
+          status: order.status,
+          subtotal: order.subtotal,
+          delivery_fee: order.delivery_fee,
+          discount_amount: order.discount_amount,
+          total: order.total,
+          customer: { id: customerId, email, full_name: fullName, phone },
+          pickup,
+          payment: { method: PAY_ON_PICKUP, status: "pending" },
+        },
+      });
     }
 
     // 6. The payment record the webhook will match on. An unguessable reference.
