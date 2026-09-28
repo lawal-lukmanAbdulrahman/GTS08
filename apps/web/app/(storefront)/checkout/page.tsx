@@ -52,7 +52,7 @@ export default function CheckoutPage() {
   const { cartItems, clearCart, hydrated } = useCart();
   const { user, customer } = useAuth();
   const store = useStoreInfo();
-  const { quote, error: quoteError } = useCheckoutQuote(cartItems);
+  const { quote, error: quoteError, loading: quoteLoading } = useCheckoutQuote(cartItems);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -90,7 +90,7 @@ export default function CheckoutPage() {
   const holdHours = store?.pickup_hold_hours ?? 48;
 
   const detailsReady = firstName.trim().length > 0 && lastName.trim().length > 0 && EMAIL.test(email.trim()) && phone.replace(/\D/g, "").length >= 7;
-  const canPlaceOrder = cartItems.length > 0 && quote?.all_available === true && detailsReady && !isSubmitting;
+  const canPlaceOrder = cartItems.length > 0 && !quoteLoading && quote?.all_available !== false && detailsReady && !isSubmitting;
 
   const placeOrder = async () => {
     if (!canPlaceOrder) return;
@@ -272,8 +272,9 @@ export default function CheckoutPage() {
                   canPlaceOrder ? "bg-[#EDCF5D] hover:bg-[#010101] text-[#010101] hover:text-white shadow-md" : "bg-gray-200 text-gray-400 cursor-not-allowed"
                 }`}
               >
-                {isSubmitting ? "Placing your order..." : "Place order"}
+                {isSubmitting ? "Placing your order..." : quoteLoading ? "Checking stock..." : "Place order"}
               </button>
+              {quoteLoading && <p className="text-[11px] text-gray-500 text-center mt-2">Verifying stock availability...</p>}
               {!detailsReady && <p className="text-[11px] text-gray-500 text-center mt-2">Fill in your details to place the order.</p>}
 
               <p className="text-[11px] text-gray-400 text-center mt-4 leading-relaxed">

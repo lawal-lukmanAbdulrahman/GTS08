@@ -631,54 +631,58 @@ function AccountContent() {
 
     setAddrSubmitting(true);
 
-    if (editingAddressId) {
-      const supabase = createClient() as any;
-      const { error } = await supabase
-        .from("addresses")
-        .update({
+    try {
+      if (editingAddressId) {
+        const supabase = createClient() as any;
+        const { error } = await supabase
+          .from("addresses")
+          .update({
+            full_name: cleanName,
+            phone: cleanPhone,
+            address_line1: cleanLine1,
+            city: cleanCity,
+            state: cleanState,
+            is_default: newAddrDefault,
+          })
+          .eq("id", editingAddressId);
+
+        if (!error) {
+          setShowAddAddressModal(false);
+          setEditingAddressId(null);
+          setNewAddrName("");
+          setNewAddrPhone("");
+          setNewAddrLine1("");
+          setNewAddrCity("");
+          setNewAddrDefault(false);
+          await refreshCustomer();
+        } else {
+          alert(error.message);
+        }
+      } else {
+        const res = await addSavedAddress({
           full_name: cleanName,
           phone: cleanPhone,
           address_line1: cleanLine1,
-          city: cleanCity,
-          state: cleanState,
+          city: newAddrCity,
+          state: newAddrState,
           is_default: newAddrDefault,
-        })
-        .eq("id", editingAddressId);
+        });
 
-      setAddrSubmitting(false);
-      if (!error) {
-        setShowAddAddressModal(false);
-        setEditingAddressId(null);
-        setNewAddrName("");
-        setNewAddrPhone("");
-        setNewAddrLine1("");
-        setNewAddrCity("");
-        setNewAddrDefault(false);
-        await refreshCustomer();
-      } else {
-        alert(error.message);
+        if (!res.error) {
+          setShowAddAddressModal(false);
+          setNewAddrName("");
+          setNewAddrPhone("");
+          setNewAddrLine1("");
+          setNewAddrCity("");
+          setNewAddrDefault(false);
+        } else {
+          alert(res.error);
+        }
       }
-    } else {
-      const res = await addSavedAddress({
-        full_name: cleanName,
-        phone: cleanPhone,
-        address_line1: cleanLine1,
-        city: newAddrCity,
-        state: newAddrState,
-        is_default: newAddrDefault,
-      });
-
+    } catch {
+      alert("Something went wrong saving your address. Please try again.");
+    } finally {
       setAddrSubmitting(false);
-      if (!res.error) {
-        setShowAddAddressModal(false);
-        setNewAddrName("");
-        setNewAddrPhone("");
-        setNewAddrLine1("");
-        setNewAddrCity("");
-        setNewAddrDefault(false);
-      } else {
-        alert(res.error);
-      }
     }
   };
 

@@ -150,8 +150,32 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return { ok: false, message: "This item is currently out of stock." };
       }
 
+      // Pre-compute stock limit result synchronously using the current cart snapshot.
+      // This ensures the return value is correct even though setCartItems may be batched.
+      const prev = latest.current;
+      const existingItem = prev.find(
+        (item) =>
+          item.product.id === product.id &&
+          item.size === defaultSize &&
+          item.color === defaultColor
+      );
+      const currentQty = existingItem ? existingItem.quantity : 0;
+      const desiredQty = currentQty + quantity;
+
       let resultOk = true;
       let resultMsg: string | undefined = undefined;
+
+      if (existingItem) {
+        if (desiredQty > capLimit) {
+          resultOk = false;
+          resultMsg = `Maximum available stock of ${capLimit} reached.`;
+        }
+      } else {
+        if (quantity > capLimit) {
+          resultOk = false;
+          resultMsg = `Only ${capLimit} available in stock. Added ${Math.min(capLimit, quantity)} to your cart.`;
+        }
+      }
 
       setCartItems((prev) => {
         const existingIndex = prev.findIndex(
@@ -164,13 +188,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         if (existingIndex > -1) {
           const updated = [...prev];
           const existingItem = updated[existingIndex]!;
-          const desiredQty = existingItem.quantity + quantity;
-          const finalQty = Math.min(capLimit, desiredQty);
-
-          if (desiredQty > capLimit) {
-            resultOk = false;
-            resultMsg = `Maximum available stock of ${capLimit} reached.`;
-          }
+          const finalQty = Math.min(capLimit, existingItem.quantity + quantity);
 
           updated[existingIndex] = {
             ...existingItem,
@@ -182,10 +200,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
 
         const initialQty = Math.min(capLimit, quantity);
-        if (quantity > capLimit) {
-          resultOk = false;
-          resultMsg = `Only ${capLimit} available in stock. Added ${initialQty} to your cart.`;
-        }
 
         return [
           ...prev,
