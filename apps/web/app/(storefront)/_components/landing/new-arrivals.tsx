@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { ProductCard } from "../ui/product-card";
 import { useCatalogue } from "../catalogue-context";
 

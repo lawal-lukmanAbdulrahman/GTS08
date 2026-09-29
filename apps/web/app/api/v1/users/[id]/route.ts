@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { isUuid } from "@gts/utils";
-import type { SalesRange } from "@gts/utils";
-import { PERMISSION_KEYS, effectivePermissions, requireAdmin, requireSuperAdmin, type PermissionKey } from "../../_lib/staff-access";
+import { isUuid, type SalesRange } from "@gts/utils";
+import { PERMISSION_KEYS, effectivePermissions, requireAdmin, type PermissionKey } from "../../_lib/staff-access";
 import { clientIp, logActivity } from "../../_lib/activity";
 import { afterResponse } from "../../_lib/email/after";
 import { notifyAccessChanged } from "../../_lib/email/events";

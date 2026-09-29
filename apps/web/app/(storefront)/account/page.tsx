@@ -16,7 +16,7 @@ import {
 } from "../_components/auth/passkey-client";
 import { checkPasskeySupport } from "../_components/auth/webauthn-utils";
 import { PinInput } from "../_components/auth/pin-input";
-import { validateSqlSafe, sanitizeSafeText, idempotentFetch, formatWAT, getOrderPickupPin, formatPickupPin } from "@gts/utils";
+import { validateSqlSafe, sanitizeSafeText, idempotentFetch, getOrderPickupPin, formatPickupPin } from "@gts/utils";
 import {
   getStoredCookiePreferences,
   saveCookiePreferences,

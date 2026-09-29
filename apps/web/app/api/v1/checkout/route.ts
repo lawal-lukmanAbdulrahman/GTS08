@@ -191,7 +191,6 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       const { data: settings } = await serviceClient.from("settings").select("*").eq("id", SETTINGS_ID).maybeSingle();
       const row = (settings ?? {}) as { pickup_hold_hours?: number | null; store_name?: string | null; store_address?: string | null; support_phone?: string | null };
       const holdHours = row.pickup_hold_hours && row.pickup_hold_hours > 0 ? row.pickup_hold_hours : DEFAULT_PICKUP_HOLD_HOURS;
-      const deadline = new Date(Date.now() + holdHours * 3_600_000).toISOString();
 
       let stationName = row.store_name || "GTS";
       let stationAddress = row.store_address ?? null;

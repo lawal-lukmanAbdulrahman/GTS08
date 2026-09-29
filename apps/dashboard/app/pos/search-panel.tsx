@@ -32,12 +32,6 @@ interface SearchPanelProps {
   scanMessage?: string | null;
 }
 
-const STOCK_BADGE: Record<PosProduct["stock_status"], { label: string; className: string }> = {
-  in_stock: { label: "In Stock", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" },
-  low_stock: { label: "Low Stock", className: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
-  out_of_stock: { label: "Out of Stock", className: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" },
-};
-
 const VIEW_MODE_KEY = "gts_pos_view_mode";
 
 function checkIsTransparent(product: PosProduct): boolean {
@@ -82,9 +76,9 @@ function Thumb({
 export default function SearchPanel({
   query,
   onQueryChange,
-  category,
-  onCategoryChange,
-  categories,
+  category: _category,
+  onCategoryChange: _onCategoryChange,
+  categories: _categories,
   products,
   loading,
   hasMore,

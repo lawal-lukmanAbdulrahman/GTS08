@@ -101,7 +101,7 @@ describe("OrderInfoDrawer", () => {
   });
 
   it("completes WhatsApp handover when entering PIN and payment method", async () => {
-    const fetchMock = vi.fn(async (url: string, opts?: any) => {
+    const fetchMock = vi.fn(async (url: string, _opts?: any) => {
       if (url.includes("/complete-pickup")) {
         return new Response(JSON.stringify({ data: { status: "collected" } }), { status: 200 });
       }

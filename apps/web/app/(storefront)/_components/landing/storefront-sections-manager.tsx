@@ -8,7 +8,6 @@ import { NewArrivals } from "./new-arrivals";
 import { ForYou } from "./for-you";
 import { CrazyDeals } from "./crazy-finds";
 import { BeautyHygieneDeals } from "./beauty-hygiene-deals";
-import { Categories } from "./categories";
 import { FAQ } from "./faq";
 import { Footer } from "./footer";
 

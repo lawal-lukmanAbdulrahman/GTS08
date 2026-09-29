@@ -88,7 +88,7 @@ describe("Storefront Auth Isolation", () => {
     );
 
     // Mock DB queries for customer
-    mockFrom.mockImplementation((table: string) => ({
+    mockFrom.mockImplementation((_table: string) => ({
       select: () => ({
         or: () => ({
           limit: () => ({
@@ -152,7 +152,7 @@ describe("Storefront Auth Isolation", () => {
     });
 
     // Mock database responses: no customer row, user is role 'admin'
-    mockFrom.mockImplementation((table: string) => ({
+    mockFrom.mockImplementation((_table: string) => ({
       select: () => ({
         or: () => ({
           limit: () => ({

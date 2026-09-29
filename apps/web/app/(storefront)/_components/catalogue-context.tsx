@@ -73,7 +73,7 @@ export function CatalogueProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchCatalogue = useCallback(async (isBackground = false) => {
+  const fetchCatalogue = useCallback(async (_isBackground = false) => {
     try {
       const res = await fetch(CATALOGUE_URL);
       const body = await res.json().catch(() => null);

@@ -42,7 +42,7 @@ export async function GET() {
         const supabase = createServiceClient();
 
         // 1. Check if admin configured custom hero items
-        const { data: heroRows, error: heroErr } = await supabase
+        const { data: heroRows, error: _heroErr } = await supabase
           .from("hero_carousel")
           .select(`
             id, product_id, sort_order, is_active,

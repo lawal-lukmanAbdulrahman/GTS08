@@ -6,11 +6,9 @@ import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../../../_lib/staff-access";
 import { clientIp, logActivity } from "../../../_lib/activity";
 import {
-  canTransition,
   nextStatuses,
   stockEffectOfCancel,
   validateTransition,
-  requiresReason,
   getOrderPickupPin,
 } from "../../../_lib/order-machine";
 import { afterResponse } from "../../../_lib/email/after";

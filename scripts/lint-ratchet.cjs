@@ -17,8 +17,9 @@ const APPS = ["apps/web", "apps/dashboard"];
 
 function errorsFor(app) {
   let out;
+  const isWin = process.platform === "win32";
   try {
-    out = execFileSync("npx", ["eslint", ".", "--format", "json", "--no-error-on-unmatched-pattern"], { cwd: path.join(ROOT, app), maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] }).toString();
+    out = execFileSync(isWin ? "npx.cmd" : "npx", ["eslint", ".", "--format", "json", "--no-error-on-unmatched-pattern"], { cwd: path.join(ROOT, app), maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] }).toString();
   } catch (e) {
     out = e.stdout ? e.stdout.toString() : "[]"; // eslint exits 1 when there are errors; the JSON is still on stdout
   }
