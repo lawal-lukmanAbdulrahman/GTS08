@@ -80,11 +80,21 @@ export const PUT = withIdempotency(async function PUT(
     }
 
     const client = createServiceClient();
-    const { data, error } = await client
+    let { data, error } = await client
       .from("orders")
-      .select("id, order_number, channel, status, payment_status, items:order_items(variant_id, quantity)")
+      .select("id, order_number, channel, status, payment_status, tracking_number, pickup_pin, items:order_items(variant_id, quantity)")
       .eq("id", id)
       .maybeSingle();
+
+    if (error && error.message?.includes("pickup_pin")) {
+      const retry = await client
+        .from("orders")
+        .select("id, order_number, channel, status, payment_status, tracking_number, items:order_items(variant_id, quantity)")
+        .eq("id", id)
+        .maybeSingle();
+      data = retry.data ? { ...retry.data, pickup_pin: (retry.data as any).tracking_number } : null;
+      error = retry.error;
+    }
 
     if (error) return serverError(new Error(error.message));
     if (!data) return NextResponse.json({ error: "Order not found.", code: "NOT_FOUND" }, { status: 404 });
@@ -95,6 +105,8 @@ export const PUT = withIdempotency(async function PUT(
       channel: string;
       status: string;
       payment_status: string;
+      tracking_number?: string | null;
+      pickup_pin?: string | null;
       items: Array<{ variant_id: string | null; quantity: number }> | null;
     };
 
@@ -143,6 +155,7 @@ export const PUT = withIdempotency(async function PUT(
       patch.pickup_deadline = new Date(Date.now() + holdHours * 3_600_000).toISOString();
       const pickupPin = getOrderPickupPin(order);
       patch.tracking_number = pickupPin;
+      patch.pickup_pin = pickupPin;
     }
     if (to === "collected") {
       patch.delivered_at = now;
@@ -155,7 +168,17 @@ export const PUT = withIdempotency(async function PUT(
       patch.hold_reason = reason;
     }
 
-    const claimed = await transitionOrderStatus(client, id, order.status, patch);
+    let claimed = false;
+    try {
+      claimed = await transitionOrderStatus(client, id, order.status, patch);
+    } catch (err: any) {
+      if (err?.message?.includes("pickup_pin") && "pickup_pin" in patch) {
+        delete patch.pickup_pin;
+        claimed = await transitionOrderStatus(client, id, order.status, patch);
+      } else {
+        throw err;
+      }
+    }
     if (!claimed) {
       return NextResponse.json(
         { error: "Someone else just changed this order. Reload it and try again.", code: "ORDER_CHANGED" },

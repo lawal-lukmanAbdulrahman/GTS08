@@ -69,4 +69,20 @@ describe("Products list", () => {
     fireEvent.click(screen.getByText("Classic Tuxedo"));
     expect(rowCheckbox).not.toBeChecked();
   });
+
+  it("opens delete confirmation modal when Delete Product is chosen in action menu", async () => {
+    serve([product({ id: "p1", name: "Classic Tuxedo" })]);
+    render(<ProductsPage />);
+
+    await screen.findByText("Classic Tuxedo");
+    const actionBtns = screen.getAllByTitle("Actions");
+    expect(actionBtns[0]).toBeDefined();
+    fireEvent.click(actionBtns[0]!);
+
+    const deleteBtn = screen.getByText("Delete");
+    fireEvent.click(deleteBtn);
+
+    expect(screen.getByText("Delete Product Confirmation")).toBeInTheDocument();
+    expect(screen.getByText(/Are you sure you want to permanently delete/)).toBeInTheDocument();
+  });
 });

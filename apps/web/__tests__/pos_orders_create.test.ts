@@ -186,7 +186,8 @@ describe("POST /api/v1/pos/orders (walk-in sale, spec Part 5.2)", () => {
     const orderInsertCall = allCalls.orders!.find((c) => c.method === "insert");
     expect(orderInsertCall?.args[0]).toMatchObject({
       channel: "walk_in",
-      status: "completed",
+      status: "collected",
+      payment_status: "paid",
       cashier_id: "cashier-1",
       subtotal: 3000000,
       total: 3000000,

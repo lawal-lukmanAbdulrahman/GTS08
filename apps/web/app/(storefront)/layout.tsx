@@ -157,6 +157,7 @@ import { AuthProvider } from "./_components/auth-context";
 import { AuthModal } from "./_components/auth-modal";
 import { CookieConsentBanner } from "./_components/cookie-banner";
 import { BroadcastModal } from "./_components/broadcast-modal";
+import { DemoStoreBanner } from "./_components/demo-store-banner";
 
 export default function StorefrontLayout({
   children,
@@ -183,6 +184,7 @@ export default function StorefrontLayout({
                     <AuthModal />
                     <CookieConsentBanner />
                     <BroadcastModal />
+                    <DemoStoreBanner />
                   </div>
                 </div>
               </CartProvider>

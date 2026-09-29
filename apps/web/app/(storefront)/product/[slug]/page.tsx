@@ -3506,7 +3506,6 @@ function SimilarFinds({ currentProduct }: SimilarFindsProps) {
   const [apiProducts, setApiProducts] = useState<ProductItem[]>([]);
   const [_loading, setLoading] = useState(false);
   const [_recommendationSource, setRecommendationSource] = useState<string>("co_purchase_and_affinity");
-  const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -3632,9 +3631,6 @@ function SimilarFinds({ currentProduct }: SimilarFindsProps) {
     }
   }, [displayProducts]);
 
-  const toggleWishlist = (id: string) =>
-    setWishlisted((prev) => ({ ...prev, [id]: !prev[id] }));
-
   const scrollBy = (dir: "left" | "right") =>
     scrollRef.current?.scrollBy({ left: dir === "left" ? -290 : 290, behavior: "smooth" });
 
@@ -3715,8 +3711,6 @@ function SimilarFinds({ currentProduct }: SimilarFindsProps) {
                 reviews={product.reviews}
                 image={product.image}
                 hasTransparentBg={product.hasTransparentBg}
-                isWishlisted={wishlisted[product.id]}
-                onToggleWishlist={toggleWishlist}
                 className="w-[180px] sm:w-[200px] md:w-[220px] shrink-0"
               />
             );

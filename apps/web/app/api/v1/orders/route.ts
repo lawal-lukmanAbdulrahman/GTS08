@@ -120,8 +120,38 @@ export async function GET(request: NextRequest) {
     const total = count || 0;
     const pages = Math.ceil(total / limit) || 1;
 
+    // Resolve staff names from cashier_id and paid_confirmed_by
+    const userIds = [
+      ...new Set(
+        (orders || [])
+          .flatMap((o: any) => [o.cashier_id, o.paid_confirmed_by])
+          .filter((id): id is string => !!id)
+      ),
+    ];
+    const userMap: Record<string, string> = {};
+    if (userIds.length > 0) {
+      const { data: userRows } = await serviceClient
+        .from("users")
+        .select("id, full_name, email")
+        .in("id", userIds);
+      for (const u of userRows || []) {
+        userMap[(u as any).id] = (u as any).full_name || (u as any).email || "Staff";
+      }
+    }
+
+    const enhancedOrders = (orders || []).map((o: any) => {
+      const staffName =
+        (o.paid_confirmed_by ? userMap[o.paid_confirmed_by] : null) ||
+        (o.cashier_id ? userMap[o.cashier_id] : null) ||
+        null;
+      return {
+        ...o,
+        cashier_name: staffName,
+      };
+    });
+
     return NextResponse.json({
-      data: orders || [],
+      data: enhancedOrders,
       meta: {
         total,
         page,

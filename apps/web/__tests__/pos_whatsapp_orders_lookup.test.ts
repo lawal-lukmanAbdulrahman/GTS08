@@ -10,6 +10,7 @@ function makeQueryStub() {
   const stub: any = {
     select: vi.fn(() => stub),
     eq: vi.fn(() => stub),
+    in: vi.fn(() => stub),
     maybeSingle: vi.fn(() => Promise.resolve(queryResult)),
   };
   return stub;

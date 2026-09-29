@@ -6,7 +6,13 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    setupFiles: [],
+    pool: "threads",
+    poolOptions: {
+      threads: {
+        singleThread: true,
+      },
+    },
+    setupFiles: ["./test-setup.ts"],
   },
   resolve: {
     alias: {

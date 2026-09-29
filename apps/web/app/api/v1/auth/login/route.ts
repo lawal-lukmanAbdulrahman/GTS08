@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createServerClient, createServiceClient } from "@gts/database";
+import { createIsolatedAuthClient, createServiceClient } from "@gts/database";
 import { sanitizeEmail } from "../utils";
 import { validateSqlSafe } from "@gts/utils";
 import { withIdempotency } from "@/lib/idempotency";
@@ -70,8 +70,8 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createServerClient();
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    const authClient = createIsolatedAuthClient();
+    const { data: authData, error: authError } = await authClient.auth.signInWithPassword({
       email,
       password,
     });
@@ -105,7 +105,10 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
 
     if (userProfile.is_blocked) {
       // The password was right, so a session now exists. End it: a suspended account must hold no valid session at all.
-      await supabase.auth.signOut().catch(() => undefined);
+      await authClient.auth.signOut().catch(() => undefined);
+      if (authData.session?.access_token && (serviceClient.auth as any)?.admin?.signOut) {
+        await (serviceClient.auth as any).admin.signOut(authData.session.access_token, "local").catch(() => undefined);
+      }
       if (userProfile.role !== "customer") {
         await logActivity(serviceClient, { actorId: userProfile.id, action: "auth.login_blocked", targetType: "user", targetId: userProfile.id, ip: clientIp(request) });
       }

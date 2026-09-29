@@ -7,6 +7,7 @@ import { API_BASE, getToken } from "../../lib/session";
 export interface ImageOptimizationResult {
   file: Blob | File;
   hasTransparentBg: boolean;
+  dominantColor?: string;
   width: number;
   height: number;
   originalSize: number;
@@ -15,7 +16,8 @@ export interface ImageOptimizationResult {
 
 /**
  * Optimizes image resolution (max 1200x1200px), compresses for rapid upload speeds,
- * and analyzes alpha channels to verify if it has a transparent background.
+ * analyzes alpha channels to verify if it has a transparent background, and extracts
+ * the dominant harmonic color for storefront hero backgrounds.
  */
 export async function optimizeAndInspectImage(
   file: File,
@@ -71,18 +73,41 @@ export async function optimizeAndInspectImage(
       // Draw the resized image
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Check alpha channel for transparency
+      // Check alpha channel for transparency and extract dominant color
       let hasTransparency = false;
+      let dominantColor: string | undefined = undefined;
       try {
         const imgData = ctx.getImageData(0, 0, width, height);
         const data = imgData.data;
-        // Sample pixel alpha values (data[i + 3])
-        for (let i = 3; i < data.length; i += 16) {
-          const alpha = data[i];
+        let rSum = 0, gSum = 0, bSum = 0, totalWeight = 0;
+
+        for (let i = 0; i < data.length; i += 16) {
+          const alpha = data[i + 3];
           if (alpha !== undefined && alpha < 240) {
             hasTransparency = true;
-            break;
           }
+          if (alpha !== undefined && alpha >= 128) {
+            const r = data[i] ?? 0;
+            const g = data[i + 1] ?? 0;
+            const b = data[i + 2] ?? 0;
+            const max = Math.max(r, g, b);
+            const min = Math.min(r, g, b);
+            const delta = max - min;
+            const isNeutral = max < 25 || (min > 230 && delta < 15);
+            const weight = isNeutral ? 0.05 : delta + 15;
+            rSum += r * weight;
+            gSum += g * weight;
+            bSum += b * weight;
+            totalWeight += weight;
+          }
+        }
+
+        if (totalWeight > 0) {
+          const rAvg = Math.round(rSum / totalWeight);
+          const gAvg = Math.round(gSum / totalWeight);
+          const bAvg = Math.round(bSum / totalWeight);
+          const pad = (n: number) => n.toString(16).padStart(2, "0");
+          dominantColor = `#${pad(rAvg)}${pad(gAvg)}${pad(bAvg)}`;
         }
       } catch (e) {
         console.warn("Could not inspect image transparency:", e);
@@ -99,6 +124,7 @@ export async function optimizeAndInspectImage(
             return resolve({
               file,
               hasTransparentBg: hasTransparency,
+              dominantColor,
               width,
               height,
               originalSize: file.size,
@@ -109,6 +135,7 @@ export async function optimizeAndInspectImage(
           resolve({
             file: blob,
             hasTransparentBg: hasTransparency,
+            dominantColor,
             width,
             height,
             originalSize: file.size,
@@ -143,6 +170,7 @@ export async function uploadToCloudinary(
   url: string;
   public_id: string;
   hasTransparentBg: boolean;
+  dominantColor?: string;
   width: number;
   height: number;
   originalSize?: number;
@@ -150,6 +178,7 @@ export async function uploadToCloudinary(
 }> {
   let fileToUpload: File | Blob = file;
   let hasTransparentBg = false;
+  let dominantColor: string | undefined = undefined;
   let width = 0;
   let height = 0;
   let originalSize = file.size;
@@ -161,6 +190,7 @@ export async function uploadToCloudinary(
       const opt = await optimizeAndInspectImage(file, 1200);
       fileToUpload = opt.file;
       hasTransparentBg = opt.hasTransparentBg;
+      dominantColor = opt.dominantColor;
       width = opt.width;
       height = opt.height;
       originalSize = opt.originalSize;
@@ -198,6 +228,7 @@ export async function uploadToCloudinary(
     url,
     public_id: publicId,
     hasTransparentBg,
+    dominantColor,
     width: width || body?.width || 0,
     height: height || body?.height || 0,
     originalSize,

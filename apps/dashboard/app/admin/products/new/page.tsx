@@ -152,7 +152,9 @@ export default function CreateProductPage() {
     width?: number;
     height?: number;
     hasTransparentBg?: boolean;
+    dominantColor?: string;
   } | null>(null);
+  const [dominantColor, setDominantColor] = useState<string>("");
   const heroFileInputRef = useRef<HTMLInputElement>(null);
   const variantZoneFileInputRef = useRef<HTMLInputElement>(null);
   const [isDraggingVariantZone, setIsDraggingVariantZone] = useState(false);
@@ -297,6 +299,7 @@ export default function CreateProductPage() {
             status: "draft",
             is_featured: isFeatured,
             has_transparent_bg: hasTransparentBg,
+            dominant_color: dominantColor || undefined,
             image_url: imageUrl.trim() || undefined,
             short_description: shortDescription.trim(),
             description: description.trim(),
@@ -350,6 +353,7 @@ export default function CreateProductPage() {
     variants,
     descriptionImages,
     hasTransparentBg,
+    dominantColor,
     isFeatured,
     cloudDraftId,
   ]);
@@ -648,12 +652,16 @@ export default function CreateProductPage() {
       if (!imageUrl) {
         setImageUrl(res.url);
         setHasTransparentBg(Boolean(res.hasTransparentBg));
+        if (res.dominantColor) {
+          setDominantColor(res.dominantColor);
+        }
         setHeroImageStats({
           originalSize: res.originalSize,
           optimizedSize: res.optimizedSize,
           width: res.width,
           height: res.height,
           hasTransparentBg: res.hasTransparentBg,
+          dominantColor: res.dominantColor,
         });
       }
 
@@ -692,6 +700,9 @@ export default function CreateProductPage() {
       if (!imageUrl) {
         setImageUrl(res.url);
         setHasTransparentBg(Boolean(res.hasTransparentBg));
+        if (res.dominantColor) {
+          setDominantColor(res.dominantColor);
+        }
       }
     } catch (err: any) {
       setErrorMsg("Color image upload failed: " + (err.message || "Please try again."));
@@ -956,6 +967,7 @@ export default function CreateProductPage() {
       status: targetStatus,
       is_featured: isFeatured,
       has_transparent_bg: hasTransparentBg,
+      dominant_color: dominantColor || undefined,
       image_url: effectiveImageUrl,
       short_description: shortDescription.trim(),
       description: description.trim(),

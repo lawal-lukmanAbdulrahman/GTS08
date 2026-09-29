@@ -113,6 +113,7 @@ export function dbProductToItem(p: ApiProduct): ProductItem {
 
   return {
     id: p.slug,
+    productId: p.id,
     brand: p.brand || "GTS",
     sku: p.sku || p.slug,
     title: p.name,

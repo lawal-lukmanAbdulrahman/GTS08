@@ -10,7 +10,7 @@ import { DELIVERY_FEE_KOBO, resolveCartLines } from "../_lib/checkout-cart";
 import { initializePayment } from "../_lib/paystack";
 import { afterResponse } from "../_lib/email/after";
 import { notifyPickupOrder } from "../_lib/email/events";
-import { computePromoDiscount, normalizePromoCode, type PromoRow } from "@gts/utils";
+import { computePromoDiscount, normalizePromoCode, type PromoRow, getOrderPickupPin } from "@gts/utils";
 
 /** Every one of these is paid through Paystack, whose webhook is the only thing that marks an order paid. */
 const PREPAID_METHODS = ["paystack", "card-transfer", "palmpay", "opay"];
@@ -342,10 +342,22 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     const holds: InventoryChange[] = items.map((i) => ({ variantId: i.variant_id, deltaReserved: i.quantity, requireAvailable: i.quantity }));
     const held = await adjustAll(serviceClient, holds);
     if (!held.ok) {
-      if (held.reason === "DATABASE_ERROR") return serverError(new Error(held.message));
+      if (held.reason === "DATABASE_ERROR") {
+        if (/foreign key|violates foreign key|23503|not-null|does not exist|violates not-null/i.test(held.message)) {
+          return NextResponse.json(
+            {
+              error: "An item in your order is no longer available.",
+              code: "ITEM_UNAVAILABLE",
+              details: { variant_id: held.failedVariantId },
+            },
+            { status: 409 }
+          );
+        }
+        return serverError(new Error(held.message));
+      }
       return NextResponse.json(
         {
-          error: "One or more items no longer have enough stock.",
+          error: "One or more items no longer have enough stock or are no longer available.",
           code: "INSUFFICIENT_STOCK",
           details: { variant_id: held.failedVariantId, ...(held.reason === "INSUFFICIENT_STOCK" ? { available: held.available } : {}) },
         },
@@ -406,11 +418,35 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       // An order with no lines can never be fulfilled: cancel it and free the stock.
       await serviceClient.from("orders").update({ status: "cancelled", internal_notes: "Cancelled: order lines could not be saved." }).eq("id", order.id);
       await releaseHolds();
+      if (/foreign key|violates foreign key|23503|not-null|does not exist|violates not-null/i.test(itemsErr.message)) {
+        return NextResponse.json(
+          {
+            error: "An item in your order is no longer available.",
+            code: "ITEM_UNAVAILABLE",
+          },
+          { status: 409 }
+        );
+      }
       return serverError(new Error(itemsErr.message));
     }
 
     // A pickup order is paid at the till (POS), which confirms it; nothing is charged online.
     if (isPickup && pickup) {
+      const pickupPin = getOrderPickupPin(order);
+      try {
+        const { error: pinErr } = await serviceClient
+          .from("orders")
+          .update({ tracking_number: pickupPin, pickup_pin: pickupPin })
+          .eq("id", order.id);
+        if (pinErr && /pickup_pin/i.test(pinErr.message)) {
+          await serviceClient
+            .from("orders")
+            .update({ tracking_number: pickupPin })
+            .eq("id", order.id);
+        }
+      } catch (pinErr) {
+        console.warn("Failed to set tracking_number/pickup_pin on pickup order:", pinErr);
+      }
       afterResponse(() => notifyPickupOrder(serviceClient, order.id));
       return NextResponse.json({
         success: true,

@@ -1,5 +1,5 @@
 export { createClient } from "./client";
-export { createServerClient, createServiceClient } from "./server";
+export { createServerClient, createServiceClient, createIsolatedAuthClient } from "./server";
 export type { Database } from "./types.gen";
 export { getRequestDataMode, runWithDataMode, SCOPED_TABLES } from "./data-scope";
 export type { DataMode } from "./data-scope";

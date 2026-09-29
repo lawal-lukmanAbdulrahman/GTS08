@@ -21,7 +21,7 @@ export interface StorefrontLayoutConfig {
 const DEFAULT_STOREFRONT_SECTIONS: StorefrontSectionConfig[] = [
   { id: "hero", name: "Hero Showcase", category: "Hero", enabled: true, order: 0 },
   { id: "bestsellers", name: "Bestselling Products", category: "Products", enabled: true, order: 1 },
-  { id: "categories", name: "Featured Categories", category: "Categories", enabled: true, order: 2 },
+  { id: "categories", name: "Featured Categories", category: "Categories", enabled: false, order: 2 },
   { id: "appliances", name: "Upgrade Your Appliances", category: "Products", enabled: true, order: 3 },
   { id: "baby", name: "Baby Specials", category: "Products", enabled: true, order: 4 },
   { id: "new-arrivals", name: "Fresh Season New Arrivals", category: "Showcase", enabled: true, order: 5 },

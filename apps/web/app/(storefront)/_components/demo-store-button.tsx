@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createClient } from "@gts/database/client";
 import { CATALOGUE_CACHE_KEY } from "./catalogue-context";
 
 /**
@@ -34,9 +35,47 @@ export default function DemoStoreButton({ reload = () => window.location.reload(
     try {
       const res = await fetch("/api/v1/auth/demo-login", { method: "POST" });
       if (res.ok) {
+        const body = await res.json().catch(() => null);
+        const session = body?.data?.session;
+        const user = body?.data?.user;
+
+        const week = 604800;
+        document.cookie = `gts_demo_mode=true; path=/; max-age=${week}; SameSite=Lax`;
+        localStorage.setItem("gts_demo_mode", "true");
+
+        if (session?.access_token) {
+          document.cookie = `gts_access_token=${session.access_token}; path=/; max-age=${week}; SameSite=Lax`;
+          document.cookie = `gts_customer_token=${session.access_token}; path=/; max-age=${week}; SameSite=Lax`;
+          localStorage.setItem("gts_customer_token", session.access_token);
+          localStorage.setItem(
+            "gts_customer_user",
+            JSON.stringify({
+              id: user?.id || "demo-shopper",
+              email: user?.email || "demo@gts.ng",
+              role: "customer",
+              full_name: "Demo Shopper",
+              is_demo: true,
+            })
+          );
+
+          try {
+            const supabase = createClient();
+            if (session.refresh_token) {
+              await supabase.auth.setSession({
+                access_token: session.access_token,
+                refresh_token: session.refresh_token,
+              });
+            }
+          } catch {}
+        }
+
         // The tab's copy of the catalogue belongs to the live shop: drop it so the demo catalogue loads.
         try {
           sessionStorage.removeItem(CATALOGUE_CACHE_KEY);
+          sessionStorage.removeItem("gts_catalogue_v1");
+          localStorage.removeItem("gts_catalogue_v1");
+          localStorage.removeItem("gts_wishlist_items");
+          localStorage.removeItem("gts_cart");
         } catch {
           // storage blocked: nothing cached to drop
         }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { consume, createRateLimitStore } from "@gts/utils";
-import { createServerClient, createServiceClient, runWithDataMode } from "@gts/database";
+import { createIsolatedAuthClient, createServiceClient, runWithDataMode } from "@gts/database";
 import { clientIp, logActivity } from "../../_lib/activity";
 import { serverError } from "../../_lib/http";
 
@@ -58,8 +58,8 @@ export async function POST(request: NextRequest) {
     const hashed = link?.properties?.hashed_token;
     if (linkError || !hashed) throw new Error(`demo link: ${linkError?.message ?? "no token"}`);
 
-    const supabase = await createServerClient();
-    const { data: verified, error: verifyError } = await supabase.auth.verifyOtp({ token_hash: hashed, type: "magiclink" });
+    const authClient = createIsolatedAuthClient();
+    const { data: verified, error: verifyError } = await authClient.auth.verifyOtp({ token_hash: hashed, type: "magiclink" });
     const session = verified?.session;
     if (verifyError || !session) throw new Error(`demo session: ${verifyError?.message ?? "no session"}`);
 
@@ -70,10 +70,28 @@ export async function POST(request: NextRequest) {
       logActivity(service, { actorId: demo.id, action: "auth.login", targetType: "user", targetId: demo.id, changes: { via: "demo_button" }, ip })
     );
 
-    return NextResponse.json(
+    const res = NextResponse.json(
       { data: { session: { access_token: session.access_token, refresh_token: session.refresh_token, expires_at: session.expires_at }, user: demo, permissions: permissions ?? null } },
       { headers: { "Cache-Control": "no-store" } }
     );
+
+    const week = 604800;
+    res.cookies.set("gts_access_token", session.access_token, {
+      path: "/",
+      maxAge: week,
+      sameSite: "lax",
+    });
+    res.cookies.set("gts_customer_token", session.access_token, {
+      path: "/",
+      maxAge: week,
+      sameSite: "lax",
+    });
+    res.cookies.set("gts_demo_mode", "true", {
+      path: "/",
+      maxAge: week,
+      sameSite: "lax",
+    });
+    return res;
   } catch (err) {
     return serverError(err);
   }

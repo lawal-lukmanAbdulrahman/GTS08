@@ -95,4 +95,19 @@ describe("Categories (admin)", () => {
     await waitFor(() => expect(api.deleteCategory).toHaveBeenCalledWith("c3"));
     expect(await screen.findByRole("alert")).toHaveTextContent(/still has products/);
   });
+
+  it("shows deleting loading state while deletion is in flight", async () => {
+    let resolveDelete: (v: unknown) => void = () => {};
+    api.deleteCategory.mockImplementation(() => new Promise((resolve) => { resolveDelete = resolve; }));
+    render(<CategoriesPage />);
+    await screen.findByTestId("category-Shoes");
+    fireEvent.click(within(row("Shoes")).getByRole("button", { name: /^delete/i }));
+    fireEvent.click(within(row("Shoes")).getByRole("button", { name: /yes, delete/i }));
+
+    expect(await screen.findByText(/deleting category/i)).toBeInTheDocument();
+    expect(within(row("Shoes")).getByText(/deleting\.\.\./i)).toBeInTheDocument();
+
+    resolveDelete({ ok: true, data: {} });
+    await waitFor(() => expect(screen.queryByText(/deleting category/i)).not.toBeInTheDocument());
+  });
 });

@@ -45,6 +45,8 @@ vi.mock("@gts/database", () => ({
       return stub;
     },
   }),
+  getRequestDataMode: () => Promise.resolve("live"),
+  runWithDataMode: (_mode: any, fn: any) => fn(),
 }));
 
 import { NextRequest } from "next/server";

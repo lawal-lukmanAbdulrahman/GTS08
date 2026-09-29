@@ -72,6 +72,15 @@ export const POST = withIdempotency(async function POST(
 
     if (updateErr) return serverError(new Error(updateErr.message));
 
+    // Record transaction so cash in register and bank figures reflect the payment
+    await client.from("transactions").insert({
+      order_id: id,
+      payment_method: paymentMethod,
+      payment_status: "success",
+      amount: order.total,
+      confirmed_by: access.user.id,
+    });
+
     // Audit log
     await logActivity(client, {
       actorId: access.user.id,

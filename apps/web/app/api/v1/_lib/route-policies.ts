@@ -62,8 +62,8 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "categories": { GET: "public", POST: "permission:can_manage_products" },
   "categories/[id]": { GET: "public", PATCH: "permission:can_manage_products", DELETE: "permission:can_manage_products" },
   "categories/reorder": { PUT: "permission:can_manage_products" },
-  "products": { GET: "public", POST: "permission:can_manage_products", PUT: "permission:can_manage_products" }, // GET adds cost for staff
-  "products/[slug]": { GET: "optionalStaff" },
+  "products": { GET: "public", POST: "permission:can_manage_products", PUT: "permission:can_manage_products", DELETE: "permission:can_manage_products" }, // GET adds cost for staff
+  "products/[slug]": { GET: "optionalStaff", DELETE: "permission:can_manage_products" },
   "products/drafts": { GET: "permission:can_manage_products", POST: "permission:can_manage_products", DELETE: "permission:can_manage_products" },
   "products/search": { GET: "public" },
   "search": { GET: "public" },
@@ -150,7 +150,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "staff/me/sales": { GET: "staff" },
   "upload": { POST: "permission:can_manage_products" },
   "users": { GET: "admin" },
-  "users/[id]": { GET: "admin", PATCH: "admin", DELETE: "super_admin" },
+  "users/[id]": { GET: "admin", PATCH: "admin", DELETE: "admin" },
   "users/staff": { GET: "admin", POST: "super_admin" },
 
   // ── point of sale

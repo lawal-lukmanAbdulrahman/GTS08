@@ -221,11 +221,19 @@ export function paperCss(paper: PaperSize, lineCount: number): string {
   line-height: ${LINE_HEIGHT};
   white-space: pre;
 }
+@media screen {
+  .receipt-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    font-size: ${paper === "58mm" ? "13.5px" : paper === "80mm" ? "13px" : "12px"} !important;
+    line-height: 1.45 !important;
+  }
+}
 @media print {
   .receipt-preview { zoom: 1 !important; }
   body * { visibility: hidden; }
   .receipt-sheet, .receipt-sheet * { visibility: visible; }
-  .receipt-sheet { position: absolute; left: 0; right: 0; top: 0; margin: 0 auto; padding: 3mm 0; color: #000; background: #fff; }
+  .receipt-sheet { position: absolute; left: 0; right: 0; top: 0; margin: 0 auto; padding: 3mm 0; color: #000; background: #fff; width: ${s.contentWidthMm}mm !important; font-size: calc(${s.contentWidthMm}mm / ${s.chars} / ${GLYPH_WIDTH_EM}) !important; line-height: ${LINE_HEIGHT} !important; }
 }`;
 }
 

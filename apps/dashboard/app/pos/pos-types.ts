@@ -18,6 +18,7 @@ export interface PosProduct {
   primary_image: { cloudinary_id: string; alt: string } | null;
   stock_status: "in_stock" | "low_stock" | "out_of_stock";
   variants: PosVariant[];
+  has_transparent_bg?: boolean;
 }
 
 export interface CartLine {
@@ -29,6 +30,8 @@ export interface CartLine {
   unitPrice: number; // kobo, base_price + price_modifier
   quantity: number;
   available: number; // stock ceiling for the quantity stepper
+  imageUrl?: string | null;
+  primary_image?: { cloudinary_id: string; alt: string } | null;
 }
 
 export type PaymentMethod = "cash" | "pos_terminal";

@@ -23,8 +23,12 @@ const MAX_RETRY_WAIT_MS = 3000;
 
 function config(): { key: string; from: string; replyTo?: string } | null {
   const key = process.env.RESEND_API_KEY?.trim();
-  const from = process.env.EMAIL_FROM?.trim();
+  let from = process.env.EMAIL_FROM?.trim();
   if (!key || !from) return null;
+  // Resend rejects unverified custom domains and public mail providers like @gmail.com
+  if (from.includes("@gmail.com") || from.includes("@yahoo.com")) {
+    from = "GTS <onboarding@resend.dev>";
+  }
   return { key, from, replyTo: process.env.EMAIL_REPLY_TO?.trim() || undefined };
 }
 
@@ -90,17 +94,20 @@ export async function sendEmail(message: EmailMessage): Promise<SendResult> {
   const to = message.to?.trim();
   if (!to || !SINGLE_ADDRESS.test(to)) return { ok: false, reason: "Invalid recipient address." };
 
+  console.log(`[EMAIL DISPATCH] To: ${to} | From: ${cfg.from} | Subject: "${message.subject}"`);
+
   const res = await post("/emails", cfg.key, payload(message, cfg.from, cfg.replyTo), message.idempotencyKey ? { "Idempotency-Key": message.idempotencyKey } : {});
   if (!res) {
-    console.error("[email] Could not reach Resend.");
+    console.error(`[email] Could not reach Resend for ${to}`);
     return { ok: false, reason: "Could not reach the email service." };
   }
   if (!res.ok) {
     const reason = await explain(res);
-    console.error(`[email] Resend refused a message (HTTP ${res.status}).`);
+    console.error(`[email] Resend refused a message to ${to} (HTTP ${res.status}): ${reason}`);
     return { ok: false, reason };
   }
   const body = (await res.json().catch(() => null)) as { id?: string } | null;
+  console.log(`[EMAIL SENT] ID: ${body?.id} to ${to}`);
   return { ok: true, id: body?.id ?? null };
 }
 

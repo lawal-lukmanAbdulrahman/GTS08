@@ -29,9 +29,8 @@ export const DEFAULT_STOREFRONT_SECTIONS: SectionConfig[] = [
   { section_key: "for-you", title: "For You", is_active: true, sort_order: 4 },
   { section_key: "crazy-deals", title: "Crazy Deals", is_active: true, sort_order: 5 },
   { section_key: "beauty", title: "Beauty & Hygiene", is_active: true, sort_order: 6 },
-  { section_key: "categories", title: "Categories", is_active: true, sort_order: 7 },
-  { section_key: "faq", title: "FAQ", is_active: true, sort_order: 8 },
-  { section_key: "footer", title: "Footer", is_active: true, sort_order: 9 },
+  { section_key: "faq", title: "FAQ", is_active: true, sort_order: 7 },
+  { section_key: "footer", title: "Footer", is_active: true, sort_order: 8 },
 ];
 
 export function StorefrontSectionsManager() {
@@ -76,7 +75,7 @@ export function StorefrontSectionsManager() {
       case "beauty":
         return <BeautyHygieneDeals key="beauty" categorySlug={sec.config?.category_slug} />;
       case "categories":
-        return <Categories key="categories" />;
+        return null;
       case "faq":
         return <FAQ key="faq" />;
       case "footer":
@@ -86,7 +85,7 @@ export function StorefrontSectionsManager() {
     }
   };
 
-  const activeSections = sections.filter((s) => s.is_active !== false);
+  const activeSections = sections.filter((s) => s.is_active !== false && s.section_key !== "categories");
 
   return (
     <div className="flex flex-col w-full">

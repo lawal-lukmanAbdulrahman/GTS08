@@ -38,10 +38,13 @@ function Complete() {
   // The receipt's name, phone and website are the shop's own Store Details; the defaults apply if they can't be read.
   useEffect(() => {
     if (typeof fetch !== "function") return;
-    fetch("/api/v1/settings")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((b) => b?.data && setStore({ name: b.data.store_name, phone: b.data.support_phone, website: b.data.store_website }))
-      .catch(() => undefined);
+    const req = fetch("/api/v1/settings");
+    if (req && typeof req.then === "function") {
+      req
+        .then((r) => (r.ok ? r.json() : null))
+        .then((b) => b?.data && setStore({ name: b.data.store_name, phone: b.data.support_phone, website: b.data.store_website }))
+        .catch(() => undefined);
+    }
   }, []);
 
   // The cart is emptied only once the server confirms payment, never just because the customer came back.

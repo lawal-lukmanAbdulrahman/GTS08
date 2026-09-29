@@ -44,7 +44,7 @@ export function summariseSales(rows: SaleRow[]): SalesSummary {
       voided.total += row.amount;
       continue;
     }
-    if (row.order.status !== "completed") continue;
+    if (row.order.status !== "completed" && row.order.status !== "collected") continue;
 
     sales.count += 1;
     sales.total += row.amount;

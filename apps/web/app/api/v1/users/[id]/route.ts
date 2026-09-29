@@ -204,19 +204,22 @@ export async function PATCH(request: NextRequest, { params }: Context) {
  * row stays so the sales, voids and logs they made keep their name.
  */
 export async function DELETE(request: NextRequest, { params }: Context) {
-  const superAdmin = await requireSuperAdmin(request);
-  if (!superAdmin.ok) return superAdmin.response;
+  const admin = await requireAdmin(request);
+  if (!admin.ok) return admin.response;
 
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "Staff member not found.", code: "NOT_FOUND" }, { status: 404 });
-  if (id === superAdmin.user.id) {
+  if (id === admin.user.id) {
     return NextResponse.json({ error: "You can't remove your own account.", code: "CANNOT_REMOVE_SELF" }, { status: 400 });
   }
 
-  const target = await loadStaff(id, superAdmin.isDemo === true);
+  const target = await loadStaff(id, admin.isDemo === true);
   if (!target) return NextResponse.json({ error: "Staff member not found.", code: "NOT_FOUND" }, { status: 404 });
   if (target.is_super_admin) {
     return NextResponse.json({ error: "The super admin can't be removed.", code: "CANNOT_REMOVE_SUPER_ADMIN" }, { status: 400 });
+  }
+  if (target.role === "admin" && !admin.isSuperAdmin) {
+    return NextResponse.json({ error: "Only the super admin can remove another admin.", code: "SUPER_ADMIN_ONLY" }, { status: 403 });
   }
 
   const serviceClient = createServiceClient();
@@ -228,6 +231,6 @@ export async function DELETE(request: NextRequest, { params }: Context) {
   const { error: banError } = await serviceClient.auth.admin.updateUserById(id, { ban_duration: "876000h" });
   if (banError) console.error("[users/remove] could not disable the login:", banError.message);
 
-  await logActivity(serviceClient, { actorId: superAdmin.user.id, action: "staff.remove", targetType: "user", targetId: id, changes: { role: target.role }, ip: clientIp(request) });
+  await logActivity(serviceClient, { actorId: admin.user.id, action: "staff.remove", targetType: "user", targetId: id, changes: { role: target.role }, ip: clientIp(request) });
   return NextResponse.json({ data: { id, removed: true } });
 }

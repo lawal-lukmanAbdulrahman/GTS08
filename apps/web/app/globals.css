@@ -265,24 +265,4 @@
 
 
 
-/* Touch targets: on phones and touch screens, controls are at least 44px tall (WCAG 2.5.5 / storefront spec Part 3). */
-@media (pointer: coarse), (max-width: 767px) {
-  button:not([data-compact]),
-  [role="button"]:not([data-compact]),
-  select,
-  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]) {
-    min-height: 44px;
-  }
-  button:not([data-compact]),
-  [role="button"]:not([data-compact]) {
-    min-width: 44px;
-  }
-  /* Standalone links (not links inside a sentence) */
-  a[href]:not(p a):not(li a):not(h1 a):not(h2 a):not(h3 a):not(.sr-only):not([data-compact]),
-  [role="tab"],
-  footer li a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-  }
-}
+

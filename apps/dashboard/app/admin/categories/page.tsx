@@ -24,6 +24,7 @@ export default function CategoriesPage() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const r = await listCategories();
@@ -80,8 +81,17 @@ export default function CategoriesPage() {
     const siblings = all.filter((c) => c.parent_id === cat.parent_id).sort(byOrder);
     const index = siblings.findIndex((c) => c.id === cat.id);
     const parent = cat.parent_id ? all.find((p) => p.id === cat.parent_id) : undefined;
+    const isThisDeleting = deletingId === cat.id;
+    const isAnyBusy = busy || deletingId !== null;
+
     return (
-      <li key={cat.id} data-testid={`category-${cat.name}`} className={`py-3 flex flex-col sm:flex-row sm:items-center gap-3 ${cat.parent_id ? "sm:pl-8" : ""}`}>
+      <li
+        key={cat.id}
+        data-testid={`category-${cat.name}`}
+        className={`py-3 flex flex-col sm:flex-row sm:items-center gap-3 transition-opacity duration-150 ${cat.parent_id ? "sm:pl-8" : ""} ${
+          isThisDeleting ? "opacity-50 pointer-events-none" : ""
+        }`}
+      >
         {editing === cat.id ? (
           <div className="flex-1 space-y-2">
             <label className="sr-only" htmlFor={`edit-name-${cat.id}`}>
@@ -92,7 +102,7 @@ export default function CategoriesPage() {
             <div className="flex gap-2">
               <button
                 type="button"
-                disabled={busy || !editName.trim()}
+                disabled={isAnyBusy || !editName.trim()}
                 onClick={async () => {
                   if (await run(() => updateCategory(cat.id, { name: editName.trim(), description: editDescription.trim() || null }))) setEditing(null);
                 }}
@@ -121,14 +131,27 @@ export default function CategoriesPage() {
 
         {editing !== cat.id && (
           <div className="flex flex-wrap items-center gap-1.5">
-            <button type="button" aria-label="Move up" disabled={busy || index <= 0} onClick={() => move(cat, -1)} className={`${SMALL_BUTTON} bg-gray-100 dark:bg-[#242424]`}>
+            <button
+              type="button"
+              aria-label="Move up"
+              disabled={isAnyBusy || index <= 0}
+              onClick={() => move(cat, -1)}
+              className={`${SMALL_BUTTON} bg-gray-100 dark:bg-[#242424]`}
+            >
               ↑
             </button>
-            <button type="button" aria-label="Move down" disabled={busy || index >= siblings.length - 1} onClick={() => move(cat, 1)} className={`${SMALL_BUTTON} bg-gray-100 dark:bg-[#242424]`}>
+            <button
+              type="button"
+              aria-label="Move down"
+              disabled={isAnyBusy || index >= siblings.length - 1}
+              onClick={() => move(cat, 1)}
+              className={`${SMALL_BUTTON} bg-gray-100 dark:bg-[#242424]`}
+            >
               ↓
             </button>
             <button
               type="button"
+              disabled={isAnyBusy}
               onClick={() => {
                 setEditing(cat.id);
                 setEditName(cat.name);
@@ -138,28 +161,59 @@ export default function CategoriesPage() {
             >
               Edit
             </button>
-            <button type="button" disabled={busy} onClick={() => void run(() => updateCategory(cat.id, { is_active: !cat.is_active }))} className={`${SMALL_BUTTON} bg-gray-100 dark:bg-[#242424]`}>
+            <button
+              type="button"
+              disabled={isAnyBusy}
+              onClick={() => void run(() => updateCategory(cat.id, { is_active: !cat.is_active }))}
+              className={`${SMALL_BUTTON} bg-gray-100 dark:bg-[#242424]`}
+            >
               {cat.is_active ? "Hide" : "Show"}
             </button>
             {confirmDelete === cat.id ? (
               <>
                 <button
                   type="button"
-                  disabled={busy}
+                  aria-label="Yes, delete"
+                  disabled={isAnyBusy}
                   onClick={async () => {
-                    setConfirmDelete(null);
-                    await run(() => deleteCategory(cat.id));
+                    setDeletingId(cat.id);
+                    try {
+                      await run(() => deleteCategory(cat.id));
+                    } finally {
+                      setDeletingId(null);
+                      setConfirmDelete(null);
+                    }
                   }}
-                  className={`${SMALL_BUTTON} bg-red-600 text-white`}
+                  className={`${SMALL_BUTTON} bg-red-600 text-white inline-flex items-center gap-1.5`}
                 >
-                  Yes, delete
+                  {isThisDeleting ? (
+                    <>
+                      <svg className="animate-spin h-3 w-3 text-white shrink-0" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    "Yes, delete"
+                  )}
                 </button>
-                <button type="button" onClick={() => setConfirmDelete(null)} className={`${SMALL_BUTTON} bg-gray-100 dark:bg-[#242424]`}>
+                <button
+                  type="button"
+                  disabled={isAnyBusy}
+                  onClick={() => setConfirmDelete(null)}
+                  className={`${SMALL_BUTTON} bg-gray-100 dark:bg-[#242424]`}
+                >
                   Keep
                 </button>
               </>
             ) : (
-              <button type="button" onClick={() => setConfirmDelete(cat.id)} className={`${SMALL_BUTTON} text-red-600 bg-red-50 dark:bg-red-950/30`}>
+              <button
+                type="button"
+                disabled={isAnyBusy}
+                onClick={() => setConfirmDelete(cat.id)}
+                className={`${SMALL_BUTTON} text-red-600 bg-red-50 dark:bg-red-950/30 disabled:opacity-40`}
+              >
                 Delete
               </button>
             )}
@@ -213,7 +267,25 @@ export default function CategoriesPage() {
           </button>
         </form>
 
-        <section className="rounded-[16px] border border-gray-200 dark:border-[#262626] bg-white dark:bg-[#181818] p-4 space-y-2">
+        <section className="rounded-[16px] border border-gray-200 dark:border-[#262626] bg-white dark:bg-[#181818] p-4 space-y-2 relative overflow-hidden">
+          {deletingId && (
+            <div className="flex items-center gap-2 py-1.5 px-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold animate-pulse">
+              <svg className="animate-spin h-3.5 w-3.5 text-red-500 shrink-0" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span>Deleting category... Please wait.</span>
+            </div>
+          )}
+          {busy && !deletingId && (
+            <div className="flex items-center gap-2 py-1.5 px-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-semibold animate-pulse">
+              <svg className="animate-spin h-3.5 w-3.5 text-amber-500 shrink-0" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span>Updating categories...</span>
+            </div>
+          )}
           {actionError && (
             <p role="alert" className="text-sm text-red-600 dark:text-red-400">
               {actionError}

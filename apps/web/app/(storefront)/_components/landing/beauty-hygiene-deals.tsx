@@ -6,7 +6,6 @@ import { ProductCard } from "../ui/product-card";
 import { useCatalogue } from "../catalogue-context";
 
 export function BeautyHygieneDeals({ categorySlug }: { categorySlug?: string } = {}) {
-  const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const { products: catalogue } = useCatalogue();
@@ -51,10 +50,6 @@ export function BeautyHygieneDeals({ categorySlug }: { categorySlug?: string } =
     }
   }, [sourceProducts]);
 
-  const toggleWishlist = (id: string) => {
-    setWishlisted((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
   const handleScrollLeft = () => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollBy({ left: -290, behavior: "smooth" });
@@ -66,6 +61,10 @@ export function BeautyHygieneDeals({ categorySlug }: { categorySlug?: string } =
       scrollContainerRef.current.scrollBy({ left: 290, behavior: "smooth" });
     }
   };
+
+  if (sourceProducts.length === 0) {
+    return null;
+  }
 
   return (
     <section className="w-full px-3 md:px-4 pt-4 sm:pt-6 md:pt-8 pb-3 sm:pb-4 md:pb-5">
@@ -103,7 +102,7 @@ export function BeautyHygieneDeals({ categorySlug }: { categorySlug?: string } =
           <button
             aria-label="Previous beauty products"
             onClick={handleScrollLeft}
-            className={`absolute left-3 sm:left-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md ${
+            className={`absolute left-3 sm:left-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md shrink-0 ${
               canScrollLeft ? "opacity-100 flex" : "opacity-0 pointer-events-none hidden"
             }`}
           >
@@ -119,7 +118,6 @@ export function BeautyHygieneDeals({ categorySlug }: { categorySlug?: string } =
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
             {sourceProducts.map((product) => {
-              const isWishlisted = wishlisted[product.id];
               return (
                 <ProductCard
                   key={product.id}
@@ -132,8 +130,6 @@ export function BeautyHygieneDeals({ categorySlug }: { categorySlug?: string } =
                   reviews={product.reviews}
                   image={product.image}
                   hasTransparentBg={product.hasTransparentBg}
-                  isWishlisted={isWishlisted}
-                  onToggleWishlist={toggleWishlist}
                   className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0"
                 />
               );
@@ -151,7 +147,7 @@ export function BeautyHygieneDeals({ categorySlug }: { categorySlug?: string } =
           <button
             aria-label="Next beauty products"
             onClick={handleScrollRight}
-            className={`absolute right-3 sm:right-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md ${
+            className={`absolute right-3 sm:right-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md shrink-0 ${
               canScrollRight ? "opacity-100 flex" : "opacity-0 pointer-events-none hidden"
             }`}
           >

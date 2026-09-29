@@ -83,6 +83,7 @@ describe("POST /api/v1/pos/whatsapp-orders/:id/confirm (D001)", () => {
             status: "pending_payment",
             total: 1500000,
             order_number: "GTS-202609-000002",
+            tracking_number: "123456",
             items: [{ variant_id: "v1", quantity: 1, unit_price: 1500000 }],
           },
           error: null,
@@ -100,38 +101,50 @@ describe("POST /api/v1/pos/whatsapp-orders/:id/confirm (D001)", () => {
       ok: false,
       response: NextResponse.json({ error: "denied", code: "POS_ACCESS_DENIED" }, { status: 403 }),
     });
-    const res = await POST(makeRequest({ payment_method: "cash" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
+    const res = await POST(makeRequest({ payment_method: "cash", code: "123456" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(res.status).toBe(403);
   });
 
   it("returns 400 for an invalid payment method", async () => {
-    const res = await POST(makeRequest({ payment_method: "paystack" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
+    const res = await POST(makeRequest({ payment_method: "paystack", code: "123456" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     const body = await res.json();
     expect(res.status).toBe(400);
     expect(body.code).toBe("INVALID_PAYMENT_METHOD");
   });
 
+  it("returns 400 when the collection PIN is invalid or missing", async () => {
+    const resNoCode = await POST(makeRequest({ payment_method: "cash" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
+    expect(resNoCode.status).toBe(400);
+    const bodyNoCode = await resNoCode.json();
+    expect(bodyNoCode.code).toBe("INVALID_PICKUP_CODE");
+
+    const resWrongCode = await POST(makeRequest({ payment_method: "cash", code: "999999" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
+    expect(resWrongCode.status).toBe(400);
+    const bodyWrong = await resWrongCode.json();
+    expect(bodyWrong.code).toBe("INVALID_PICKUP_CODE");
+  });
+
   it("returns 409 when the order is no longer pending", async () => {
     tableConfig.orders = () => ({
-      data: { id: "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744", status: "completed", total: 1500000, order_number: "x", items: [] },
+      data: { id: "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744", status: "collected", total: 1500000, order_number: "x", tracking_number: "123456", items: [] },
       error: null,
     });
-    const res = await POST(makeRequest({ payment_method: "cash" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
+    const res = await POST(makeRequest({ payment_method: "cash", code: "123456" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(res.status).toBe(409);
   });
 
   it("completes the order, releases the reservation, decrements stock, and records the transaction", async () => {
-    const res = await POST(makeRequest({ payment_method: "pos_terminal" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
+    const res = await POST(makeRequest({ payment_method: "pos_terminal", code: "123456" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.data.status).toBe("completed");
+    expect(body.data.status).toBe("collected");
 
     expect(mockTransition).toHaveBeenCalledWith(
       expect.anything(),
       "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744",
       "pending_payment",
-      expect.objectContaining({ status: "completed" })
+      expect.objectContaining({ status: "collected", payment_status: "paid" })
     );
 
     const txInsertCall = allCalls.transactions!.find((c) => c.method === "insert");
@@ -155,7 +168,7 @@ describe("POST /api/v1/pos/whatsapp-orders/:id/confirm (D001)", () => {
 
   it("returns 409 and touches no stock when the order was cancelled a moment earlier", async () => {
     mockTransition.mockResolvedValue(false);
-    const res = await POST(makeRequest({ payment_method: "cash" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
+    const res = await POST(makeRequest({ payment_method: "cash", code: "123456" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(res.status).toBe(409);
     expect(mockAdjustAll).not.toHaveBeenCalled();
     expect(allCalls.transactions).toBeUndefined();
@@ -163,19 +176,19 @@ describe("POST /api/v1/pos/whatsapp-orders/:id/confirm (D001)", () => {
 
   it("reopens the order and records no payment if stock cannot be updated", async () => {
     mockAdjustAll.mockResolvedValue({ ok: false, reason: "CONTENTION", failedVariantId: "v1" });
-    const res = await POST(makeRequest({ payment_method: "cash" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
+    const res = await POST(makeRequest({ payment_method: "cash", code: "123456" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(res.status).toBe(503);
     expect(mockTransition).toHaveBeenLastCalledWith(
       expect.anything(),
       "6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744",
-      "completed",
+      "collected",
       expect.objectContaining({ status: "pending_payment" })
     );
     expect(allCalls.transactions).toBeUndefined();
   });
 
   it("records the payment in the audit log against the cashier who took it", async () => {
-    await POST(makeRequest({ payment_method: "pos_terminal" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
+    await POST(makeRequest({ payment_method: "pos_terminal", code: "123456" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     const row = allCalls.activity_logs!.find((c) => c.method === "insert")!.args[0] as any;
     expect(row).toMatchObject({
       actor_id: "cashier-2",
@@ -188,8 +201,9 @@ describe("POST /api/v1/pos/whatsapp-orders/:id/confirm (D001)", () => {
 
   it("logs nothing if the confirmation didn't happen", async () => {
     mockTransition.mockResolvedValue(false);
-    await POST(makeRequest({ payment_method: "cash" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
+    await POST(makeRequest({ payment_method: "cash", code: "123456" }), ctx("6e7f85a9-d0fe-4b5d-8b50-4c6f2991d744"));
     expect(allCalls.activity_logs).toBeUndefined();
   });
 });
+
 

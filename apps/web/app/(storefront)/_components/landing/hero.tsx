@@ -25,6 +25,119 @@ const POSITION: Record<SlideRole, {
   "far-right": { x: "140%",  scale: 0.35, opacity: 0,    zIndex: 0  },
 };
 
+export interface HeroPalette {
+  radialGradient: string;
+  glowColor: string;
+  edgeColor: string;
+}
+
+export function hexToRgb(hex: string): [number, number, number] | null {
+  const clean = hex.replace("#", "").trim();
+  if (clean.length === 3) {
+    const r = parseInt(clean[0]! + clean[0]!, 16);
+    const g = parseInt(clean[1]! + clean[1]!, 16);
+    const b = parseInt(clean[2]! + clean[2]!, 16);
+    return isNaN(r) || isNaN(g) || isNaN(b) ? null : [r, g, b];
+  }
+  if (clean.length === 6) {
+    const r = parseInt(clean.slice(0, 2), 16);
+    const g = parseInt(clean.slice(2, 4), 16);
+    const b = parseInt(clean.slice(4, 6), 16);
+    return isNaN(r) || isNaN(g) || isNaN(b) ? null : [r, g, b];
+  }
+  return null;
+}
+
+export function generateHeroPalette(colorHexOrRgb?: string | [number, number, number]): HeroPalette {
+  let r = 26, g = 60, b = 150;
+  if (Array.isArray(colorHexOrRgb)) {
+    [r, g, b] = colorHexOrRgb;
+  } else if (typeof colorHexOrRgb === "string" && colorHexOrRgb.trim()) {
+    const parsed = hexToRgb(colorHexOrRgb);
+    if (parsed) [r, g, b] = parsed;
+  }
+
+  const maxChannel = Math.max(r, g, b);
+  let cr = r, cg = g, cb = b;
+  if (maxChannel < 60) {
+    const boost = 60 / Math.max(1, maxChannel);
+    cr = Math.min(255, Math.round(r * boost + 15));
+    cg = Math.min(255, Math.round(g * boost + 20));
+    cb = Math.min(255, Math.round(b * boost + 35));
+  } else if (maxChannel > 225 && Math.min(r, g, b) > 185) {
+    cr = 160;
+    cg = 150;
+    cb = 140;
+  }
+
+  const pad = (n: number) => n.toString(16).padStart(2, "0");
+  const centerHex = `#${pad(cr)}${pad(cg)}${pad(cb)}`;
+  const m1Hex = `#${pad(Math.round(cr * 0.65))}${pad(Math.round(cg * 0.65))}${pad(Math.round(cb * 0.65))}`;
+  const m2Hex = `#${pad(Math.round(cr * 0.38))}${pad(Math.round(cg * 0.38))}${pad(Math.round(cb * 0.38))}`;
+  const m3Hex = `#${pad(Math.round(cr * 0.18))}${pad(Math.round(cg * 0.18))}${pad(Math.round(cb * 0.18))}`;
+  const e1Hex = `#${pad(Math.round(cr * 0.07))}${pad(Math.round(cg * 0.07))}${pad(Math.round(cb * 0.07))}`;
+  const edgeHex = `#${pad(Math.max(1, Math.round(cr * 0.02)))}${pad(Math.max(3, Math.round(cg * 0.02)))}${pad(Math.max(8, Math.round(cb * 0.02)))}`;
+
+  return {
+    radialGradient: `radial-gradient(ellipse 90% 80% at 50% 52%, ${centerHex} 0%, ${m1Hex} 20%, ${m2Hex} 42%, ${m3Hex} 62%, ${e1Hex} 80%, ${edgeHex} 100%)`,
+    glowColor: `rgba(${cr}, ${cg}, ${cb}, 0.65)`,
+    edgeColor: edgeHex,
+  };
+}
+
+const imagePaletteCache = new Map<string, HeroPalette>();
+
+export function extractPaletteFromImageUrl(src: string, callback: (pal: HeroPalette) => void) {
+  if (typeof window === "undefined" || !src) return;
+  if (imagePaletteCache.has(src)) {
+    callback(imagePaletteCache.get(src)!);
+    return;
+  }
+  const img = new window.Image();
+  img.crossOrigin = "anonymous";
+  img.src = src;
+  img.onload = () => {
+    try {
+      const canvas = document.createElement("canvas");
+      const size = 48;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, size, size);
+      const data = ctx.getImageData(0, 0, size, size).data;
+      let rSum = 0, gSum = 0, bSum = 0, totalWeight = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const a = data[i + 3] ?? 255;
+        if (a < 128) continue; // skip transparent pixels
+        const r = data[i] ?? 0;
+        const g = data[i + 1] ?? 0;
+        const b = data[i + 2] ?? 0;
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const delta = max - min;
+        const isNeutral = max < 25 || (min > 230 && delta < 15);
+        const weight = isNeutral ? 0.05 : delta + 15;
+        rSum += r * weight;
+        gSum += g * weight;
+        bSum += b * weight;
+        totalWeight += weight;
+      }
+      if (totalWeight > 0) {
+        const pal = generateHeroPalette([
+          Math.round(rSum / totalWeight),
+          Math.round(gSum / totalWeight),
+          Math.round(bSum / totalWeight),
+        ]);
+        imagePaletteCache.set(src, pal);
+        callback(pal);
+      }
+    } catch {
+      // CORS or canvas read error: retain default palette
+    }
+  };
+}
+
 interface ColorVariant {
   id: string;
   colorName: string;
@@ -159,41 +272,25 @@ export function Hero() {
         const heroJson = res.ok ? await res.json() : null;
         let items: Array<{ product: any }> = Array.isArray(heroJson?.data) ? heroJson.data : [];
         if (items.length === 0) {
-          // No slides chosen: feature the shop's own products (whatever this visitor's data set holds).
-          const pr = await fetch("/api/v1/products?limit=5");
+          // No slides chosen: feature the shop's own products with transparent backgrounds
+          const pr = await fetch("/api/v1/products?limit=10&has_transparent_bg=true");
           const prJson = pr.ok ? await pr.json() : null;
           items = (Array.isArray(prJson?.data) ? prJson.data : []).map((p: any) => ({
             product: { ...p, images: (p.images ?? []).map((i: any) => ({ cloudinary_public_id: i.cloudinary_public_id ?? i.cloudinary_id })) },
           }));
         }
-        const json = { data: items };
-        if (mounted && json.data.length > 0) {
-          const PALETTES = [
-            {
-              radialGradient: "radial-gradient(ellipse 90% 80% at 50% 52%, #2A52C4 0%, #1A3678 20%, #0E2050 42%, #070F2C 62%, #030818 80%, #010510 100%)",
-              glowColor: "rgba(30, 58, 138, 0.65)",
-              edgeColor: "#010510",
-            },
-            {
-              radialGradient: "radial-gradient(ellipse 90% 80% at 50% 52%, #B45309 0%, #78350F 20%, #452006 42%, #221003 62%, #0E0802 80%, #060402 100%)",
-              glowColor: "rgba(120, 53, 15, 0.65)",
-              edgeColor: "#060402",
-            },
-            {
-              radialGradient: "radial-gradient(ellipse 90% 80% at 50% 52%, #166534 0%, #0F4024 20%, #082816 42%, #041408 62%, #020A04 80%, #010502 100%)",
-              glowColor: "rgba(20, 83, 45, 0.65)",
-              edgeColor: "#010502",
-            },
-            {
-              radialGradient: "radial-gradient(ellipse 90% 80% at 50% 52%, #4C1D95 0%, #3B0764 20%, #2E0854 42%, #1A0530 62%, #0E021A 80%, #07010D 100%)",
-              glowColor: "rgba(126, 34, 206, 0.65)",
-              edgeColor: "#07010D",
-            },
-          ];
 
-          const mapped: HeroProduct[] = json.data.map((item: any, idx: number) => {
+        // Strictly enforce transparent background products only (opaque items never appear in hero)
+        const transparentOnly = items.filter((item: any) => {
+          const p = item.product;
+          return p && p.has_transparent_bg !== false;
+        });
+
+        if (mounted && transparentOnly.length > 0) {
+          const mapped: HeroProduct[] = transparentOnly.slice(0, 10).map((item: any, idx: number) => {
             const p = item.product;
-            const pal = PALETTES[idx % PALETTES.length]!;
+            const primaryColor = p.dominant_color || p.variants?.[0]?.color_hex || (idx % 2 === 0 ? "#1E40AF" : "#10B981");
+            const pal = generateHeroPalette(primaryColor);
             const imgRaw = p?.images?.[0]?.cloudinary_public_id || "/products/hero/air_jordan_retro_1_blue.png";
             const imageUrl =
               imgRaw.startsWith("/") || imgRaw.startsWith("http")
@@ -203,7 +300,8 @@ export function Hero() {
             const variants: ColorVariant[] =
               p?.variants && p.variants.length > 0
                 ? p.variants.map((v: any, vi: number) => {
-                    const vPal = PALETTES[(idx + vi) % PALETTES.length]!;
+                    const vColor = v.color_hex || p.dominant_color || primaryColor;
+                    const vPal = generateHeroPalette(vColor);
                     return {
                       id: v.id || `${p.id}-${vi}`,
                       colorName: v.color || "Default",
@@ -212,7 +310,7 @@ export function Hero() {
                       radialGradient: vPal.radialGradient,
                       glowColor: vPal.glowColor,
                       edgeColor: vPal.edgeColor,
-                      hasTransparentBg: p.has_transparent_bg,
+                      hasTransparentBg: v.has_transparent_bg ?? p.has_transparent_bg,
                     };
                   })
                 : [
@@ -270,6 +368,37 @@ export function Hero() {
       mounted = false;
     };
   }, []);
+
+  // Dynamically inspect product images to refine harmonic color gradients
+  useEffect(() => {
+    if (productsList.length === 0) return;
+    productsList.forEach((prod) => {
+      const eligible = getHeroEligibleVariants(prod);
+      eligible.forEach((v) => {
+        extractPaletteFromImageUrl(v.image, (freshPal) => {
+          setProductsList((current) =>
+            current.map((p) =>
+              p.id === prod.id
+                ? {
+                    ...p,
+                    variants: p.variants.map((varItem) =>
+                      varItem.id === v.id
+                        ? {
+                            ...varItem,
+                            radialGradient: freshPal.radialGradient,
+                            glowColor: freshPal.glowColor,
+                            edgeColor: freshPal.edgeColor,
+                          }
+                        : varItem
+                    ),
+                  }
+                : p
+            )
+          );
+        });
+      });
+    });
+  }, [productsList.length]);
 
   const N = productsList.length || 1;
 
@@ -433,7 +562,7 @@ export function Hero() {
         <button
           aria-label="Previous product"
           onClick={handlePrev}
-          className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 z-40 w-9 h-9 rounded-full bg-white/20 hover:bg-white/40 text-white backdrop-blur-md flex items-center justify-center transition-all active:scale-95"
+          className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 z-40 w-9 h-9 rounded-full bg-white/20 hover:bg-white/40 text-white backdrop-blur-md flex items-center justify-center transition-all active:scale-95 shrink-0"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -444,7 +573,7 @@ export function Hero() {
         <button
           aria-label="Next product"
           onClick={handleNext}
-          className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 z-40 w-9 h-9 rounded-full bg-white text-[#010101] hover:bg-[#F2F0EA] flex items-center justify-center transition-all active:scale-95 shadow-md"
+          className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 z-40 w-9 h-9 rounded-full bg-white text-[#010101] hover:bg-[#F2F0EA] flex items-center justify-center transition-all active:scale-95 shadow-md shrink-0"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -464,9 +593,6 @@ export function Hero() {
               <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-[38px] font-extrabold text-white leading-[1.1] tracking-tight font-sans drop-shadow-lg whitespace-pre-line">
                 {activeProduct.headline}
               </h1>
-              <p className="mt-1.5 sm:mt-2 text-xs sm:text-[13px] text-white/80 font-light leading-snug line-clamp-2">
-                {activeProduct.tagline}
-              </p>
             </motion.div>
           </AnimatePresence>
         </div>
@@ -556,7 +682,7 @@ export function Hero() {
                 setCenterStep((s) => s + delta);
               }}
               aria-label={`Go to slide ${pi + 1}`}
-              className={`h-1.5 rounded-full transition-all duration-500 ${
+              className={`h-1.5 rounded-full transition-all duration-500 shrink-0 p-0 border-0 ${
                 pi === currentIndex ? "w-5 bg-white" : "w-1.5 bg-white/40 hover:bg-white/70"
               }`}
             />

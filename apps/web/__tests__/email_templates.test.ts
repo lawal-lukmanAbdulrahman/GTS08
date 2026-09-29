@@ -260,4 +260,11 @@ describe("pickupOrderEmail", () => {
     const m = pickupOrderEmail({ ...o, address: null });
     expect(m.text).toContain("0814 830 8129");
   });
+
+  it("renders the 6-digit pickup collection PIN when provided", () => {
+    const m = pickupOrderEmail({ ...o, pickupPin: "481920" });
+    expect(m.html).toContain("Pickup Collection PIN");
+    expect(m.html).toContain("481 920");
+    expect(m.text).toContain("Pickup Collection PIN: 481 920");
+  });
 });

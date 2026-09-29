@@ -5,7 +5,7 @@ import { makeDbStub } from "./_helpers/db-stub";
 const mockSend = vi.fn();
 vi.mock("../app/api/v1/_lib/email/send", () => ({ sendEmail: (...a: unknown[]) => mockSend(...a) }));
 
-import { notifyPickupOrder, notifyCustomerWelcome, notifyPasswordReset, notifyAccessChanged, notifyFlagUpdated, notifyOrderPaid, notifyPasswordChanged, notifyPosReceipt, notifyStaffWelcome } from "../app/api/v1/_lib/email/events";
+import { notifyPickupOrder, notifyOrderStatus, notifyCustomerWelcome, notifyPasswordReset, notifyAccessChanged, notifyFlagUpdated, notifyOrderPaid, notifyPasswordChanged, notifyPosReceipt, notifyStaffWelcome } from "../app/api/v1/_lib/email/events";
 
 const db = makeDbStub();
 const sent = () => mockSend.mock.calls.map((c) => c[0]) as Array<{ to: string; subject: string; html: string; text: string }>;
@@ -196,5 +196,68 @@ describe("notifyPickupOrder", () => {
     db.results.orders = { data: { order_number: "GTS-1", total: 5000, pickup_deadline: null, customer: null, items: [] }, error: null };
     await notifyPickupOrder(db.client, "order-9");
     expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("handles array customer format seamlessly", async () => {
+    db.results.orders = { data: { order_number: "GTS-2", total: 8000, pickup_deadline: "2026-09-30T14:00:00Z", customer: [{ email: "array@example.com", full_name: "Array Customer" }], items: [] }, error: null };
+    await notifyPickupOrder(db.client, "order-10");
+    const m = mockSend.mock.calls[0]![0] as { to: string; text: string };
+    expect(m.to).toBe("array@example.com");
+  });
+});
+
+describe("notifyOrderStatus", () => {
+  it("emails customer with PIN, location, hours, and deadline when ready_for_pickup", async () => {
+    db.results.orders = {
+      data: {
+        id: "order-ready-1",
+        order_number: "GTS-100",
+        total: 15000,
+        payment_status: "unpaid",
+        paid_at: null,
+        tracking_number: "481920",
+        pickup_pin: "481920",
+        pickup_deadline: "2026-10-02T18:00:00Z",
+        customer: { email: "shopper@example.com", full_name: "Shopper" },
+        pickup_station: { name: "Ikeja Hub", address_line1: "15 Isaac John St", city: "Ikeja", state: "Lagos", operating_hours: "Mon - Sat: 9:00 AM - 7:00 PM" },
+      },
+      error: null,
+    };
+    db.results.settings = { data: { store_name: "GTS", store_address: "12 Marina", support_phone: null }, error: null };
+
+    await notifyOrderStatus(db.client, "order-ready-1", "ready_for_pickup");
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    const m = mockSend.mock.calls[0]![0] as { to: string; text: string; subject: string; html: string };
+    expect(m.to).toBe("shopper@example.com");
+    expect(m.subject).toContain("GTS-100 is ready for pickup");
+    expect(m.text).toContain("481 920");
+    expect(m.text).toContain("Ikeja Hub");
+    expect(m.text).toContain("Mon - Sat: 9:00 AM - 7:00 PM");
+    expect(m.html).toContain("Pickup Collection PIN");
+    expect(m.html).toContain("481 920");
+  });
+
+  it("handles array customer and derives collection PIN when missing", async () => {
+    db.results.orders = {
+      data: {
+        id: "order-ready-2",
+        order_number: "GTS-101",
+        total: 5000,
+        payment_status: "paid",
+        paid_at: "2026-10-01T10:00:00Z",
+        tracking_number: null,
+        pickup_pin: null,
+        pickup_deadline: "2026-10-03T18:00:00Z",
+        customer: [{ email: "guest@example.com", full_name: "Guest User" }],
+      },
+      error: null,
+    };
+    db.results.settings = { data: { store_name: "GTS", store_address: "12 Marina", support_phone: null }, error: null };
+
+    await notifyOrderStatus(db.client, "order-ready-2", "ready_for_pickup");
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    const m = mockSend.mock.calls[0]![0] as { to: string; text: string };
+    expect(m.to).toBe("guest@example.com");
+    expect(m.text).toMatch(/\d{3} \d{3}/); // Has 6-digit formatted PIN
   });
 });

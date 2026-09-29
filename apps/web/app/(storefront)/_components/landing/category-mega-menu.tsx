@@ -18,7 +18,7 @@ export interface CategoryItem {
   brands?: { name: string; href: string }[];
 }
 
-function RenderCategoryIcon({ name, active }: { name: string; active: boolean }) {
+export function RenderCategoryIcon({ name, active = false }: { name: string; active?: boolean }) {
   const strokeColor = active ? "#D97706" : "currentColor";
   const fillColor = active ? "#FBBF24" : "none";
 

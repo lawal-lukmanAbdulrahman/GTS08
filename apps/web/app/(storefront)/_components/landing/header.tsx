@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { CategoryMegaMenu } from "./category-mega-menu";
+import { CategoryMegaMenu, RenderCategoryIcon } from "./category-mega-menu";
 import { UserAccountMenu } from "./user-account-menu";
 import { SearchDropdownCard } from "./search-overlay";
 import { saveRecentSearch } from "./search-history";
@@ -16,160 +16,30 @@ import {
   getCustomerNotifications,
 } from "../../../../lib/notifications";
 import { ShopAllLink } from "../shop-all-link";
+import { iconFor, useStoreCategories } from "../../_lib/categories";
 
-// ── Mobile Drawer Categories List (Matches Storefront Catalog) ──
-const DRAWER_CATEGORIES = [
-  {
-    name: "Phone & Tablets",
-    query: "Phones & Tablets",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <rect x="6" y="2" width="12" height="20" rx="3" />
-        <path d="M10 18h4" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    name: "Appliances",
-    query: "Appliances",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5 4h14v3H5zM8 7v4a4 4 0 008 0V7M5 19h14M7 19v2m10-2v2" />
-      </svg>
-    ),
-  },
-  {
-    name: "Electronics",
-    query: "Electronics",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <rect x="3" y="7" width="18" height="13" rx="2" />
-        <path strokeLinecap="round" d="M16 3l-4 4-4-4" />
-        <circle cx="8.5" cy="13.5" r="1.5" fill="currentColor" />
-        <path strokeLinecap="round" d="M13 11h4M13 14h4M13 17h2" />
-      </svg>
-    ),
-  },
-  {
-    name: "Supermarket",
-    query: "Supermarket",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a7 7 0 007-7c0-4-3-6-7-6s-7 2-7 6a7 7 0 007 7z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8V4c2 0 4 1 4 1" />
-      </svg>
-    ),
-  },
-  {
-    name: "Health & Beauty",
-    query: "Health & Beauty",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6 10h4v11H6zM7 10V6l2-2 1 1v5M14 13h4v8h-4zM16 13V9l1-1 1 1v4" />
-      </svg>
-    ),
-  },
-  {
-    name: "Home & Office",
-    query: "Home & Office",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5 4h14v3H5zM8 7v4a4 4 0 008 0V7M5 19h14M7 19v2m10-2v2" />
-        <circle cx="12" cy="14" r="1.5" />
-      </svg>
-    ),
-  },
-  {
-    name: "Power",
-    query: "Power",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5L12 3l9 7.5v9.75a1.5 1.5 0 01-1.5 1.5h-15a1.5 1.5 0 01-1.5-1.5V10.5z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M13 8.5l-3 4.5h3l-1.5 4.5" />
-      </svg>
-    ),
-  },
-  {
-    name: "Computing",
-    query: "Computing",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <rect x="3" y="4" width="18" height="12" rx="2" />
-        <path strokeLinecap="round" d="M9 20h6M12 16v4" />
-      </svg>
-    ),
-  },
-  {
-    name: "Women's Fashion",
-    query: "Fashion",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 3l-2 5 2 2-3 11h12l-3-11 2-2-2-5H9z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 3a3 3 0 006 0" />
-      </svg>
-    ),
-  },
-  {
-    name: "Men's Fashion",
-    query: "Fashion",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5 4l4 2 3-2 3 2 4-2v17H5V4z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M11 7l1 1 1-1-1 7-1-7z" />
-      </svg>
-    ),
-  },
-  {
-    name: "Baby Products",
-    query: "Baby Products",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <circle cx="12" cy="12" r="9" />
-        <circle cx="9" cy="10" r="1" fill="currentColor" />
-        <circle cx="15" cy="10" r="1" fill="currentColor" />
-        <path strokeLinecap="round" d="M9.5 15a3.5 3.5 0 005 0" />
-        <path strokeLinecap="round" d="M12 3a2 2 0 012 2" />
-      </svg>
-    ),
-  },
-  {
-    name: "Gaming",
-    query: "Gaming",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6 11h12a4 4 0 014 4v1a4 4 0 01-6.5 3.1L13 17h-2l-2.5 2.1A4 4 0 012 16v-1a4 4 0 014-4z" />
-        <path strokeLinecap="round" d="M6 15h4M8 13v4M16 14h.01M18 16h.01" />
-      </svg>
-    ),
-  },
-  {
-    name: "Sporting Goods",
-    query: "Sporting Goods",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6 8v8M4 9.5v5M8 9.5v5M18 8v8M16 9.5v5M20 9.5v5M8 12h8" />
-      </svg>
-    ),
-  },
-  {
-    name: "Automobile",
-    query: "Automobile",
-    icon: (
-      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.7}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5 11l2-5h10l2 5M4 11h16v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6z" />
-        <circle cx="7.5" cy="15.5" r="1.5" />
-        <circle cx="16.5" cy="15.5" r="1.5" />
-      </svg>
-    ),
-  },
-];
+
 
 export function Header() {
+  const storeCategories = useStoreCategories();
+  const drawerCategories = useMemo(() => {
+    if (!storeCategories) return [];
+    return storeCategories
+      .filter((c) => !c.parent_id)
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+  }, [storeCategories]);
+
   const { totalItemCount } = useCart();
   const { wishlistCount } = useWishlist();
   const { openAuthModal } = useAuthModal();
   const { user, customer, signOut } = useAuth();
   const [inboxBadge, setInboxBadge] = useState<number>(0);
+
+  const isDemo =
+    typeof window !== "undefined" &&
+    (localStorage.getItem("gts_demo_mode") === "true" ||
+      document.cookie.includes("gts_demo_mode=true") ||
+      Boolean((user as any)?.is_demo));
 
   useEffect(() => {
     if (!user) {
@@ -406,24 +276,24 @@ export function Header() {
 
         {/* Right: About, FAQs, Cart Icon Button */}
         <div className="flex-1 flex justify-end items-center gap-4 sm:gap-6">
-          <ShopAllLink />
+          <ShopAllLink className="hidden md:inline" />
           <Link
             href="/about"
-            className="hidden sm:inline text-xs sm:text-sm font-medium text-[#010101] hover:text-[#EDCF5D] transition-colors"
+            className="hidden md:inline text-xs sm:text-sm font-medium text-[#010101] hover:text-[#EDCF5D] transition-colors"
           >
             About
           </Link>
           <Link
             href="/#faq"
-            className="hidden sm:inline text-xs sm:text-sm font-medium text-[#010101] underline underline-offset-4 decoration-gray-300 hover:decoration-[#010101] transition-colors"
+            className="hidden md:inline text-xs sm:text-sm font-medium text-[#010101] underline underline-offset-4 decoration-gray-300 hover:decoration-[#010101] transition-colors"
           >
             FAQs
           </Link>
-          {/* Wishlist Icon Button */}
+          {/* Wishlist Icon Button — hidden on mobile */}
           <Link
             href="/wishlist"
             aria-label="Wishlist"
-            className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-gray-200 flex items-center justify-center text-[#010101] hover:bg-gray-50 transition-all shrink-0 shadow-2xs"
+            className="hidden md:flex relative w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-gray-200 items-center justify-center text-[#010101] hover:bg-gray-50 transition-all shrink-0 shadow-2xs"
           >
             <svg
               className="w-4 h-4"
@@ -505,7 +375,7 @@ export function Header() {
                   router.push(`/search?q=${encodeURIComponent(trimmed)}`);
                 }
               }}
-              className={`flex items-center justify-between rounded-full pl-4 sm:pl-5 pr-[6px] sm:pr-[5px] h-11 sm:h-[38px] transition-all relative ${
+              className={`flex items-center justify-between rounded-full pl-4 sm:pl-5 pr-1.5 sm:pr-[5px] h-10 sm:h-[38px] transition-all relative overflow-hidden ${
                 isSearchOpen
                   ? "bg-white border border-[#010101] shadow-md ring-1 ring-[#010101]/10 z-50"
                   : "bg-[#F2F0EA] hover:bg-[#EAE7DF]"
@@ -519,14 +389,14 @@ export function Header() {
                 value={searchQuery}
                 onFocus={() => setIsSearchOpen(true)}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent text-sm sm:text-sm text-[#010101] placeholder-[#A4A4A4] outline-none w-full font-medium cursor-text"
+                className="bg-transparent text-xs sm:text-sm text-[#010101] placeholder-[#A4A4A4] outline-none w-full font-medium cursor-text pr-2"
               />
               <button
                 type="submit"
                 aria-label="Search"
-                className="w-8 h-8 sm:w-7 sm:h-7 rounded-full bg-[#010101] text-white shadow-2xs flex items-center justify-center shrink-0 hover:bg-black transition-colors cursor-pointer"
+                className="w-7 h-7 sm:w-7 sm:h-7 rounded-full bg-[#010101] text-white shadow-2xs flex items-center justify-center shrink-0 hover:bg-black transition-colors cursor-pointer self-center"
               >
-                <svg className="w-4 h-4 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </button>
@@ -611,26 +481,6 @@ export function Header() {
           <div className="fixed inset-y-0 left-0 z-50 w-80 max-w-[85vw] bg-white shadow-2xl flex flex-col animate-in slide-in-from-left duration-300 text-[#010101] font-sans">
             {/* ── Drawer Body: Account + Navigation ── */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 pt-6">
-              {/* Guest Welcome Banner */}
-              {!user && (
-                <div className="flex items-center justify-between p-3.5 bg-[#F9F8F5] rounded-2xl border border-gray-200/80">
-                  <div>
-                    <p className="font-bold text-sm text-[#010101]">Welcome to GTS</p>
-                    <p className="text-xs text-gray-500">Sign in for orders & chat</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMobileDrawerOpen(false);
-                      openAuthModal("login");
-                    }}
-                    className="px-3.5 py-1.5 rounded-full bg-[#010101] text-white text-xs font-bold hover:bg-[#EDCF5D] hover:text-[#010101] transition-all cursor-pointer shadow-2xs"
-                  >
-                    Sign in
-                  </button>
-                </div>
-              )}
-
               {/* Account Menu Items */}
               <div className="space-y-1">
                 {/* My Account */}
@@ -753,24 +603,34 @@ export function Header() {
                 </div>
 
                 <div className="space-y-0.5">
-                  {DRAWER_CATEGORIES.map((cat) => (
-                    <button
-                      key={cat.name}
-                      type="button"
-                      onClick={() => {
-                        setIsMobileDrawerOpen(false);
-                        router.push(`/search?category=${encodeURIComponent(cat.query)}`);
-                      }}
-                      className="w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-gray-800 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors text-left cursor-pointer group"
-                    >
-                      <span className="w-5 h-5 flex items-center justify-center text-gray-500 group-hover:text-[#010101] transition-colors shrink-0">
-                        {cat.icon}
-                      </span>
-                      <span className="text-[13.5px] font-medium text-gray-800 group-hover:text-[#010101] flex-1 truncate">
-                        {cat.name}
-                      </span>
-                    </button>
-                  ))}
+                  {storeCategories === null ? (
+                    <div className="space-y-2 py-1 px-3.5">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="h-8 rounded-lg bg-gray-100 animate-pulse" />
+                      ))}
+                    </div>
+                  ) : drawerCategories.length === 0 ? (
+                    <p className="text-xs text-gray-400 py-2 px-3.5">No categories found</p>
+                  ) : (
+                    drawerCategories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          setIsMobileDrawerOpen(false);
+                          router.push(`/search?category=${encodeURIComponent(cat.name)}`);
+                        }}
+                        className="w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-gray-800 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors text-left cursor-pointer group"
+                      >
+                        <span className="w-5 h-5 flex items-center justify-center text-gray-500 group-hover:text-[#010101] transition-colors shrink-0">
+                          <RenderCategoryIcon name={iconFor(cat.name)} active={false} />
+                        </span>
+                        <span className="text-[13.5px] font-medium text-gray-800 group-hover:text-[#010101] flex-1 truncate">
+                          {cat.name}
+                        </span>
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -806,20 +666,20 @@ export function Header() {
 
             {/* ── Anchored Drawer Footer: Contextual Sign In / Sign Out ── */}
             <div className="p-4 border-t border-gray-100 bg-white shrink-0">
-              {user ? (
+              {user || isDemo ? (
                 <button
                   type="button"
                   onClick={async () => {
                     setIsMobileDrawerOpen(false);
                     await signOut();
-                    router.push("/");
+                    window.location.reload();
                   }}
                   className="w-full flex items-center justify-center gap-2 border border-gray-300 hover:border-red-400 hover:bg-red-50 text-gray-700 hover:text-red-600 font-bold text-sm py-3 px-4 rounded-xl transition-all cursor-pointer shadow-2xs"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
                   </svg>
-                  <span>Sign out</span>
+                  <span>{isDemo ? "Exit Demo" : "Sign out"}</span>
                 </button>
               ) : (
                 <button

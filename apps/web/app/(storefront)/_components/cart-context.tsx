@@ -82,6 +82,25 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [cartItems, hydrated]);
 
+  // Deleted product watcher: if an item in the customer's cart is deleted or archived from the catalogue,
+  // automatically prune it so it is never displayed as orderable or submitted to checkout.
+  useEffect(() => {
+    if (!hydrated || catalogue.length === 0) return;
+    setCartItems((prev) => {
+      const activeSlugs = new Set(catalogue.map((p) => p.id.toLowerCase()));
+      const valid = prev.filter((item) => activeSlugs.has(item.product.id.toLowerCase()));
+      if (valid.length !== prev.length) {
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(valid));
+        } catch {
+          // silent
+        }
+        return valid;
+      }
+      return prev;
+    });
+  }, [catalogue, hydrated]);
+
   // The server keeps a copy so the cart follows a shopper who signs in. The browser copy is what they see; a failed sync changes nothing.
   useEffect(() => {
     if (!hydrated || merging.current) return;

@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const signIn = vi.fn();
 vi.mock("@gts/database", () => ({
   createServerClient: async () => ({ auth: { signInWithPassword: (...a: unknown[]) => signIn(...a) } }),
+  createIsolatedAuthClient: () => ({ auth: { signInWithPassword: (...a: unknown[]) => signIn(...a) } }),
   createServiceClient: () => ({ from: () => ({}) }),
 }));
 vi.mock("@/lib/idempotency", () => ({ withIdempotency: (h: unknown) => h }));

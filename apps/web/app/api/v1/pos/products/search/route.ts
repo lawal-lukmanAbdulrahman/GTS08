@@ -21,6 +21,7 @@ interface RawProduct {
   name: string;
   slug: string;
   base_price: number;
+  has_transparent_bg?: boolean | null;
   category: { id: string; name: string; slug: string } | null;
   images: Array<{ cloudinary_public_id: string; alt_text: string | null; is_primary: boolean }> | null;
   variants: RawVariant[] | null;
@@ -37,6 +38,7 @@ function mapProduct(product: RawProduct) {
     name: product.name,
     slug: product.slug,
     base_price: product.base_price,
+    has_transparent_bg: Boolean(product.has_transparent_bg),
     category: product.category,
     primary_image: primaryImage
       ? { cloudinary_id: primaryImage.cloudinary_public_id, alt: primaryImage.alt_text || product.name }
@@ -98,7 +100,7 @@ export async function GET(request: NextRequest) {
 
   // Build the base select query with all relations needed for POS
   const selectFields = `
-    id, name, slug, base_price,
+    id, name, slug, base_price, has_transparent_bg,
     category:categories(id, name, slug),
     images:product_images(cloudinary_public_id, alt_text, is_primary),
     variants:product_variants(id, size, color, color_hex, sku, price_modifier, is_active,

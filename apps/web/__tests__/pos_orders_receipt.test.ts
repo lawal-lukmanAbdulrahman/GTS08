@@ -157,6 +157,14 @@ describe("GET /api/v1/pos/orders/[id]/receipt (reprint)", () => {
     expect((await res.json()).code).toBe("NOT_PRINTABLE");
   });
 
+  it("reprints a receipt for a collected order (e.g. WhatsApp pickup)", async () => {
+    setup({ order: { ...ORDER, status: "collected", channel: "whatsapp" } });
+    const res = await GET(req(), ctx("f1584b99-5a47-4098-8ad7-5bb8d29e9734"));
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.orderNumber).toBe(ORDER.order_number);
+  });
+
   it("audits every reprint", async () => {
     setup();
     await GET(req(), ctx("f1584b99-5a47-4098-8ad7-5bb8d29e9734"));

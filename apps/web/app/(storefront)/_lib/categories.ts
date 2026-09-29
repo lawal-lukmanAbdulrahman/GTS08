@@ -35,7 +35,7 @@ const ICON_WORDS: Array<[RegExp, string]> = [
   [/gam|console/i, "gaming"],
 ];
 
-function iconFor(name: string): string {
+export function iconFor(name: string): string {
   return ICON_WORDS.find(([re]) => re.test(name))?.[1] ?? "store";
 }
 

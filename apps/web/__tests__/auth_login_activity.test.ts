@@ -13,6 +13,7 @@ let byEmail: { data: unknown; error: unknown } = { data: null, error: null };
 let profile: { data: unknown; error: unknown } = { data: null, error: null };
 vi.mock("@gts/database", () => ({
   createServerClient: async () => ({ auth: { signInWithPassword: (...a: unknown[]) => mockSignIn(...a), signOut: (...a: unknown[]) => mockSignOut(...a) } }),
+  createIsolatedAuthClient: () => ({ auth: { signInWithPassword: (...a: unknown[]) => mockSignIn(...a), signOut: (...a: unknown[]) => mockSignOut(...a) } }),
   createServiceClient: () => ({
     from: (table: string) => {
       const stub: any = {

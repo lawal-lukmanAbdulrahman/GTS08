@@ -7,6 +7,8 @@ import { clientIp, logActivity } from "../../_lib/activity";
 import { nextStatuses } from "../../_lib/order-machine";
 import { validateCourierFields } from "../../_lib/order-admin";
 import { readJson, serverError } from "../../_lib/http";
+import { afterResponse } from "../../_lib/email/after";
+import { notifyPickupOrder } from "../../_lib/email/events";
 
 type Context = { params: Promise<{ id: string }> };
 const notFound = () => NextResponse.json({ error: "Order not found.", code: "NOT_FOUND" }, { status: 404 });
@@ -23,8 +25,8 @@ export async function GET(request: NextRequest, { params }: Context) {
     const { data, error } = await serviceClient
       .from("orders")
       .select(
-        `id, order_number, channel, status, payment_status, payment_method, paid_confirmed_by,
-         cancel_reason, cancelled_by, hold_reason, ready_for_pickup_at, pickup_deadline,
+        `id, order_number, channel, status, payment_status, payment_method, paid_confirmed_by, cashier_id,
+         cancel_reason, cancelled_by, hold_reason, ready_for_pickup_at, pickup_deadline, tracking_number,
          subtotal, delivery_fee, discount_amount, total, promo_code,
          internal_notes, paid_at, delivered_at, created_at, updated_at,
          customer:customers(id, full_name, email, phone),
@@ -38,7 +40,21 @@ export async function GET(request: NextRequest, { params }: Context) {
 
     if (error) return serverError(new Error(error.message));
     if (!data) return notFound();
-    const order = data as { status: string; channel: string };
+    const order = data as { status: string; channel: string; cashier_id?: string | null; paid_confirmed_by?: string | null };
+
+    // Resolve staff name who processed or confirmed the order
+    const staffId = order.paid_confirmed_by || order.cashier_id;
+    let cashierName: string | null = null;
+    if (staffId) {
+      const { data: staffUser } = await serviceClient
+        .from("users")
+        .select("full_name, email")
+        .eq("id", staffId)
+        .maybeSingle();
+      if (staffUser) {
+        cashierName = (staffUser as any).full_name || (staffUser as any).email || null;
+      }
+    }
 
     // Fetch append-only audit trail
     const { data: logs } = await serviceClient
@@ -51,6 +67,7 @@ export async function GET(request: NextRequest, { params }: Context) {
     return NextResponse.json({
       data: {
         ...order,
+        cashier_name: cashierName,
         order_status: order.status,
         allowed_next: order.channel === "walk_in" ? [] : nextStatuses(order.status),
         audit_log: logs || [],
@@ -79,11 +96,15 @@ export async function PATCH(request: NextRequest, { params }: Context) {
       .from("orders")
       .update({ ...check.value, updated_at: new Date().toISOString() })
       .eq("id", id)
-      .select("id, order_number, status, payment_status, carrier_name, tracking_number, carrier_tracking_url, internal_notes, updated_at")
+      .select("id, order_number, status, payment_status, carrier_name, tracking_number, carrier_tracking_url, internal_notes, pickup_deadline, updated_at")
       .maybeSingle();
 
     if (error) return serverError(new Error(error.message));
     if (!data) return notFound();
+
+    if (check.value.pickup_deadline !== undefined) {
+      afterResponse(() => notifyPickupOrder(client, id, `pickup-deadline-update/${id}-${Date.now()}`));
+    }
 
     await logActivity(client, {
       actorId: access.user.id,

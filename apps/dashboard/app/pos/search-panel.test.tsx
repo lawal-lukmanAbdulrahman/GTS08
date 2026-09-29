@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import SearchPanel from "./search-panel";
@@ -45,6 +45,9 @@ const DEFAULTS = {
 };
 
 describe("SearchPanel (spec Part 3)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
   it("shows a stock badge per product and dims an out-of-stock card", () => {
     render(
       <SearchPanel
@@ -171,9 +174,9 @@ describe("SearchPanel (spec Part 3)", () => {
         />
       );
 
-    it("shows products with no search text, headed 'Best sellers'", () => {
+    it("shows products with no search text, headed 'Products'", () => {
       render0();
-      expect(screen.getByText("Best sellers")).toBeInTheDocument();
+      expect(screen.getByText("Products")).toBeInTheDocument();
       expect(screen.getByText("Plain Tee")).toBeInTheDocument();
       expect(screen.queryByText(/start typing/i)).not.toBeInTheDocument();
     });
@@ -181,7 +184,7 @@ describe("SearchPanel (spec Part 3)", () => {
     it("heads the list 'Results' once the cashier searches", () => {
       render0({ query: "tee" });
       expect(screen.getByText(/results for .tee./i)).toBeInTheDocument();
-      expect(screen.queryByText("Best sellers")).not.toBeInTheDocument();
+      expect(screen.queryByText("Products")).not.toBeInTheDocument();
     });
 
     it("says so when the catalogue is empty, and when a search finds nothing", () => {
@@ -212,13 +215,6 @@ describe("SearchPanel (spec Part 3)", () => {
     it("disables 'Load more' while it loads", () => {
       render0({ hasMore: true, loadingMore: true });
       expect(screen.getByRole("button", { name: /loading/i })).toBeDisabled();
-    });
-
-    it("renders the category tabs and picks one", () => {
-      const onCategoryChange = vi.fn();
-      render0({ categories: [{ id: "c1", name: "Appliances", slug: "appliances" }], onCategoryChange });
-      fireEvent.click(screen.getByRole("button", { name: "Appliances" }));
-      expect(onCategoryChange).toHaveBeenCalledWith("appliances");
     });
   });
 
@@ -314,23 +310,25 @@ describe("SearchPanel (spec Part 3)", () => {
       expect(screen.queryByText(/\d+ left/i)).not.toBeInTheDocument();
     });
 
-    it("switches between comfortable and compact, and remembers the choice", () => {
-      localStorage.clear();
-      const { unmount } = render(<SearchPanel query="" onQueryChange={vi.fn()} category="all" onCategoryChange={vi.fn()} categories={[]} products={[SINGLE_VARIANT_PRODUCT]} loading={false} onQuickAdd={vi.fn()} onOpenVariantModal={vi.fn()} {...DEFAULTS} />);
-      expect(screen.getByRole("button", { name: /compact view/i })).toHaveAttribute("aria-pressed", "false");
-      fireEvent.click(screen.getByRole("button", { name: /compact view/i }));
-      expect(screen.getByRole("button", { name: /compact view/i })).toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByTestId("product-grid").className).toMatch(/grid-cols-3|grid-cols-4|grid-cols-5/);
-      unmount();
+    it("uses compact grid layout by default", () => {
       render(<SearchPanel query="" onQueryChange={vi.fn()} category="all" onCategoryChange={vi.fn()} categories={[]} products={[SINGLE_VARIANT_PRODUCT]} loading={false} onQuickAdd={vi.fn()} onOpenVariantModal={vi.fn()} {...DEFAULTS} />);
-      expect(screen.getByRole("button", { name: /compact view/i })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByTestId("product-grid").className).toMatch(/grid-cols-3|grid-cols-4|grid-cols-5/);
     });
 
-    it("the flag button has a visible label and a touch-sized target", () => {
+    it("the flag button has an accessible label and a compact square target", () => {
       only(SINGLE_VARIANT_PRODUCT);
       const flag = screen.getByRole("button", { name: /flag plain tee/i });
       expect(flag).toHaveTextContent(/flag/i);
-      expect(flag.className).toMatch(/min-h-\[44px\]/);
+      expect(flag.className).toMatch(/w-8 h-8/);
+    });
+
+    it("allows switching between grid and list layouts", () => {
+      only(SINGLE_VARIANT_PRODUCT);
+      const select = screen.getByRole("combobox", { name: /view layout/i });
+      expect(select).toHaveValue("grid");
+      fireEvent.change(select, { target: { value: "list" } });
+      expect(select).toHaveValue("list");
+      expect(screen.getByTestId("product-card")).toBeInTheDocument();
     });
   });
 
@@ -366,10 +364,10 @@ describe("SearchPanel (spec Part 3)", () => {
       expect(screen.queryByText(/updating/i)).not.toBeInTheDocument();
     });
 
-    it("marks the chosen category chip as pressed for assistive tech", () => {
-      grid({ category: "tees", categories: [{ id: "c1", name: "Tees", slug: "tees" }] });
-      expect(screen.getByRole("button", { name: "Tees" })).toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "false");
+    it("renders product cards with square image aspect ratio", () => {
+      grid();
+      const card = screen.getByTestId("product-card");
+      expect(card.querySelector(".aspect-square")).toBeInTheDocument();
     });
   });
 });

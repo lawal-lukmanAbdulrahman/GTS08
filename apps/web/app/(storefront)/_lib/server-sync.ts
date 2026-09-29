@@ -90,23 +90,27 @@ export async function fetchWishlistSlugs(token: string): Promise<string[] | null
     const res = await fetch("/api/v1/wishlist", { headers: auth(token) });
     const body = await res.json().catch(() => null);
     if (!res.ok || !Array.isArray(body?.data)) return null;
-    return (body.data as Array<{ slug?: string }>).map((p) => p.slug).filter((s): s is string => typeof s === "string");
+    return (body.data as Array<{ slug?: string; product_id?: string }>)
+      .map((p) => p.slug || p.product_id)
+      .filter((s): s is string => typeof s === "string" && s.length > 0);
   } catch {
     return null;
   }
 }
 
-export async function saveWishlistSlug(token: string, slug: string): Promise<boolean> {
+export async function saveWishlistSlug(token: string, slugOrId: string): Promise<boolean> {
   try {
-    return (await fetch("/api/v1/wishlist", { method: "POST", headers: auth(token), body: JSON.stringify({ product_slug: slug }) })).ok;
+    const isId = UUID.test(slugOrId);
+    const body = isId ? { product_id: slugOrId } : { product_slug: slugOrId };
+    return (await fetch("/api/v1/wishlist", { method: "POST", headers: auth(token), body: JSON.stringify(body) })).ok;
   } catch {
     return false;
   }
 }
 
-export async function removeWishlistSlug(token: string, slug: string): Promise<boolean> {
+export async function removeWishlistSlug(token: string, slugOrId: string): Promise<boolean> {
   try {
-    return (await fetch(`/api/v1/wishlist/${encodeURIComponent(slug)}`, { method: "DELETE", headers: auth(token) })).ok;
+    return (await fetch(`/api/v1/wishlist/${encodeURIComponent(slugOrId)}`, { method: "DELETE", headers: auth(token) })).ok;
   } catch {
     return false;
   }

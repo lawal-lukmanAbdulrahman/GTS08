@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { formatWAT, getOrderPickupPin, formatPickupPin } from "@gts/utils";
+import { formatWAT } from "@gts/utils";
 import { API_BASE } from "../../lib/api-base";
 import { authFetch } from "../../lib/session";
 import { describeStatus, FORWARD_NEXT, BACKWARD_STEP, requiresReason } from "./order-status-options";
@@ -77,6 +77,11 @@ const ORDER_PIPELINE_STEPS = [
   { key: "collected", label: "Collected", desc: "Picked up" },
 ];
 
+const WHATSAPP_PIPELINE_STEPS = [
+  { key: "placed", label: "Placed", desc: "Recorded via WhatsApp" },
+  { key: "collected", label: "Collected", desc: "In-store handover completed" },
+];
+
 export default function OrderInfoDrawer({
   orderId,
   isOpen,
@@ -131,11 +136,15 @@ export default function OrderInfoDrawer({
 
   if (!isOpen || !orderId) return null;
 
+  const isWhatsApp = order?.channel === "whatsapp";
   const formatNaira = (kobo: number) => "₦" + (kobo / 100).toLocaleString("en-NG");
 
   const getStepIndex = (status?: string) => {
     if (!status) return 0;
     if (status === "cancelled" || status === "expired" || status === "on_hold") return -1;
+    if (isWhatsApp) {
+      return status === "collected" ? 1 : 0;
+    }
     const map: Record<string, number> = {
       placed: 0,
       pending: 0,
@@ -148,6 +157,7 @@ export default function OrderInfoDrawer({
   };
 
   const currentStep = getStepIndex(order?.status);
+  const pipelineSteps = isWhatsApp ? WHATSAPP_PIPELINE_STEPS : ORDER_PIPELINE_STEPS;
 
   const handleExecuteAction = async () => {
     if (!order || !actionType) return;
@@ -311,6 +321,54 @@ export default function OrderInfoDrawer({
     }
   };
 
+  const handleCompletePickupInline = async () => {
+    if (!order) return;
+    const isWalkIn = order.channel === "pos" || order.channel === "walk_in";
+    const cleanPin = pickupPinInput.trim().replace(/\s+/g, "");
+    if (!isWalkIn && !cleanPin) {
+      setActionError("Customer 6-digit collection PIN is required to complete handover.");
+      return;
+    }
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const isUnpaid = order.payment_status !== "paid";
+      const token = typeof window !== "undefined" ? localStorage.getItem("gts_token") : null;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const res = await fetch(`${API_BASE}/orders/${order.id}/complete-pickup`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          pickup_pin: !isWalkIn ? cleanPin : undefined,
+          mark_paid: isUnpaid,
+          payment_method: isUnpaid ? selectedPayMethod : undefined,
+          note: actionReason.trim() || undefined,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok) {
+        setDrawerNotice(
+          isWhatsApp
+            ? "WhatsApp handover completed successfully! Order collected."
+            : "Pickup handover completed successfully! Order collected."
+        );
+        setPickupPinInput("");
+        setActionType(null);
+        await fetchOrderDetail(order.id);
+        await onStatusUpdated();
+      } else {
+        setActionError(json?.error || "Failed to complete pickup handover.");
+      }
+    } catch {
+      setActionError("Network error while updating order.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-hidden font-sans">
       {/* Backdrop */}
@@ -387,15 +445,15 @@ export default function OrderInfoDrawer({
                 <div className="p-4 rounded-2xl bg-gray-50 dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#282828] space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 font-mono">
-                      Fulfillment Pipeline
+                      {isWhatsApp ? "WhatsApp Fulfillment Pipeline" : "Fulfillment Pipeline"}
                     </span>
                     <span className="text-xs font-mono text-gray-500">
                       Placed {formatWAT(order.created_at)}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                    {ORDER_PIPELINE_STEPS.map((step, idx) => {
+                  <div className={`grid ${isWhatsApp ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-4"} gap-2 pt-1`}>
+                    {pipelineSteps.map((step, idx) => {
                       const isPast = currentStep !== -1 && idx < currentStep;
                       const isCurrent = currentStep !== -1 && idx === currentStep;
 
@@ -426,19 +484,149 @@ export default function OrderInfoDrawer({
                     <span className="text-xs font-mono font-bold uppercase text-gray-400">
                       Current Action Required
                     </span>
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold uppercase ${
-                        order.payment_status === "paid"
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400"
-                          : "bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-400"
-                      }`}
-                    >
-                      {order.payment_status === "paid" ? "Paid" : "Payment Due at Pickup"}
-                    </span>
+                    {order.pickup_deadline ? (
+                      <span className="font-mono text-[11px] font-bold text-amber-700 dark:text-amber-400">
+                        Collect by: {formatWAT(order.pickup_deadline)}
+                      </span>
+                    ) : (
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold uppercase ${
+                          order.payment_status === "paid"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400"
+                            : "bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-400"
+                        }`}
+                      >
+                        {order.payment_status === "paid" ? "Paid" : "Pending"}
+                      </span>
+                    )}
                   </div>
 
+                  {/* ── WhatsApp Direct Handover Card (Placement -> Counter Collection) ── */}
+                  {isWhatsApp && order.status !== "collected" && (
+                    <div className="space-y-3">
+                      <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-300">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span>WhatsApp Order &middot; In-Store Collection</span>
+                          </div>
+                          <span className="font-mono text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
+                            {order.order_number}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-emerald-700 dark:text-emerald-300/90 leading-relaxed">
+                          This order was recorded via WhatsApp. An email with collection instructions and their 6-digit verification code has been dispatched to the customer.
+                        </p>
+                        {order.pickup_deadline && (
+                          <div className="pt-1 flex items-center gap-1 text-[11px] font-mono font-semibold text-emerald-800 dark:text-emerald-200">
+                            <span>Hold deadline:</span>
+                            <span className="font-bold underline decoration-emerald-500/50">{formatWAT(order.pickup_deadline)}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Payment Status & Counter Collection */}
+                      {order.payment_status === "paid" ? (
+                        <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                          <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                          <span className="font-semibold">
+                            Customer paid in full ({formatNaira(order.total)}).
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="p-4 rounded-xl bg-white dark:bg-[#141414] border border-gray-200 dark:border-[#2C2C2C] space-y-2.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-gray-800 dark:text-gray-200">
+                              Payment Due at Counter:
+                            </span>
+                            <span className="font-mono font-black text-sm text-[#010101] dark:text-white">
+                              {formatNaira(order.total)}
+                            </span>
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1.5 uppercase tracking-wider font-mono">
+                              Collect Payment Via:
+                            </label>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {(["cash", "pos", "transfer"] as const).map((m) => (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => setSelectedPayMethod(m)}
+                                  className={`py-1.5 px-2 rounded-lg border text-center font-bold font-mono text-xs uppercase cursor-pointer transition-all ${
+                                    selectedPayMethod === m
+                                      ? "border-black dark:border-white bg-[#010101] text-white dark:bg-white dark:text-black shadow-xs"
+                                      : "border-gray-200 dark:border-[#2C2C2C] text-gray-600 dark:text-gray-400 hover:border-gray-400"
+                                  }`}
+                                >
+                                  {m === "pos" ? "POS Terminal" : m === "transfer" ? "Transfer" : "Cash"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Customer 6-Digit Email Verification PIN */}
+                      <div className="p-4 rounded-xl bg-white dark:bg-[#141414] border border-gray-200 dark:border-[#2C2C2C] space-y-1.5 text-xs">
+                        <div className="flex items-center justify-between">
+                          <label className="block font-bold text-gray-900 dark:text-white font-mono uppercase tracking-wider text-[11px]">
+                            Customer 6-Digit Verification PIN *
+                          </label>
+                          <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold uppercase">
+                            From Customer Email
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                          Enter the 6-digit verification code received in the customer&apos;s email ({order.customer?.email || "customer email"}).
+                        </p>
+                        <input
+                          type="text"
+                          maxLength={7}
+                          placeholder="e.g. 481 920"
+                          value={pickupPinInput}
+                          onChange={(e) => {
+                            setPickupPinInput(e.target.value);
+                            setActionError(null);
+                          }}
+                          autoComplete="off"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-[#333] bg-white dark:bg-[#1E1E1E] text-base font-mono font-black tracking-widest text-center text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                        />
+                      </div>
+
+                      {actionError && (
+                        <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs">
+                          {actionError}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleCompletePickupInline}
+                        disabled={actionLoading}
+                        className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {actionLoading ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                        )}
+                        <span>
+                          {order.payment_status === "paid"
+                            ? "Verify Code & Complete Handover"
+                            : `Collect ${formatNaira(order.total)} & Complete Handover`}
+                        </span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ── Standard Storefront Fulfillment Steps ── */}
                   {/* If placed / pending */}
-                  {(order.status === "placed" || order.status === "pending_payment" || order.status === "pending") && (
+                  {!isWhatsApp && (order.status === "placed" || order.status === "pending_payment" || order.status === "pending") && (
                     <div className="space-y-3">
                       <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-900 dark:text-amber-200">
                         <p className="font-bold">Order Received</p>
@@ -464,7 +652,7 @@ export default function OrderInfoDrawer({
                   )}
 
                   {/* If confirmed */}
-                  {order.status === "confirmed" && (
+                  {!isWhatsApp && order.status === "confirmed" && (
                     <div className="space-y-3">
                       <div className="p-3 rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/60 text-xs text-sky-900 dark:text-sky-200">
                         <p className="font-bold">Packaging in Progress</p>
@@ -490,57 +678,107 @@ export default function OrderInfoDrawer({
                   )}
 
                   {/* If ready_for_pickup */}
-                  {order.status === "ready_for_pickup" && (
-                    <div className="space-y-3">
-                      <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold">Awaiting Customer Collection</span>
-                          {order.pickup_deadline && (
-                            <span className="font-mono text-[11px] font-bold text-amber-700 dark:text-amber-400">
-                              Collect by: {formatWAT(order.pickup_deadline)}
-                            </span>
-                          )}
+                  {!isWhatsApp && order.status === "ready_for_pickup" && (
+                    <>
+                      {/* Payment Status & Counter Collection */}
+                      {order.payment_status === "paid" ? (
+                        <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                          <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                          <span className="font-semibold">
+                            Customer paid in full online ({formatNaira(order.total)}).
+                          </span>
                         </div>
-                        <p className="text-[11px] text-amber-800 dark:text-amber-300">
-                          {order.payment_status === "paid"
-                            ? "Customer has already paid. Hand over garments upon verifying order reference code."
-                            : `Customer must pay ${formatNaira(order.total)} at the till before handing over items.`}
-                        </p>
-                      </div>
+                      ) : (
+                        <div className="p-4 rounded-xl bg-white dark:bg-[#141414] border border-gray-200 dark:border-[#2C2C2C] space-y-2.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-gray-800 dark:text-gray-200">
+                              Payment Due at Counter:
+                            </span>
+                            <span className="font-mono font-black text-sm text-[#010101] dark:text-white">
+                              {formatNaira(order.total)}
+                            </span>
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1.5 uppercase tracking-wider font-mono">
+                              Collect Payment Via:
+                            </label>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {(["cash", "pos", "transfer"] as const).map((m) => (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => setSelectedPayMethod(m)}
+                                  className={`py-1.5 px-2 rounded-lg border text-center font-bold font-mono text-xs uppercase cursor-pointer transition-all ${
+                                    selectedPayMethod === m
+                                      ? "border-black dark:border-white bg-[#010101] text-white dark:bg-white dark:text-black shadow-xs"
+                                      : "border-gray-200 dark:border-[#2C2C2C] text-gray-600 dark:text-gray-400 hover:border-gray-400"
+                                  }`}
+                                >
+                                  {m === "pos" ? "POS Terminal" : m === "transfer" ? "Transfer" : "Cash"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
-                      <div className="space-y-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActionType("complete_pickup");
-                            setActionReason("");
-                          }}
-                          className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
-                        >
+                      {/* Anti-Theft Verification Input (Confidential Staff Entry) */}
+                      {order.channel !== "pos" && order.channel !== "walk_in" && (
+                        <div className="p-4 rounded-xl bg-white dark:bg-[#141414] border border-gray-200 dark:border-[#2C2C2C] space-y-1.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <label className="block font-bold text-gray-900 dark:text-white font-mono uppercase tracking-wider text-[11px]">
+                              Customer 6-Digit Collection PIN *
+                            </label>
+                            <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold uppercase">
+                              Anti-Theft Check
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                            Ask customer for the 6-digit PIN on their collection pass or email.
+                          </p>
+                          <input
+                            type="text"
+                            maxLength={7}
+                            placeholder="e.g. 481 920"
+                            value={pickupPinInput}
+                            onChange={(e) => {
+                              setPickupPinInput(e.target.value);
+                              setActionError(null);
+                            }}
+                            autoComplete="off"
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-[#333] bg-white dark:bg-[#1E1E1E] text-base font-mono font-black tracking-widest text-center text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                          />
+                        </div>
+                      )}
+
+                      {actionError && (
+                        <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs">
+                          {actionError}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleCompletePickupInline}
+                        disabled={actionLoading}
+                        className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {actionLoading ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                           </svg>
-                          <span>
-                            {order.payment_status === "paid"
-                              ? "Complete Pickup Handover"
-                              : `Atomic Pay (₦${(order.total / 100).toLocaleString()}) & Hand Over Items`}
-                          </span>
-                        </button>
-
-                        {order.payment_status !== "paid" && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActionType("pay");
-                              setActionReason("");
-                            }}
-                            className="w-full py-2 px-3 rounded-xl border border-gray-300 dark:border-[#333333] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#252525] font-bold text-xs cursor-pointer"
-                          >
-                            Mark Paid Separately (Cash / POS / Transfer)
-                          </button>
                         )}
-                      </div>
-                    </div>
+                        <span>
+                          {order.channel === "pos" || order.channel === "walk_in"
+                            ? "Confirm Handover & Complete Order"
+                            : "Verify PIN & Complete Handover"}
+                        </span>
+                      </button>
+                    </>
                   )}
 
                   {/* If collected */}
@@ -557,7 +795,7 @@ export default function OrderInfoDrawer({
 
                   {/* Secondary controls row */}
                   <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-[#282828] flex-wrap">
-                    {BACKWARD_STEP[order.status] && (
+                    {!isWhatsApp && BACKWARD_STEP[order.status] && (
                       <button
                         type="button"
                         onClick={() => {
@@ -592,7 +830,7 @@ export default function OrderInfoDrawer({
                         }}
                         className="px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-400 hover:bg-rose-50 text-xs font-semibold cursor-pointer"
                       >
-                        Cancel order
+                        {isWhatsApp ? "Cancel WhatsApp order" : "Cancel order"}
                       </button>
                     )}
 
@@ -613,25 +851,6 @@ export default function OrderInfoDrawer({
 
                 {/* ── 3. Customer & Pickup Station Information Grid ── */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  {/* Anti-Theft Verification PIN (for Staff Handover Reference) */}
-                  {order.status === "ready_for_pickup" && (
-                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between sm:col-span-2">
-                      <div className="space-y-0.5">
-                        <span className="font-mono text-[10px] font-bold uppercase text-amber-800 dark:text-amber-400 tracking-wider">
-                          Anti-Theft Collection PIN
-                        </span>
-                        <p className="text-xs text-amber-900 dark:text-amber-300">
-                          Customer must provide this 6-digit PIN upon arrival to collect order.
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-mono text-base font-black tracking-widest text-[#010101] dark:text-white bg-white dark:bg-[#141414] px-3.5 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700/60 shadow-2xs inline-block">
-                          {formatPickupPin(order.tracking_number || getOrderPickupPin(order))}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Customer Card */}
                   <div className="p-4 rounded-2xl bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#282828] space-y-1.5 shadow-2xs">
                     <span className="font-mono text-[10px] font-bold uppercase text-gray-400">

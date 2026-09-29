@@ -117,10 +117,28 @@ export const POST = withIdempotency(async function POST(
       .from("orders")
       .update(patch)
       .eq("id", id)
+      .neq("status", "collected")
       .select("id, order_number, status, payment_status, payment_method, paid_at, delivered_at, updated_at")
       .maybeSingle();
 
     if (updateErr) return serverError(new Error(updateErr.message));
+    if (!updated) {
+      return NextResponse.json(
+        { error: "Order has already been collected.", code: "ALREADY_COLLECTED" },
+        { status: 400 }
+      );
+    }
+
+    // Record transaction so cash in register and bank figures reflect the counter payment
+    if (!isCurrentlyPaid && paymentMethodToRecord) {
+      await client.from("transactions").insert({
+        order_id: id,
+        payment_method: paymentMethodToRecord,
+        payment_status: "success",
+        amount: order.total,
+        confirmed_by: pickupAccess.user.id,
+      });
+    }
 
     // Audit log
     await logActivity(client, {

@@ -19,6 +19,7 @@ vi.mock("@gts/database", async () => {
   return {
     runWithDataMode: scope.runWithDataMode,
     createServerClient: async () => ({ auth: { verifyOtp: (...a: unknown[]) => verifyOtp(...a) } }),
+    createIsolatedAuthClient: () => ({ auth: { verifyOtp: (...a: unknown[]) => verifyOtp(...a) } }),
     createServiceClient: () => ({
       auth: { admin: { generateLink: (...a: unknown[]) => generateLink(...a) } },
       from: (table: string) => {

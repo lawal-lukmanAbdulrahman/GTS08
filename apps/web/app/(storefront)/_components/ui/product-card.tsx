@@ -191,7 +191,7 @@ export function ProductCard({
             <button
               aria-label="Add to wishlist"
               onClick={handleWishlistClick}
-              className="absolute bottom-2.5 right-2.5 z-20 bg-[#010101] text-white p-2 rounded-full shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
+              className="absolute bottom-2.5 right-2.5 z-20 bg-[#010101] text-white w-8 h-8 rounded-full shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center cursor-pointer shrink-0"
             >
               <svg
                 className="w-4 h-4 transition-colors"

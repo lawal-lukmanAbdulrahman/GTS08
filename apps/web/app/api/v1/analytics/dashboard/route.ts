@@ -25,17 +25,17 @@ export async function GET(request: NextRequest) {
     const [orders, previousOrders, paidCustomers, transactions, products, stock, views, recent] = await Promise.all([
       client
         .from("orders")
-        .select("id, total, channel, status, created_at, customer_id, cashier_id, discount_amount, promo_code, items:order_items(quantity, line_total, product_snapshot)")
+        .select("id, total, channel, status, payment_status, created_at, customer_id, cashier_id, discount_amount, promo_code, items:order_items(quantity, line_total, product_snapshot)")
         .gte("created_at", iso(period.from))
         .lt("created_at", iso(period.to))
         .limit(LIMIT),
-      client.from("orders").select("total, channel, status, created_at").gte("created_at", iso(period.prevFrom)).lt("created_at", iso(period.prevTo)).limit(LIMIT),
-      client.from("orders").select("customer_id").in("status", PAID_STATUSES).not("customer_id", "is", null).limit(50_000),
+      client.from("orders").select("total, channel, status, payment_status, created_at").gte("created_at", iso(period.prevFrom)).lt("created_at", iso(period.prevTo)).limit(LIMIT),
+      client.from("orders").select("customer_id").or(`status.in.(${PAID_STATUSES.join(",")}),payment_status.eq.paid`).not("customer_id", "is", null).limit(50_000),
       client.from("transactions").select("payment_method, payment_status, amount, created_at").gte("created_at", iso(period.prevFrom)).lt("created_at", iso(period.to)).limit(LIMIT),
       client.from("products").select("id, name, base_price, cost_price, status, category:categories(name)").limit(5_000),
       client.from("inventory").select("quantity, reserved_quantity, variant:product_variants(product_id)").limit(LIMIT),
       client.from("product_views").select("session_id, event_type, created_at").gte("created_at", iso(period.prevFrom)).lt("created_at", iso(period.to)).limit(100_000),
-      client.from("orders").select("id, order_number, channel, status, total, created_at, customer:customers(full_name, email)").order("created_at", { ascending: false }).limit(5),
+      client.from("orders").select("id, order_number, channel, status, payment_status, total, created_at, customer:customers(full_name, email)").order("created_at", { ascending: false }).limit(5),
     ]);
 
     const current = rows<DashboardInput["orders"][number]>(orders);
