@@ -2494,134 +2494,205 @@ function AccountContent() {
                             )}
                           </div>
                         ) : (
-                          <div className="space-y-3">
-                            {currentOrdersList.flatMap((order) => {
-                        const dateShort = (() => {
-                          try {
-                            const d = new Date(order.created_at);
-                            const day = String(d.getDate()).padStart(2, "0");
-                            const month = String(d.getMonth() + 1).padStart(2, "0");
-                            return `${day}-${month}`;
-                          } catch {
-                            return "";
-                          }
-                        })();
+                          <div className="space-y-4">
+                            {currentOrdersList.map((order) => {
+                              const dateShort = (() => {
+                                try {
+                                  const d = new Date(order.created_at);
+                                  const day = String(d.getDate()).padStart(2, "0");
+                                  const month = String(d.getMonth() + 1).padStart(2, "0");
+                                  return `${day}-${month}`;
+                                } catch {
+                                  return "";
+                                }
+                              })();
 
-                        const itemsList = order.items && order.items.length > 0 ? order.items : [null];
+                              const items = order.items && order.items.length > 0 ? order.items : [];
+                              const totalItemsCount = items.reduce((acc, it) => acc + (it.quantity || 1), 0);
 
-                        return itemsList.map((item, idx) => {
-                          const snap = item?.product_snapshot;
-                          const title = snap?.name || snap?.title || `Order ${order.order_number}`;
-                          const variation = [snap?.size, snap?.color].filter(Boolean).join(" / ");
-                          const qty = item?.quantity || 1;
+                              const getStatusPill = () => {
+                                switch (order.status) {
+                                  case "cancelled":
+                                    return (
+                                      <span className="bg-[#5A6268] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        CANCELLED
+                                      </span>
+                                    );
+                                  case "pending_payment":
+                                    return (
+                                      <span className="bg-[#EDCF5D] text-[#010101] text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        PENDING PAYMENT
+                                      </span>
+                                    );
+                                  case "paid":
+                                  case "confirmed":
+                                    return (
+                                      <span className="bg-[#15803D] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        CONFIRMED
+                                      </span>
+                                    );
+                                  case "ready_for_pickup":
+                                    return (
+                                      <span className="bg-[#EDCF5D] text-[#010101] text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wide inline-flex items-center gap-1 shadow-2xs">
+                                        <span>READY FOR PICKUP</span>
+                                        <span>📦</span>
+                                      </span>
+                                    );
+                                  case "processing":
+                                    return (
+                                      <span className="bg-[#2563EB] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        PROCESSING
+                                      </span>
+                                    );
+                                  case "shipped":
+                                    return (
+                                      <span className="bg-[#4F46E5] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        SHIPPED - IN TRANSIT
+                                      </span>
+                                    );
+                                  case "collected":
+                                  case "delivered":
+                                  case "completed":
+                                    return (
+                                      <span className="bg-[#15803D] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        {order.status === "collected" ? "COLLECTED" : "DELIVERED"}
+                                      </span>
+                                    );
+                                  default:
+                                    return (
+                                      <span className="bg-[#5A6268] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        {String(order.status).replace(/_/g, " ").toUpperCase()}
+                                      </span>
+                                    );
+                                }
+                              };
 
-                          const getStatusPill = () => {
-                            switch (order.status) {
-                              case "cancelled":
-                                return (
-                                  <span className="bg-[#5A6268] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    CANCELLED - PAYMENT UNSUCCESSFUL
-                                  </span>
-                                );
-                              case "pending_payment":
-                                return (
-                                  <span className="bg-[#EDCF5D] text-[#010101] text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    PENDING - AWAITING PAYMENT
-                                  </span>
-                                );
-                              case "paid":
-                              case "confirmed":
-                                return (
-                                  <span className="bg-[#15803D] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    CONFIRMED
-                                  </span>
-                                );
-                              case "processing":
-                                return (
-                                  <span className="bg-[#2563EB] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    PROCESSING
-                                  </span>
-                                );
-                              case "shipped":
-                                return (
-                                  <span className="bg-[#4F46E5] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    SHIPPED - IN TRANSIT
-                                  </span>
-                                );
-                              case "delivered":
-                              case "completed":
-                                return (
-                                  <span className="bg-[#15803D] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    DELIVERED
-                                  </span>
-                                );
-                              default:
-                                return (
-                                  <span className="bg-[#5A6268] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    {String(order.status).replace(/_/g, " ").toUpperCase()}
-                                  </span>
-                                );
-                            }
-                          };
+                              return (
+                                <div
+                                  key={order.id}
+                                  className="rounded-xl border border-gray-200 bg-white overflow-hidden hover:border-gray-300 transition-all shadow-2xs"
+                                >
+                                  {/* Top Header of the Order */}
+                                  <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2.5">
+                                    <div className="flex items-center gap-2.5 flex-wrap">
+                                      <span className="font-bold text-xs sm:text-sm text-[#010101]">
+                                        Order #{order.order_number}
+                                      </span>
+                                      <span className="text-gray-300">•</span>
+                                      <span className="text-xs text-gray-500 font-medium">
+                                        On {dateShort}
+                                      </span>
+                                      {getStatusPill()}
+                                    </div>
 
-                          return (
-                            <div
-                              key={`${order.id}-${item?.id || idx}`}
-                              className="rounded-md border border-gray-200 bg-white p-3.5 sm:p-4 hover:border-gray-300 transition-all flex items-start justify-between gap-3.5 sm:gap-4 relative"
-                            >
-                              <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
-                                {/* Left Thumbnail */}
-                                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-sm bg-gray-50 border border-gray-100 relative overflow-hidden shrink-0 flex items-center justify-center">
-                                  {snap?.image ? (
-                                    <Image
-                                      src={snap.image}
-                                      alt={title}
-                                      fill
-                                      className="object-contain p-1"
-                                    />
-                                  ) : (
-                                    <span className="text-gray-400 font-bold text-xs">GTS</span>
-                                  )}
-                                </div>
-
-                                {/* Middle Details */}
-                                <div className="min-w-0 flex-1 pr-2">
-                                  <h4 className="text-xs sm:text-sm font-medium text-[#010101] leading-snug line-clamp-2">
-                                    {title}
-                                  </h4>
-                                  <p className="text-xs text-gray-500 mt-1 font-normal">
-                                    Order {order.order_number}
-                                  </p>
-                                  {variation && (
-                                    <p className="text-xs text-gray-500 mt-0.5 font-normal">
-                                      Variation: {variation}
-                                    </p>
-                                  )}
-                                  <p className="text-xs text-gray-500 mt-0.5 font-normal">
-                                    Qty: {qty}
-                                  </p>
-                                  <div className="mt-1.5">
-                                    {getStatusPill()}
+                                    <div className="flex items-center gap-3">
+                                      <span className="font-bold text-xs sm:text-sm text-[#010101]">
+                                        ₦{((order.total || 0) / 100).toLocaleString()}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedOrder(order)}
+                                        className="text-[#010101] hover:text-[#8D730C] text-xs sm:text-sm font-bold cursor-pointer underline decoration-[#EDCF5D] decoration-2 underline-offset-4 transition-colors"
+                                      >
+                                        See Details
+                                      </button>
+                                    </div>
                                   </div>
-                                  <p className="text-xs font-semibold text-[#010101] mt-1.5">
-                                    On {dateShort}
-                                  </p>
-                                </div>
-                              </div>
 
-                              {/* Top Right Action */}
-                              <button
-                                type="button"
-                                onClick={() => setSelectedOrder(order)}
-                                className="text-[#010101] hover:text-[#8D730C] text-xs sm:text-sm font-bold shrink-0 cursor-pointer underline decoration-[#EDCF5D] decoration-2 underline-offset-4 self-start pt-0.5 transition-colors"
-                              >
-                                See Details
-                              </button>
-                            </div>
-                          );
-                        });
-                      })}
-                    </div>
+                                  {/* List of Items Inside This Order */}
+                                  <div className="p-3.5 sm:p-4 divide-y divide-gray-100 space-y-3">
+                                    {items.length === 0 ? (
+                                      <div className="flex items-center justify-between text-xs text-gray-500 py-1">
+                                        <span>Order items package</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelectedOrder(order)}
+                                          className="text-[#010101] font-semibold underline"
+                                        >
+                                          View Details
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      items.map((item, idx) => {
+                                        const snap = item.product_snapshot;
+                                        const title = snap?.name || snap?.title || `Item ${idx + 1}`;
+                                        const variation = [snap?.size, snap?.color].filter(Boolean).join(" / ");
+                                        const qty = item.quantity || 1;
+                                        const priceNaira = Math.round((item.unit_price || 0) / 100);
+
+                                        return (
+                                          <div
+                                            key={item.id || idx}
+                                            className={`flex items-start justify-between gap-3 sm:gap-4 ${
+                                              idx > 0 ? "pt-3" : ""
+                                            }`}
+                                          >
+                                            <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
+                                              {/* Left Thumbnail */}
+                                              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg bg-gray-50 border border-gray-100 relative overflow-hidden shrink-0 flex items-center justify-center">
+                                                {snap?.image ? (
+                                                  <Image
+                                                    src={snap.image}
+                                                    alt={title}
+                                                    fill
+                                                    unoptimized
+                                                    className="object-contain p-1"
+                                                  />
+                                                ) : (
+                                                  <span className="text-gray-400 font-bold text-xs">🛍️</span>
+                                                )}
+                                              </div>
+
+                                              {/* Middle Details */}
+                                              <div className="min-w-0 flex-1 pr-2">
+                                                <h4 className="text-xs sm:text-sm font-semibold text-[#010101] leading-snug line-clamp-1">
+                                                  {title}
+                                                </h4>
+                                                <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500 flex-wrap">
+                                                  {variation && <span>Variation: {variation}</span>}
+                                                  {variation && <span>•</span>}
+                                                  <span>Qty: {qty}</span>
+                                                  {priceNaira > 0 && <span>•</span>}
+                                                  {priceNaira > 0 && (
+                                                    <span className="font-medium text-gray-700">
+                                                      ₦{priceNaira.toLocaleString()} each
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            {/* Item Total Price */}
+                                            <div className="shrink-0 text-right self-center">
+                                              <span className="text-xs sm:text-sm font-bold text-[#010101]">
+                                                ₦{Math.round((item.line_total || priceNaira * qty * 100) / 100).toLocaleString()}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+
+                                  {/* Bottom Strip: Items summary & tracking */}
+                                  <div className="bg-gray-50/50 px-4 py-2.5 border-t border-gray-100 flex items-center justify-between text-xs">
+                                    <span className="text-gray-500 font-medium">
+                                      {totalItemsCount} {totalItemsCount === 1 ? "item" : "items"} in this package
+                                    </span>
+                                    <Link
+                                      href={`/track?order_number=${encodeURIComponent(order.order_number)}`}
+                                      className="text-gray-700 hover:text-[#010101] font-bold flex items-center gap-1 transition-colors"
+                                    >
+                                      <span>Track Order</span>
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                      </svg>
+                                    </Link>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                   )}
                 </>
               );

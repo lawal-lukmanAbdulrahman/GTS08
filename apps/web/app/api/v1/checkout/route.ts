@@ -178,7 +178,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     // Where and by when a pickup order is collected (Store Details or selected Pickup Station).
     let pickup: {
       hold_hours: number;
-      deadline: string;
+      deadline: string | null;
       store_name: string;
       address: string | null;
       station_id?: string | null;
