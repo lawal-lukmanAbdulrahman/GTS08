@@ -62,8 +62,8 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "categories": { GET: "public", POST: "permission:can_manage_products" },
   "categories/[id]": { GET: "public", PATCH: "permission:can_manage_products", DELETE: "permission:can_manage_products" },
   "categories/reorder": { PUT: "permission:can_manage_products" },
-  "products": { GET: "public", POST: "permission:can_manage_products", PUT: "permission:can_manage_products" }, // GET adds cost for staff
-  "products/[slug]": { GET: "optionalStaff" },
+  "products": { GET: "public", POST: "permission:can_manage_products", PUT: "permission:can_manage_products", DELETE: "permission:can_manage_products" }, // GET adds cost for staff
+  "products/[slug]": { GET: "optionalStaff", DELETE: "permission:can_manage_products" },
   "products/drafts": { GET: "permission:can_manage_products", POST: "permission:can_manage_products", DELETE: "permission:can_manage_products" },
   "products/search": { GET: "public" },
   "search": { GET: "public" },
@@ -106,9 +106,13 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   // ── orders
   "orders": { GET: "session|optionalStaff" }, // own orders; everyone's with can_view_all_orders
   "orders/[id]": { GET: "permission:can_view_all_orders", PATCH: "permission:can_view_all_orders" },
+  "orders/[id]/complete-pickup": { POST: "permission:can_complete_pickup" },
+  "orders/[id]/pay": { POST: "permission:can_mark_orders_paid" },
   "orders/[id]/status": { PUT: "permission:can_view_all_orders" },
   "orders/customer": { GET: "session" },
   "orders/track": { GET: "public" }, // requires order number AND email
+  "pickup-stations": { GET: "optionalStaff", POST: "admin" },
+  "pickup-stations/[id]": { GET: "public", PATCH: "admin", DELETE: "admin" },
 
   // ── inventory
   "inventory": { GET: "permission:can_manage_inventory" },
@@ -146,7 +150,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "staff/me/sales": { GET: "staff" },
   "upload": { POST: "permission:can_manage_products" },
   "users": { GET: "admin" },
-  "users/[id]": { GET: "admin", PATCH: "admin", DELETE: "super_admin" },
+  "users/[id]": { GET: "admin", PATCH: "admin", DELETE: "admin" },
   "users/staff": { GET: "admin", POST: "super_admin" },
 
   // ── point of sale

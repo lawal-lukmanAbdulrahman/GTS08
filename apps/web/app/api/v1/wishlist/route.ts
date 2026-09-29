@@ -57,7 +57,11 @@ export async function POST(request: NextRequest) {
     if (!byId && !bySlug) return NextResponse.json({ error: "Choose a product to save.", code: "VALIDATION_ERROR" }, { status: 400 });
 
     const client = createServiceClient();
-    const { data: product } = await client.from("products").select("id, status").eq(byId ? "id" : "slug", (byId ? b.product_id : b.product_slug) as string).maybeSingle();
+    const { data: product } = await client
+      .from("products")
+      .select("id, status")
+      .eq(byId ? "id" : "slug", (byId ? b.product_id : b.product_slug) as string)
+      .maybeSingle();
     if (!product || (product as { status: string }).status !== "active") return NextResponse.json({ error: "Product not found.", code: "NOT_FOUND" }, { status: 404 });
     const productId = (product as { id: string }).id;
 

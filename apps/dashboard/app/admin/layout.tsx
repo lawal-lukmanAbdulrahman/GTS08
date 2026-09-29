@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { SidebarProvider, useSidebar } from "./sidebar-context";
 import { isAdminInquiryUnread } from "../../lib/notifications";
-import { authFetch } from "../lib/session";
+import { authFetch, signOut } from "../lib/session";
 import type { PermissionsView } from "../lib/staff-types";
 
 interface NavItemConfig {
@@ -75,6 +75,10 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     const syncStaffProfile = async () => {
       try {
         const res = await authFetch("/api/v1/staff/me");
+        if (res.status === 401 || res.status === 403) {
+          signOut({ reason: "customer_not_allowed" });
+          return;
+        }
         if (res.ok) {
           const json = await res.json();
           if (json.data) {
@@ -197,41 +201,18 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       isAllowed: (admin) => admin,
     },
     {
-      name: "POS Terminal",
-      href: "/pos",
+      name: "Sales Overview",
+      href: "/admin/sales",
       exact: false,
       icon: (
         <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       ),
-      isAllowed: (admin, perms, role) => admin || !!perms?.can_process_pos || role === "cashier",
+      isAllowed: (admin, perms, role) => admin || !!perms?.can_view_all_orders || !!perms?.can_process_pos || role === "cashier",
     },
     {
-      name: "Customer Inquiries",
-      href: "/admin/questions",
-      exact: false,
-      badge: inquiriesBadge > 0 ? inquiriesBadge : null,
-      icon: (
-        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a.75.75 0 01-.874-1.006l.732-1.755A7.838 7.838 0 013 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
-        </svg>
-      ),
-      isAllowed: (admin, perms) => admin || !!perms?.can_handle_tickets,
-    },
-    {
-      name: "Inventory Control",
-      href: "/admin/inventory",
-      exact: false,
-      icon: (
-        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-        </svg>
-      ),
-      isAllowed: (admin, perms, role) => admin || !!perms?.can_manage_inventory || role === "inventory_staff",
-    },
-    {
-      name: "Orders & Shipping",
+      name: "Orders & Fulfilment",
       href: "/admin/orders",
       exact: false,
       icon: (
@@ -253,6 +234,28 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       isAllowed: (admin, perms) => admin || !!perms?.can_manage_products,
     },
     {
+      name: "Inventory Control",
+      href: "/admin/inventory",
+      exact: false,
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+        </svg>
+      ),
+      isAllowed: (admin, perms, role) => admin || !!perms?.can_manage_inventory || role === "inventory_staff",
+    },
+    {
+      name: "POS Terminal",
+      href: "/pos",
+      exact: false,
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+        </svg>
+      ),
+      isAllowed: (admin, perms, role) => admin || !!perms?.can_process_pos || role === "cashier",
+    },
+    {
       name: "Categories",
       href: "/admin/categories",
       exact: false,
@@ -264,6 +267,30 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       isAllowed: (admin, perms) => admin || !!perms?.can_manage_products,
     },
     {
+      name: "Customer Inquiries",
+      href: "/admin/questions",
+      exact: false,
+      badge: inquiriesBadge > 0 ? inquiriesBadge : null,
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a.75.75 0 01-.874-1.006l.732-1.755A7.838 7.838 0 013 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+        </svg>
+      ),
+      isAllowed: (admin, perms) => admin || !!perms?.can_handle_tickets,
+    },
+    {
+      name: "Pickup Stations",
+      href: "/admin/pickup-stations",
+      exact: false,
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+        </svg>
+      ),
+      isAllowed: (admin) => admin,
+    },
+    {
       name: "Broadcast & Popups",
       href: "/admin/broadcast",
       exact: false,
@@ -273,17 +300,6 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         </svg>
       ),
       isAllowed: (admin, perms) => admin || !!perms?.can_manage_broadcasts,
-    },
-    {
-      name: "Content Manager",
-      href: "/admin/storefront",
-      exact: false,
-      icon: (
-        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-        </svg>
-      ),
-      isAllowed: (admin) => admin,
     },
     {
       name: "Staff & Roles",

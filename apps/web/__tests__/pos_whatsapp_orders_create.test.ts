@@ -17,8 +17,7 @@ let tableConfig: Record<string, TableHandler> = {};
 const allCalls: Record<string, { method: string; args: unknown[] }[]> = {};
 
 function makeTableStub(table: string) {
-  const calls: { method: string; args: unknown[] }[] = [];
-  allCalls[table] = calls;
+  const calls: { method: string; args: unknown[] }[] = allCalls[table] ?? (allCalls[table] = []);
   const stub: any = new Proxy(
     {},
     {
@@ -58,6 +57,7 @@ const VALID_BODY = {
   items: [{ variant_id: "11111111-1111-4111-8111-111111111111", quantity: 1 }],
   customer_name: "Chidinma O.",
   customer_phone: "08031234567",
+  customer_email: "chidinma@example.com",
 };
 
 describe("POST /api/v1/pos/whatsapp-orders (create pending order, D001)", () => {
@@ -110,6 +110,13 @@ describe("POST /api/v1/pos/whatsapp-orders (create pending order, D001)", () => 
 
   it("requires a customer name and phone (this is how the receipt gets back to them)", async () => {
     const res = await POST(makeRequest({ ...VALID_BODY, customer_phone: undefined }));
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.code).toBe("CUSTOMER_CONTACT_REQUIRED");
+  });
+
+  it("requires a customer email so pickup PIN and tracking can be emailed", async () => {
+    const res = await POST(makeRequest({ ...VALID_BODY, customer_email: undefined }));
     const body = await res.json();
     expect(res.status).toBe(400);
     expect(body.code).toBe("CUSTOMER_CONTACT_REQUIRED");

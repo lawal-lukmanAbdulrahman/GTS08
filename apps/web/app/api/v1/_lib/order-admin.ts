@@ -5,9 +5,10 @@ export interface CourierFields {
   tracking_number?: string | null;
   carrier_tracking_url?: string | null;
   internal_notes?: string | null;
+  pickup_deadline?: string | null;
 }
 
-/** Validates the courier and note fields an admin can set on an order. Only fields present are returned. */
+/** Validates the courier, note, and collection deadline fields an admin can set on an order. Only fields present are returned. */
 export function validateCourierFields(body: unknown): { ok: true; value: CourierFields } | { ok: false; errors: Record<string, string> } {
   if (!isPlainObject(body)) return { ok: false, errors: { _body: "Expected a JSON object." } };
   const value: CourierFields = {};
@@ -31,6 +32,17 @@ export function validateCourierFields(body: unknown): { ok: true; value: Courier
     if (raw === null || raw === "") value.carrier_tracking_url = null;
     else if (typeof raw !== "string" || raw.length > 500 || !/^https:\/\/[^\s]+$/i.test(raw.trim())) errors.carrier_tracking_url = "Tracking link must be a secure (https) web address.";
     else value.carrier_tracking_url = raw.trim();
+  }
+
+  if ("pickup_deadline" in body) {
+    const raw = (body as Record<string, unknown>).pickup_deadline;
+    if (raw === null || raw === "") {
+      value.pickup_deadline = null;
+    } else {
+      const d = new Date(String(raw));
+      if (isNaN(d.getTime())) errors.pickup_deadline = "Invalid collection deadline format.";
+      else value.pickup_deadline = d.toISOString();
+    }
   }
 
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, value };

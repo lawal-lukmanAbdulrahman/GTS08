@@ -267,13 +267,33 @@ describe("CartPanel (spec Part 4)", () => {
     it("offers Hold while there are items, and holds it", () => {
       const onHold = vi.fn();
       render(<CartPanel lines={[LINE]} paymentMethod="cash" onIncrement={noop} onDecrement={noop} onRemove={noop} onPaymentMethodChange={noop} onConfirm={noop} onHold={onHold} />);
-      fireEvent.click(screen.getByRole("button", { name: /hold sale/i }));
+      const holdBtn = screen.getByRole("button", { name: /hold sale/i });
+      expect(holdBtn).toBeInTheDocument();
+      fireEvent.click(holdBtn);
       expect(onHold).toHaveBeenCalled();
     });
 
     it("has nothing to hold on an empty cart", () => {
       render(<CartPanel lines={[]} paymentMethod={null} onIncrement={noop} onDecrement={noop} onRemove={noop} onPaymentMethodChange={noop} onConfirm={noop} onHold={vi.fn()} />);
       expect(screen.queryByRole("button", { name: /hold sale/i })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("item thumbnail rendering", () => {
+    it("renders fallback placeholder when item has no image", () => {
+      render(<CartPanel lines={[LINE]} paymentMethod="cash" onIncrement={noop} onDecrement={noop} onRemove={noop} onPaymentMethodChange={noop} onConfirm={noop} />);
+      expect(screen.getByTestId("cart-no-image")).toBeInTheDocument();
+    });
+
+    it("renders image tag when imageUrl is provided", () => {
+      const lineWithImage: CartLine = {
+        ...LINE,
+        imageUrl: "https://example.com/shirt.jpg",
+      };
+      render(<CartPanel lines={[lineWithImage]} paymentMethod="cash" onIncrement={noop} onDecrement={noop} onRemove={noop} onPaymentMethodChange={noop} onConfirm={noop} />);
+      const img = screen.getByRole("img", { name: /gts oxford shirt/i });
+      expect(img).toBeInTheDocument();
+      expect(img).toHaveAttribute("src", "https://example.com/shirt.jpg");
     });
   });
 });

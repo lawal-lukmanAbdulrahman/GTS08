@@ -3,12 +3,14 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../_lib/access";
 import { sanitizeEmail, sanitizeSqlInput } from "../../auth/utils";
-import { computeCartTotals, parseWhatsAppContact, type PosCartLine, validateOrderItems } from "@gts/utils";
+import { computeCartTotals, parseWhatsAppContact, type PosCartLine, validateOrderItems, getOrderPickupPin } from "@gts/utils";
 import { checkStockSufficiency } from "../_lib/stock-sufficiency";
 import { variantAvailable } from "../_lib/stock-status";
 import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
 import { clientIp, logActivity } from "../../_lib/activity";
 import { dbError } from "../../_lib/http";
+import { afterResponse } from "../../_lib/email/after";
+import { notifyPickupOrder } from "../../_lib/email/events";
 
 interface OrderItemInput {
   variant_id: string;
@@ -21,8 +23,9 @@ interface VariantRow {
   color: string | null;
   sku: string | null;
   price_modifier: number;
+  is_active?: boolean;
   inventory: { quantity: number; reserved_quantity: number } | null;
-  product: { id: string; name: string; base_price: number };
+  product: { id: string; name: string; base_price: number; status?: string };
 }
 
 /**
@@ -112,10 +115,11 @@ export async function POST(request: NextRequest) {
 
   const customerName = body.customer_name ? sanitizeSqlInput(body.customer_name) : "";
   const customerPhone = body.customer_phone ? sanitizeSqlInput(body.customer_phone) : "";
-  if (!customerName || !customerPhone) {
+  const customerEmail = body.customer_email ? sanitizeEmail(body.customer_email) : "";
+  if (!customerName || !customerPhone || !customerEmail || !customerEmail.includes("@")) {
     return NextResponse.json(
       {
-        error: "Customer name and phone are required to reach them on WhatsApp about this order.",
+        error: "Customer name, phone number, and a valid email address are required to record a WhatsApp order.",
         code: "CUSTOMER_CONTACT_REQUIRED",
       },
       { status: 400 }
@@ -129,9 +133,9 @@ export async function POST(request: NextRequest) {
     .from("product_variants")
     .select(
       `
-      id, size, color, sku, price_modifier,
+      id, size, color, sku, price_modifier, is_active,
       inventory(quantity, reserved_quantity),
-      product:products(id, name, base_price)
+      product:products(id, name, base_price, status)
       `
     )
     .in("id", variantIds);
@@ -148,6 +152,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: `Product variant not found: ${missing.variant_id}`, code: "VARIANT_NOT_FOUND" },
       { status: 400 }
+    );
+  }
+
+  const unavailable = items.find((i) => {
+    const v = variantById.get(i.variant_id);
+    return !v || v.is_active === false || (v.product && v.product.status && v.product.status !== "active");
+  });
+  if (unavailable) {
+    return NextResponse.json(
+      { error: "One or more items in this order are no longer available.", code: "ITEM_UNAVAILABLE", details: { variant_id: unavailable.variant_id } },
+      { status: 409 }
     );
   }
 
@@ -205,26 +220,36 @@ export async function POST(request: NextRequest) {
   }
 
   let customerId: string | null = null;
-  const contactNote = `WhatsApp customer: ${customerName} (${customerPhone})`;
-  if (body.customer_email) {
-    const email = sanitizeEmail(body.customer_email);
-    const { data: existing } = await serviceClient
-      .from("customers")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle();
+  const contactNote = `WhatsApp customer: ${customerName} (${customerPhone}) - Email: ${customerEmail}`;
+  const { data: existing } = await serviceClient
+    .from("customers")
+    .select("id")
+    .eq("email", customerEmail)
+    .maybeSingle();
 
-    if (existing) {
-      customerId = (existing as { id: string }).id;
-    } else {
-      const { data: created } = await serviceClient
-        .from("customers")
-        .insert({ email, full_name: customerName, phone: customerPhone })
-        .select("id")
-        .single();
-      customerId = (created as { id: string } | null)?.id ?? null;
-    }
+  if (existing) {
+    customerId = (existing as { id: string }).id;
+  } else {
+    const { data: created } = await serviceClient
+      .from("customers")
+      .insert({ email: customerEmail, full_name: customerName, phone: customerPhone })
+      .select("id")
+      .single();
+    customerId = (created as { id: string } | null)?.id ?? null;
   }
+
+  // Generate 6-digit collection verification PIN upfront so it is saved directly on insert
+  const generatedPin = Math.floor(100000 + Math.random() * 900000).toString();
+
+  // ── Determine pickup deadline from store settings (Hold pickup orders for hours, default 48h) ──
+  const { data: settings } = await serviceClient
+    .from("settings")
+    .select("pickup_hold_hours")
+    .eq("id", "00000000-0000-0000-0000-000000000001")
+    .maybeSingle();
+  const holdHours =
+    settings?.pickup_hold_hours && settings.pickup_hold_hours > 0 ? settings.pickup_hold_hours : 48;
+  const pickupDeadline = new Date(Date.now() + holdHours * 3_600_000).toISOString();
 
   const { data: order, error: orderError } = await serviceClient
     .from("orders")
@@ -238,8 +263,10 @@ export async function POST(request: NextRequest) {
       total: totals.total,
       cashier_id: access.user.id,
       internal_notes: contactNote,
+      tracking_number: generatedPin,
+      pickup_deadline: pickupDeadline,
     })
-    .select("id, order_number, total, status")
+    .select("id, order_number, total, status, tracking_number, pickup_deadline")
     .single();
 
   if (orderError || !order) {
@@ -249,7 +276,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-  const createdOrder = order as { id: string; order_number: string; total: number; status: string };
+  const createdOrder = order as { id: string; order_number: string; total: number; status: string; tracking_number: string };
 
   const orderItemsPayload = items.map((i) => {
     const v = variantById.get(i.variant_id)!;
@@ -263,7 +290,32 @@ export async function POST(request: NextRequest) {
       product_snapshot: { id: v.product.id, name: v.product.name, size: v.size, color: v.color, sku: v.sku },
     };
   });
-  await serviceClient.from("order_items").insert(orderItemsPayload);
+  const { error: itemsErr } = await serviceClient.from("order_items").insert(orderItemsPayload);
+  if (itemsErr) {
+    await serviceClient.from("orders").update({ status: "cancelled", internal_notes: "Cancelled: order lines could not be saved." }).eq("id", createdOrder.id);
+    await rollback(serviceClient, reserveChanges);
+    if (/foreign key|violates foreign key|23503|not-null|does not exist|violates not-null/i.test(itemsErr.message)) {
+      return NextResponse.json(
+        { error: "One or more items in this order are no longer available.", code: "ITEM_UNAVAILABLE" },
+        { status: 409 }
+      );
+    }
+    return dbError(itemsErr, "DATABASE_ERROR", 500);
+  }
+
+  // ── Compute 6-digit collection verification PIN & dispatch customer notification ──
+  const pickupPin = getOrderPickupPin(createdOrder);
+  try {
+    await serviceClient
+      .from("orders")
+      .update({ tracking_number: pickupPin })
+      .eq("id", createdOrder.id);
+  } catch (pinErr) {
+    console.warn("Failed to set tracking_number to pickupPin:", pinErr);
+  }
+
+  // Send WhatsApp order acknowledgement email with pickup details & collection PIN
+  afterResponse(() => notifyPickupOrder(serviceClient, createdOrder.id));
 
   await logActivity(serviceClient, {
     actorId: access.user.id,

@@ -45,7 +45,6 @@ export function Bestsellers() {
       .slice(0, 12);
   }, [apiProducts, catalogue, loading]);
 
-  const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -70,10 +69,6 @@ export function Bestsellers() {
       };
     }
   }, []);
-
-  const toggleWishlist = (id: string) => {
-    setWishlisted((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
 
   const handleScrollLeft = () => {
     if (scrollContainerRef.current) {
@@ -125,7 +120,7 @@ export function Bestsellers() {
           <button
             aria-label="Previous products"
             onClick={handleScrollLeft}
-            className={`absolute left-3 sm:left-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md ${
+            className={`absolute left-3 sm:left-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md shrink-0 ${
               canScrollLeft ? "opacity-100 flex" : "opacity-0 pointer-events-none hidden"
             }`}
           >
@@ -148,7 +143,6 @@ export function Bestsellers() {
                   />
                 ))
               : PRODUCTS.map((product) => {
-                  const isWishlisted = wishlisted[product.id];
                   return (
                     <ProductCard
                       key={product.id}
@@ -161,8 +155,6 @@ export function Bestsellers() {
                       reviews={product.reviews}
                       image={product.image}
                       hasTransparentBg={product.hasTransparentBg}
-                      isWishlisted={isWishlisted}
-                      onToggleWishlist={toggleWishlist}
                       className="w-[160px] sm:w-[175px] md:w-[185px] max-w-[190px] shrink-0"
                     />
                   );
@@ -180,7 +172,7 @@ export function Bestsellers() {
           <button
             aria-label="Next products"
             onClick={handleScrollRight}
-            className={`absolute right-3 sm:right-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md ${
+            className={`absolute right-3 sm:right-4 top-[36%] -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md flex items-center justify-center text-black hover:bg-white transition-all active:scale-95 shadow-md shrink-0 ${
               canScrollRight ? "opacity-100 flex" : "opacity-0 pointer-events-none hidden"
             }`}
           >

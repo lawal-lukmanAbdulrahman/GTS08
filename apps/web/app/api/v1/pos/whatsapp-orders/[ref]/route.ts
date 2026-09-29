@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
+import { getOrderPickupPin } from "@gts/utils";
 import { requirePosAccess } from "../../_lib/access";
 import { dbError } from "../../../_lib/http";
 
@@ -22,12 +23,12 @@ export async function GET(
     .from("orders")
     .select(
       `
-      id, order_number, channel, status, total, internal_notes,
+      id, order_number, channel, status, total, internal_notes, tracking_number,
       items:order_items(id, quantity, unit_price, line_total, product_snapshot)
       `
     )
     .eq("order_number", ref)
-    .eq("channel", "whatsapp")
+    .in("channel", ["whatsapp", "pickup"])
     .maybeSingle();
 
   if (error) {
@@ -41,7 +42,7 @@ export async function GET(
     );
   }
 
-  const order = data as { status: string };
+  const order = data as { id: string; order_number: string; status: string; tracking_number?: string | null };
   if (order.status !== "pending_payment") {
     return NextResponse.json(
       {
@@ -52,5 +53,13 @@ export async function GET(
     );
   }
 
-  return NextResponse.json({ data });
+  const pickup_pin = getOrderPickupPin(order);
+
+  return NextResponse.json({
+    data: {
+      ...data,
+      pickup_pin,
+    },
+  });
 }
+

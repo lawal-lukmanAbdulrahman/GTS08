@@ -286,15 +286,17 @@ export default function AdminProductsPage() {
     setOpenActionMenuId(null);
 
     try {
-      const token = localStorage.getItem("gts_token");
-      await fetch(`${API_BASE}/products`, {
+      const res = await authFetch(`${API_BASE}/products`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: p.id, status: targetStatus }),
       });
+      if (!res.ok) {
+        // Rollback on error
+        setProducts((prev) =>
+          prev.map((item) => (item.id === p.id ? { ...item, status: p.status } : item))
+        );
+      }
     } catch (err) {
       console.error("Status update error:", err);
       // Rollback on error
@@ -307,48 +309,51 @@ export default function AdminProductsPage() {
   const handleBulkArchive = async () => {
     if (selectedProducts.length === 0) return;
     const idsToArchive = [...selectedProducts];
+    const prevProducts = [...products];
     setProducts((prev) =>
       prev.map((p) => (idsToArchive.includes(p.id) ? { ...p, status: "archived" as const } : p))
     );
     setSelectedProducts([]);
 
     try {
-      const token = localStorage.getItem("gts_token");
-      await Promise.all(
+      const results = await Promise.all(
         idsToArchive.map((id) =>
-          fetch(`${API_BASE}/products`, {
+          authFetch(`${API_BASE}/products`, {
             method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id, status: "archived" }),
           })
         )
       );
+      if (results.some((r) => !r.ok)) {
+        setProducts(prevProducts);
+      }
     } catch (err) {
       console.error("Bulk archive error:", err);
+      setProducts(prevProducts);
     }
   };
 
   const handleBulkDelete = async () => {
     if (selectedProducts.length === 0) return;
     const idsToDelete = [...selectedProducts];
+    const prevProducts = [...products];
     setProducts((prev) => prev.filter((p) => !idsToDelete.includes(p.id)));
     setSelectedProducts([]);
 
     try {
-      const token = localStorage.getItem("gts_token");
-      await Promise.all(
-        idsToDelete.map((id) =>
-          fetch(`${API_BASE}/products?id=${id}`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${token}` },
-          })
-        )
-      );
+      const res = await authFetch(`${API_BASE}/products?ids=${idsToDelete.join(",")}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const errorJson = await res.json().catch(() => ({}));
+        setProducts(prevProducts);
+        alert(errorJson.error || "Failed to delete selected products.");
+      }
     } catch (err) {
       console.error("Bulk delete error:", err);
+      setProducts(prevProducts);
+      alert("Failed to delete selected products. Please check your network connection.");
     }
   };
 
@@ -374,18 +379,29 @@ export default function AdminProductsPage() {
 
   const handleConfirmDelete = async () => {
     if (!deletingProductItem) return;
-    const id = deletingProductItem.id;
-    try {
-      const token = localStorage.getItem("gts_token");
-      await fetch(`${API_BASE}/products?id=${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } catch {
-      // offline fallback
-    }
-    setProducts((prev) => prev.filter((item) => item.id !== id));
+    const targetItem = deletingProductItem;
+    const id = targetItem.id;
     setDeletingProductItem(null);
+
+    // Optimistically remove from list
+    setProducts((prev) => prev.filter((item) => item.id !== id));
+
+    try {
+      const res = await authFetch(`${API_BASE}/products?id=${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const errorJson = await res.json().catch(() => ({}));
+        // Revert optimistic delete
+        setProducts((prev) => [targetItem, ...prev.filter((item) => item.id !== id)]);
+        alert(errorJson.error || "Failed to delete product. Please try again.");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      // Revert optimistic delete
+      setProducts((prev) => [targetItem, ...prev.filter((item) => item.id !== id)]);
+      alert("Failed to delete product. Please check your network connection.");
+    }
   };
 
   const formatNaira = (kobo: number) => "₦" + (kobo / 100).toLocaleString("en-NG");

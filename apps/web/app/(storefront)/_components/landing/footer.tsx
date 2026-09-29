@@ -206,7 +206,7 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="#categories" className="hover:text-[#010101] transition-colors">
+                <Link href="/search" className="hover:text-[#010101] transition-colors">
                   All Categories
                 </Link>
               </li>

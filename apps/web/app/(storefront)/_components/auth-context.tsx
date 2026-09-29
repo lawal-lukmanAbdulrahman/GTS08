@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { createClient } from "@gts/database/client";
 import type { User } from "@supabase/supabase-js";
 import { CATALOGUE_CACHE_KEY } from "./catalogue-context";
+import { clearCustomerNotifications } from "../../../lib/notifications";
 
 export interface CustomerAddress {
   id: string;
@@ -98,6 +99,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .eq("id", userId)
             .maybeSingle();
 
+          // If this user is a staff account (admin, cashier, inventory_staff),
+          // DO NOT treat them as a storefront customer, unless they are the demo account.
+          if (userData && userData.role && userData.role !== "customer") {
+            if (userData.is_demo) {
+              setUser({ id: userId, email: userData.email, role: "customer", is_demo: true } as any);
+              setCustomer({
+                id: userId,
+                user_id: userId,
+                full_name: "Demo Shopper",
+                email: userData.email || "demo@gts.ng",
+                phone: null,
+              });
+              return;
+            }
+
+            setUser(null);
+            setCustomer(null);
+            setSavedAddresses([]);
+            localStorage.removeItem("gts_customer_user");
+            localStorage.removeItem("gts_customer_token");
+            document.cookie = "gts_customer_token=; path=/; max-age=0";
+            document.cookie = "gts_access_token=; path=/; max-age=0";
+            supabase.auth.signOut().catch(() => undefined);
+            return;
+          }
+
           setCustomer({
             id: userData?.id || userId,
             user_id: userId,
@@ -116,18 +143,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // 1. Quick hydration from localStorage if already saved
     if (typeof window !== "undefined") {
-      const savedUserStr = localStorage.getItem("gts_user");
-      if (savedUserStr) {
-        try {
-          const parsed = JSON.parse(savedUserStr);
-          if (parsed?.id) {
-            setUser(parsed);
-            if (parsed.email) {
-              fetchCustomerData(parsed.id, parsed.email, parsed.user_metadata);
+      const isDemoStored =
+        localStorage.getItem("gts_demo_mode") === "true" ||
+        document.cookie.includes("gts_demo_mode=true");
+
+      if (isDemoStored) {
+        const demoUser = {
+          id: "demo-user",
+          email: "demo@gts.ng",
+          role: "customer",
+          full_name: "Demo Shopper",
+          is_demo: true,
+        };
+        const savedUserStr = localStorage.getItem("gts_customer_user");
+        let u = demoUser;
+        if (savedUserStr) {
+          try {
+            const parsed = JSON.parse(savedUserStr);
+            if (parsed?.is_demo) u = { ...demoUser, ...parsed };
+          } catch {}
+        }
+        setUser(u as any);
+        setCustomer({
+          id: u.id,
+          user_id: u.id,
+          full_name: "Demo Shopper",
+          email: u.email || "demo@gts.ng",
+          phone: null,
+        });
+      } else {
+        const savedUserStr = localStorage.getItem("gts_customer_user");
+        if (savedUserStr) {
+          try {
+            const parsed = JSON.parse(savedUserStr);
+            if (parsed?.id) {
+              if (parsed.role && parsed.role !== "customer" && !parsed.is_demo) {
+                localStorage.removeItem("gts_customer_user");
+                localStorage.removeItem("gts_customer_token");
+                document.cookie = "gts_customer_token=; path=/; max-age=0";
+                document.cookie = "gts_access_token=; path=/; max-age=0";
+              } else {
+                setUser(parsed);
+                if (parsed.email) {
+                  fetchCustomerData(parsed.id, parsed.email, parsed.user_metadata);
+                }
+              }
             }
+          } catch {
+            // ignore corrupted local storage
           }
-        } catch {
-          // ignore corrupted local storage
         }
       }
     }
@@ -135,16 +199,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 2. Validate active session with Supabase
     supabase.auth.getSession().then((res: any) => {
       const session = res?.data?.session;
+      const isDemo =
+        typeof window !== "undefined" &&
+        (localStorage.getItem("gts_demo_mode") === "true" ||
+          document.cookie.includes("gts_demo_mode=true"));
+
       if (session?.user) {
-        setUser(session.user);
-        if (session.access_token) {
-          document.cookie = `gts_access_token=${session.access_token}; path=/; max-age=604800; SameSite=Lax`;
-          localStorage.setItem("gts_user", JSON.stringify(session.user));
-          localStorage.setItem("gts_token", session.access_token);
+        if (isDemo) {
+          const demoObj = { ...session.user, role: "customer", full_name: "Demo Shopper", is_demo: true };
+          setUser(demoObj as any);
+          setCustomer({
+            id: session.user.id,
+            user_id: session.user.id,
+            full_name: "Demo Shopper",
+            email: session.user.email || "demo@gts.ng",
+            phone: null,
+          });
+        } else {
+          setUser(session.user);
+          if (session.access_token) {
+            localStorage.setItem("gts_customer_user", JSON.stringify(session.user));
+            localStorage.setItem("gts_customer_token", session.access_token);
+          }
+          if (session.user.email) {
+            fetchCustomerData(session.user.id, session.user.email, session.user.user_metadata);
+          }
         }
-        if (session.user.email) {
-          fetchCustomerData(session.user.id, session.user.email, session.user.user_metadata);
-        }
+      } else if (isDemo) {
+        setCustomer({
+          id: "demo-user",
+          user_id: "demo-user",
+          full_name: "Demo Shopper",
+          email: "demo@gts.ng",
+          phone: null,
+        });
       }
       setIsLoading(false);
     });
@@ -153,24 +241,83 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
-      if (session?.user) {
-        setUser(session.user);
-        if (session.access_token) {
-          document.cookie = `gts_access_token=${session.access_token}; path=/; max-age=604800; SameSite=Lax`;
-          localStorage.setItem("gts_user", JSON.stringify(session.user));
-          localStorage.setItem("gts_token", session.access_token);
-        }
-        if (session.user.email) {
-          fetchCustomerData(session.user.id, session.user.email, session.user.user_metadata);
-        }
-      } else {
-        // Only clear if no valid session
+      const isDemo =
+        typeof window !== "undefined" &&
+        (localStorage.getItem("gts_demo_mode") === "true" ||
+          document.cookie.includes("gts_demo_mode=true"));
+
+      if (event === "SIGNED_OUT") {
+        const oldUserId = user?.id || customer?.id;
         setUser(null);
         setCustomer(null);
         setSavedAddresses([]);
-        document.cookie = "gts_access_token=; path=/; max-age=0; SameSite=Lax";
-        localStorage.removeItem("gts_user");
-        localStorage.removeItem("gts_token");
+        localStorage.removeItem("gts_customer_user");
+        localStorage.removeItem("gts_customer_token");
+        localStorage.removeItem("gts_demo_mode");
+        if (typeof document !== "undefined") {
+          document.cookie = "gts_customer_token=; path=/; max-age=0";
+          document.cookie = "gts_access_token=; path=/; max-age=0";
+          document.cookie = "gts_demo_mode=; path=/; max-age=0";
+        }
+        clearCustomerNotifications(oldUserId);
+        setIsLoading(false);
+        return;
+      }
+
+      if (session?.user) {
+        if (isDemo) {
+          const demoObj = { ...session.user, role: "customer", full_name: "Demo Shopper", is_demo: true };
+          setUser(demoObj as any);
+          setCustomer({
+            id: session.user.id,
+            user_id: session.user.id,
+            full_name: "Demo Shopper",
+            email: session.user.email || "demo@gts.ng",
+            phone: null,
+          });
+        } else {
+          setUser(session.user);
+          if (session.access_token) {
+            localStorage.setItem("gts_customer_user", JSON.stringify(session.user));
+            localStorage.setItem("gts_customer_token", session.access_token);
+          }
+          if (session.user.email) {
+            fetchCustomerData(session.user.id, session.user.email, session.user.user_metadata);
+          }
+        }
+      } else if (isDemo) {
+        // Keep demo shopper active on refresh
+        const savedUserStr = localStorage.getItem("gts_customer_user");
+        let u = {
+          id: "demo-user",
+          email: "demo@gts.ng",
+          role: "customer",
+          full_name: "Demo Shopper",
+          is_demo: true,
+        };
+        if (savedUserStr) {
+          try {
+            const parsed = JSON.parse(savedUserStr);
+            if (parsed?.is_demo) u = { ...u, ...parsed };
+          } catch {}
+        }
+        setUser(u as any);
+        setCustomer({
+          id: u.id,
+          user_id: u.id,
+          full_name: "Demo Shopper",
+          email: u.email || "demo@gts.ng",
+          phone: null,
+        });
+      } else {
+        // Only clear if no valid session
+        const oldUserId = user?.id || customer?.id;
+        setUser(null);
+        setCustomer(null);
+        setSavedAddresses([]);
+        localStorage.removeItem("gts_customer_user");
+        localStorage.removeItem("gts_customer_token");
+        clearCustomerNotifications(oldUserId);
       }
       setIsLoading(false);
     });
@@ -195,9 +342,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data.user) {
         setUser(data.user);
         if (data.session) {
-          document.cookie = `gts_access_token=${data.session.access_token}; path=/; max-age=604800; SameSite=Lax`;
-          localStorage.setItem("gts_user", JSON.stringify(data.user));
-          localStorage.setItem("gts_token", data.session.access_token);
+          localStorage.setItem("gts_customer_user", JSON.stringify(data.user));
+          localStorage.setItem("gts_customer_token", data.session.access_token);
         }
         if (data.user.email) {
           await fetchCustomerData(data.user.id, data.user.email);
@@ -266,6 +412,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    const oldUserId = user?.id || customer?.id;
     try {
       await supabase.auth.signOut();
     } catch {
@@ -274,13 +421,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setCustomer(null);
     setSavedAddresses([]);
-    document.cookie = "gts_access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    document.cookie = "gts_user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    localStorage.removeItem("gts_user");
-    localStorage.removeItem("gts_token");
+    localStorage.removeItem("gts_customer_user");
+    localStorage.removeItem("gts_customer_token");
+    localStorage.removeItem("gts_demo_mode");
+    if (typeof document !== "undefined") {
+      document.cookie = "gts_customer_token=; path=/; max-age=0";
+      document.cookie = "gts_access_token=; path=/; max-age=0";
+      document.cookie = "gts_demo_mode=; path=/; max-age=0";
+    }
+    clearCustomerNotifications(oldUserId);
     // The cached catalogue belonged to the signed-in data set (e.g. the demo store).
     try {
       sessionStorage.removeItem(CATALOGUE_CACHE_KEY);
+      sessionStorage.removeItem("gts_catalogue_v1");
+      localStorage.removeItem("gts_catalogue_v1");
     } catch {
       // storage blocked
     }

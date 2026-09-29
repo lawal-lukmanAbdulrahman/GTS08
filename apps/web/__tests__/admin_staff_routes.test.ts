@@ -295,6 +295,7 @@ describe("DELETE /api/v1/users/:id (remove a staff member)", () => {
   const del = () => DELETE(new NextRequest("http://localhost:3000/api/v1/users/u1", { method: "DELETE" }), ctx());
   const OTHER_ADMIN = { ...CASHIER_ROW, role: "admin", is_super_admin: false, is_demo: false };
   beforeEach(() => {
+    mockRequireAdmin.mockReset().mockResolvedValue(SUPER);
     mockRequireSuperAdmin.mockReset().mockResolvedValue(SUPER);
     mockLog.mockReset();
     mockAuthUpdate.mockReset().mockResolvedValue({ error: null });
@@ -302,9 +303,9 @@ describe("DELETE /api/v1/users/:id (remove a staff member)", () => {
     calls.length = 0;
   });
 
-  it("is for the super admin only", async () => {
+  it("is for admins only", async () => {
     const { NextResponse } = await import("next/server");
-    mockRequireSuperAdmin.mockResolvedValue({ ok: false, response: NextResponse.json({ code: "SUPER_ADMIN_ONLY" }, { status: 403 }) });
+    mockRequireAdmin.mockResolvedValue({ ok: false, response: NextResponse.json({ code: "FORBIDDEN" }, { status: 403 }) });
     expect((await del()).status).toBe(403);
     expect(mockAuthUpdate).not.toHaveBeenCalled();
   });
@@ -325,11 +326,20 @@ describe("DELETE /api/v1/users/:id (remove a staff member)", () => {
     expect((await del()).status).toBe(200);
   });
 
+  it("allows regular admins to remove cashiers, but restricts removing admins to super admin", async () => {
+    mockRequireAdmin.mockResolvedValue({ ...ADMIN, isSuperAdmin: false });
+    results.users = { data: OTHER_ADMIN, error: null };
+    expect((await del()).status).toBe(403);
+
+    results.users = { data: { ...CASHIER_ROW, is_demo: false }, error: null };
+    expect((await del()).status).toBe(200);
+  });
+
   it("won't remove the super admin or the caller themself", async () => {
     results.users = { data: { ...OTHER_ADMIN, is_super_admin: true }, error: null };
     expect((await del()).status).toBe(400);
     results.users = { data: OTHER_ADMIN, error: null };
-    mockRequireSuperAdmin.mockResolvedValue({ ...SUPER, user: { id: "e4774cdd-a079-4f86-814e-8b9140bb6db4" } });
+    mockRequireAdmin.mockResolvedValue({ ...SUPER, user: { id: "e4774cdd-a079-4f86-814e-8b9140bb6db4" } });
     expect((await del()).status).toBe(400);
     expect(mockAuthUpdate).not.toHaveBeenCalled();
   });

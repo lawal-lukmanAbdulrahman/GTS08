@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { ProductCard } from "../ui/product-card";
 import { useCatalogue } from "../catalogue-context";
 
@@ -30,9 +30,6 @@ export function NewArrivals() {
         .slice(0, 9),
     [catalogue]
   );
-  const [wishlisted, setWishlisted] = useState<Record<string, boolean>>({});
-  const toggleWishlist = (id: string) =>
-    setWishlisted((prev) => ({ ...prev, [id]: !prev[id] }));
 
   return (
     <section className="w-full pt-1 sm:pt-2 md:pt-3 pb-3 sm:pb-10 md:pb-12">
@@ -112,8 +109,6 @@ export function NewArrivals() {
                     reviews={product.reviews}
                     image={product.image}
                     hasTransparentBg={product.hasTransparentBg}
-                    isWishlisted={wishlisted[product.id]}
-                    onToggleWishlist={toggleWishlist}
                     className="w-full max-w-[165px] sm:max-w-[190px]"
                   />
                 </div>

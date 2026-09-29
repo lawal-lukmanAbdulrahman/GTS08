@@ -8,7 +8,13 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    setupFiles: [],
+    setupFiles: ["./test-setup.ts"],
+    pool: "threads",
+    poolOptions: {
+      threads: {
+        singleThread: true,
+      },
+    },
     exclude: ["**/node_modules/**", "**/.next/**", "e2e/**"], // Playwright specs run with `pnpm test:e2e`
   },
   resolve: {

@@ -48,13 +48,15 @@ export function middleware(request: NextRequest) {
     if (role === "cashier") return "/pos";
     if (role === "inventory_staff") return "/inventory";
     if (role === "pending") return "/pending";
+    if (role === "customer") return "/login?reason=customer_not_allowed";
     return "/admin";
   };
 
   // If user accesses the root "/"
   if (pathname === "/") {
-    if (!token) {
+    if (!token || role === "customer") {
       const loginUrl = new URL("/login", request.url);
+      if (role === "customer") loginUrl.searchParams.set("reason", "customer_not_allowed");
       const res = NextResponse.redirect(loginUrl);
       applyDashboardSecurityHeaders(res.headers);
       return res;
@@ -71,9 +73,9 @@ export function middleware(request: NextRequest) {
     return res;
   }
 
-  // If user visits "/login" while already authenticated
+  // If user visits "/login" while already authenticated as staff
   if (pathname.startsWith("/login")) {
-    if (token) {
+    if (token && role && role !== "customer") {
       const res = NextResponse.redirect(new URL(getRoleRedirect(), request.url));
       applyDashboardSecurityHeaders(res.headers);
       return res;
@@ -83,10 +85,14 @@ export function middleware(request: NextRequest) {
     return res;
   }
 
-  // Protected portal routes: redirect unauthenticated users to /login
-  if (!token) {
+  // Protected portal routes: redirect unauthenticated users or customers to /login
+  if (!token || role === "customer") {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
+    if (role === "customer") {
+      loginUrl.searchParams.set("reason", "customer_not_allowed");
+    } else {
+      loginUrl.searchParams.set("redirect", pathname);
+    }
     const res = NextResponse.redirect(loginUrl);
     applyDashboardSecurityHeaders(res.headers);
     return res;

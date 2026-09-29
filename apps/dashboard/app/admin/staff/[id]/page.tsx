@@ -11,7 +11,6 @@ import { apiCall } from "../../../lib/staff-api";
 import { useLive } from "../../../lib/use-live";
 import type { ActivityEntryView, PermissionsView, SalesRangeId, SalesRecordView } from "../../../lib/staff-types";
 import PermissionEditor from "./permission-editor";
-import RemoveStaff from "./remove-staff";
 import { getSessionUser } from "../../../lib/session";
 
 interface StaffRecord {
@@ -35,10 +34,10 @@ export default function StaffRecordPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   // Only the super admin may block other admins or remove anyone; never themself, never the super admin.
-  const [viewer, setViewer] = useState<{ id: string; isSuper: boolean } | null>(null);
+  const [viewer, setViewer] = useState<{ id: string; isSuper: boolean; role?: string } | null>(null);
   useEffect(() => {
     const me = getSessionUser();
-    setViewer(me ? { id: me.id, isSuper: me.is_super_admin === true } : null);
+    setViewer(me ? { id: me.id, isSuper: me.is_super_admin === true, role: me.role } : null);
   }, []);
   const [range, setRange] = useState<SalesRangeId>("today");
   // Kept live: a sale, a void or a sign-in shows up here within seconds, without a reload.
@@ -56,7 +55,20 @@ export default function StaffRecordPage() {
   }
 
   const profile = record?.profile;
-  const superControls = !!viewer?.isSuper && !!profile && !profile.is_super_admin && profile.id !== viewer.id;
+  const isViewerAdmin = viewer?.role === "admin" || viewer?.isSuper === true;
+  const canBlock =
+    isViewerAdmin &&
+    !!profile &&
+    profile.id !== viewer?.id &&
+    !profile.is_super_admin &&
+    (profile.role !== "admin" || viewer?.isSuper === true);
+
+  const canDelete =
+    isViewerAdmin &&
+    !!profile &&
+    profile.id !== viewer?.id &&
+    !profile.is_super_admin &&
+    (profile.role !== "admin" || viewer?.isSuper === true);
   const name = profile?.full_name || profile?.email || "Staff member";
 
   return (
@@ -97,20 +109,14 @@ export default function StaffRecordPage() {
               isBlocked={profile.is_blocked}
               onSavePermissions={(changes) => patch({ permissions: changes })}
               onSetBlocked={(blocked) => patch({ is_blocked: blocked })}
-              canBlockAdmin={superControls}
+              canBlockAdmin={canBlock}
+              canDelete={canDelete}
+              onDelete={async () => {
+                const r = await apiCall(`/users/${id}`, { method: "DELETE" });
+                return r.ok ? { ok: true as const } : { ok: false as const, message: r.message };
+              }}
+              onDeleted={() => router.push("/admin/staff")}
             />
-            {superControls && (
-              <div className="border-t border-gray-200 dark:border-[#262626] pt-4">
-                <RemoveStaff
-                  name={name}
-                  onRemove={async () => {
-                    const r = await apiCall(`/users/${id}`, { method: "DELETE" });
-                    return r.ok ? { ok: true as const } : { ok: false as const, message: r.message };
-                  }}
-                  onRemoved={() => router.push("/admin/staff")}
-                />
-              </div>
-            )}
           </section>
 
           <section className="space-y-3">

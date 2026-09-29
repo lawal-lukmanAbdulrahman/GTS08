@@ -69,8 +69,9 @@ interface VariantRow {
   color: string | null;
   sku: string | null;
   price_modifier: number;
+  is_active?: boolean;
   inventory: { quantity: number; reserved_quantity: number } | null;
-  product: { id: string; name: string; base_price: number };
+  product: { id: string; name: string; base_price: number; status?: string };
 }
 
 function stockFailureResponse(
@@ -141,9 +142,9 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     .from("product_variants")
     .select(
       `
-      id, size, color, sku, price_modifier,
+      id, size, color, sku, price_modifier, is_active,
       inventory(quantity, reserved_quantity),
-      product:products(id, name, base_price)
+      product:products(id, name, base_price, status)
       `
     )
     .in("id", variantIds);
@@ -160,6 +161,17 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: `Product variant not found: ${missing.variant_id}`, code: "VARIANT_NOT_FOUND" },
       { status: 400 }
+    );
+  }
+
+  const unavailable = items.find((i) => {
+    const v = variantById.get(i.variant_id);
+    return !v || v.is_active === false || (v.product && v.product.status && v.product.status !== "active");
+  });
+  if (unavailable) {
+    return NextResponse.json(
+      { error: "One or more items in this sale are no longer available.", code: "ITEM_UNAVAILABLE", details: { variant_id: unavailable.variant_id } },
+      { status: 409 }
     );
   }
 
@@ -246,11 +258,15 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     }
   }
 
+  const now = new Date().toISOString();
   const { data: order, error: orderError } = await serviceClient
     .from("orders")
     .insert({
       channel: "walk_in",
-      status: "completed",
+      status: "collected",
+      payment_status: "paid",
+      payment_method: paymentMethod,
+      paid_confirmed_by: access.user.id,
       customer_id: customerId,
       promo_code: null,
       subtotal: totals.subtotal,
@@ -258,7 +274,9 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       delivery_fee: 0,
       total: totals.total,
       cashier_id: access.user.id,
-      paid_at: new Date().toISOString(),
+      paid_at: now,
+      ready_for_pickup_at: now,
+      delivered_at: now,
     })
     .select("id, order_number, total, status")
     .single();
@@ -290,7 +308,18 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       },
     };
   });
-  await serviceClient.from("order_items").insert(orderItemsPayload);
+  const { error: itemsErr } = await serviceClient.from("order_items").insert(orderItemsPayload);
+  if (itemsErr) {
+    await serviceClient.from("orders").update({ status: "cancelled", internal_notes: "Cancelled: order lines could not be saved." }).eq("id", createdOrder.id);
+    await rollback(serviceClient, stockChanges);
+    if (/foreign key|violates foreign key|23503|not-null|does not exist|violates not-null/i.test(itemsErr.message)) {
+      return NextResponse.json(
+        { error: "An item in this sale is no longer available.", code: "ITEM_UNAVAILABLE" },
+        { status: 409 }
+      );
+    }
+    return dbError(itemsErr, "DATABASE_ERROR", 500);
+  }
 
   await serviceClient.from("transactions").insert({
     order_id: createdOrder.id,

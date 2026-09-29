@@ -5,7 +5,7 @@ const WAT_MS = 3_600_000; // Lagos is UTC+1 all year
 const MAX_RANGE_DAYS = 366;
 
 /** Orders that count as money received. Unpaid, cancelled and voided ones never do. */
-export const PAID_STATUSES = ["paid", "confirmed", "processing", "shipped", "delivered", "completed"];
+export const PAID_STATUSES = ["paid", "confirmed", "processing", "shipped", "delivered", "completed", "collected"];
 
 export interface Period {
   key: string;

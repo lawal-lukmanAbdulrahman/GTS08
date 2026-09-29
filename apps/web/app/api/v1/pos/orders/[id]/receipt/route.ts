@@ -71,7 +71,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       { status: 403 }
     );
   }
-  if (order.status !== "completed" || !paid) {
+  const isCompletedSale = order.status === "completed" || order.status === "collected";
+  if (!isCompletedSale || !paid) {
     return NextResponse.json(
       { error: "A receipt can only be reprinted for a completed, paid sale.", code: "NOT_PRINTABLE" },
       { status: 409 }

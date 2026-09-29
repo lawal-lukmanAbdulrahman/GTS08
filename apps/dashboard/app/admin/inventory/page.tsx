@@ -236,6 +236,21 @@ export default function AdminInventoryPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showFilterPopover]);
 
+  // Close modals & drawers on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (adjustModalItem) setAdjustModalItem(null);
+        if (thresholdModalItem) setThresholdModalItem(null);
+        if (showBulkAdjustModal) setShowBulkAdjustModal(false);
+        if (showMovementsDrawer) setShowMovementsDrawer(false);
+        if (openActionMenuId) setOpenActionMenuId(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [adjustModalItem, thresholdModalItem, showBulkAdjustModal, showMovementsDrawer, openActionMenuId]);
+
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
@@ -1288,7 +1303,19 @@ export default function AdminInventoryPage() {
 
                         {/* Total Physical Stock */}
                         <td className="py-3 px-3 font-mono font-medium text-gray-700 dark:text-gray-300">
-                          {item.quantity}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAdjustModalItem(item);
+                              setAdjustType("add");
+                              setAdjustQty("");
+                              setAdjustReason("restock");
+                            }}
+                            className="hover:underline hover:text-[#0070F3] dark:hover:text-[#EDCF5D] cursor-pointer"
+                            title="Click to adjust stock"
+                          >
+                            {item.quantity}
+                          </button>
                         </td>
 
                         {/* Reserved Stock */}
@@ -1531,168 +1558,409 @@ export default function AdminInventoryPage() {
         </div>
       )}
 
-      {/* ────── STOCK ADJUSTMENT MODAL ────── */}
-      {adjustModalItem && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-[#1C1C1C] border border-gray-200 dark:border-[#333333] rounded-2xl p-5 sm:p-6 max-w-lg w-full space-y-4 shadow-2xl font-sans">
-            <div className="flex items-start justify-between border-b border-gray-100 dark:border-[#282828] pb-3">
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-                  Adjust Inventory Stock
-                </h2>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {adjustModalItem.product_name} ({adjustModalItem.sku || "Standard"})
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAdjustModalItem(null)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-white text-base font-bold p-1 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
+      {/* ────── STOCK ADJUSTMENT SLIDE-OVER DRAWER ────── */}
+      {adjustModalItem && (() => {
+        const currentStock = adjustModalItem.quantity;
+        const parsedInputQty = parseInt(adjustQty, 10);
+        const hasValidNumber = !isNaN(parsedInputQty) && parsedInputQty >= 0;
+        const inputQty = hasValidNumber ? parsedInputQty : 0;
+        const hasEnteredQty = adjustQty.trim() !== "" && hasValidNumber;
 
-            <form onSubmit={handleConfirmStockAdjustment} className="space-y-4 text-xs">
-              {/* Segmented Adjustment Mode: Add / Remove / Set */}
-              <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                  Adjustment Mode
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: "add", label: "+ Add Stock", desc: "Shipment / Restock" },
-                    { id: "remove", label: "- Remove Stock", desc: "Damage / Loss" },
-                    { id: "set", label: "= Set Exact Total", desc: "Audit Count" },
-                  ].map((mode) => (
-                    <button
-                      key={mode.id}
-                      type="button"
-                      onClick={() => setAdjustType(mode.id as any)}
-                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                        adjustType === mode.id
-                          ? "bg-[#010101] dark:bg-[#EDCF5D] text-white dark:text-black border-transparent font-bold shadow-md"
-                          : "bg-gray-50 dark:bg-[#242424] border-gray-200 dark:border-[#333333] text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2C2C2C]"
-                      }`}
-                    >
-                      <div className="font-bold text-xs">{mode.label}</div>
-                      <div className="text-[10px] opacity-75">{mode.desc}</div>
-                    </button>
-                  ))}
+        let projectedStock = currentStock;
+        let mathFormula = `${currentStock} units`;
+        let deltaBadge = "";
+
+        if (adjustType === "add") {
+          projectedStock = currentStock + (hasEnteredQty ? inputQty : 0);
+          mathFormula = `${currentStock} + ${hasEnteredQty ? inputQty : 0} = ${projectedStock} units`;
+          deltaBadge = hasEnteredQty && inputQty > 0 ? `+${inputQty}` : "+0";
+        } else if (adjustType === "remove") {
+          projectedStock = Math.max(0, currentStock - (hasEnteredQty ? inputQty : 0));
+          mathFormula = `${currentStock} - ${hasEnteredQty ? inputQty : 0} = ${projectedStock} units`;
+          deltaBadge = hasEnteredQty && inputQty > 0 ? `-${inputQty}` : "-0";
+        } else {
+          projectedStock = hasEnteredQty ? inputQty : currentStock;
+          mathFormula = `Set directly: ${projectedStock} units`;
+          const diff = projectedStock - currentStock;
+          deltaBadge = diff > 0 ? `+${diff}` : diff < 0 ? `${diff}` : "0";
+        }
+
+        const isSubmitDisabled =
+          adjustSubmitting ||
+          !adjustQty ||
+          isNaN(parsedInputQty) ||
+          parsedInputQty < 0 ||
+          (adjustType !== "set" && parsedInputQty === 0);
+
+        const handleModeChange = (mode: "add" | "remove" | "set") => {
+          setAdjustType(mode);
+          if (mode === "add") {
+            setAdjustReason("restock");
+          } else if (mode === "remove") {
+            setAdjustReason("write_off");
+          } else if (mode === "set") {
+            setAdjustReason("adjustment");
+          }
+        };
+
+        const handleStepQuantity = (delta: number) => {
+          const currentVal = parseInt(adjustQty, 10);
+          const base = isNaN(currentVal) ? 0 : currentVal;
+          const nextVal = Math.max(0, base + delta);
+          setAdjustQty(nextVal.toString());
+        };
+
+        const handleAddPreset = (num: number) => {
+          const currentVal = parseInt(adjustQty, 10);
+          const base = isNaN(currentVal) ? 0 : currentVal;
+          setAdjustQty((base + num).toString());
+        };
+
+        const variantImg = resolveVariantImage(
+          adjustModalItem.product_name,
+          adjustModalItem.variant_color,
+          adjustModalItem.image
+        );
+
+        return (
+          <div className="fixed inset-0 z-50 overflow-hidden font-sans">
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+              onClick={() => !adjustSubmitting && setAdjustModalItem(null)}
+            />
+
+            {/* Slide-over Panel Anchored Right */}
+            <div className="fixed inset-y-0 right-0 max-w-full flex pl-10 pointer-events-none">
+              <div className="w-screen max-w-md bg-white dark:bg-[#161618] border-l border-gray-200 dark:border-zinc-800 shadow-2xl flex flex-col h-full pointer-events-auto animate-in slide-in-from-right duration-250">
+                {/* Drawer Header */}
+                <div className="p-4 sm:p-5 border-b border-gray-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-zinc-800/80 border border-gray-200/80 dark:border-zinc-700/60 flex items-center justify-center shrink-0 overflow-hidden">
+                      {variantImg ? (
+                        <img
+                          src={variantImg}
+                          alt={adjustModalItem.product_name}
+                          className="w-full h-full object-contain p-0.5"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <span className="font-bold text-xs text-gray-400">
+                          {adjustModalItem.product_name.slice(0, 2).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-base font-bold text-gray-900 dark:text-white truncate">
+                          Adjust Stock
+                        </h2>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-zinc-700 shrink-0">
+                          {adjustModalItem.sku || "Standard"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                        {adjustModalItem.product_name}
+                        {(adjustModalItem.variant_size || adjustModalItem.variant_color) && (
+                          <span className="ml-1 opacity-75 font-mono text-[11px]">
+                            ({[adjustModalItem.variant_size, adjustModalItem.variant_color].filter(Boolean).join(" · ")})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAdjustModalItem(null)}
+                    aria-label="Close drawer"
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
-              </div>
 
-              {/* Quantity Input + Quick Booster Buttons */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="font-semibold text-gray-700 dark:text-gray-300">
-                    Quantity ({adjustType === "set" ? "New Total Count" : "Units to adjust"})
-                  </label>
-                  <span className="font-mono text-[11px] text-gray-400">
-                    Current: {adjustModalItem.quantity} units
-                  </span>
-                </div>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  value={adjustQty}
-                  onChange={(e) => setAdjustQty(e.target.value)}
-                  placeholder="Enter unit count..."
-                  className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#333333] text-sm text-gray-900 dark:text-white font-mono focus:outline-none focus:border-[#EDCF5D]"
-                />
+                {/* Form & Scrollable Body */}
+                <form onSubmit={handleConfirmStockAdjustment} className="flex flex-col flex-1 min-h-0">
+                  <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 [scrollbar-width:thin]">
+                    {/* Live Outcome Badge ("Current -> New") */}
+                    <div className="rounded-2xl p-4 bg-gray-50 dark:bg-zinc-900/70 border border-gray-200/90 dark:border-zinc-800 space-y-3">
+                      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 font-medium">
+                        <span>Stock Impact Preview</span>
+                        <span className="font-mono text-[11px] text-gray-400">
+                          Reserved: {adjustModalItem.reserved_quantity || 0} units
+                        </span>
+                      </div>
 
-                {/* Quick Booster Chips */}
-                {adjustType !== "set" && (
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <span className="text-[11px] text-gray-400 mr-1">Quick Add:</span>
-                    {[5, 10, 25, 50, 100].map((num) => (
-                      <button
-                        key={num}
-                        type="button"
-                        onClick={() => setAdjustQty(((parseInt(adjustQty, 10) || 0) + num).toString())}
-                        className="px-2 py-0.5 rounded bg-gray-100 dark:bg-[#282828] text-gray-700 dark:text-gray-300 text-[11px] font-mono hover:bg-[#EDCF5D] hover:text-black font-semibold transition-colors cursor-pointer"
+                      <div className="flex items-center justify-between gap-3">
+                        {/* Current Stock */}
+                        <div className="flex-1 bg-white dark:bg-zinc-800/80 rounded-xl p-3 border border-gray-200/70 dark:border-zinc-700/60 text-center">
+                          <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Current
+                          </div>
+                          <div className="text-xl font-bold font-mono text-gray-900 dark:text-white mt-0.5">
+                            {currentStock}
+                          </div>
+                          <div className="text-[10px] text-gray-400 font-mono mt-0.5">units in stock</div>
+                        </div>
+
+                        {/* Arrow & Delta Pill */}
+                        <div className="flex flex-col items-center justify-center shrink-0">
+                          <div
+                            className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
+                              adjustType === "add" && hasEnteredQty && inputQty > 0
+                                ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800"
+                                : adjustType === "remove" && hasEnteredQty && inputQty > 0
+                                ? "bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800"
+                                : "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800"
+                            }`}
+                          >
+                            {deltaBadge}
+                          </div>
+                          <svg className="w-5 h-5 text-gray-400 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                          </svg>
+                        </div>
+
+                        {/* After Update Stock */}
+                        <div className="flex-1 bg-white dark:bg-zinc-800/80 rounded-xl p-3 border border-gray-200/70 dark:border-zinc-700/60 text-center ring-2 ring-[#EDCF5D]/50 dark:ring-[#EDCF5D]/40">
+                          <div className="text-[11px] font-semibold text-amber-600 dark:text-[#EDCF5D] uppercase tracking-wider">
+                            After Update
+                          </div>
+                          <div className="text-xl font-bold font-mono text-gray-900 dark:text-white mt-0.5">
+                            {projectedStock}
+                          </div>
+                          <div className="text-[10px] text-gray-400 font-mono mt-0.5">projected total</div>
+                        </div>
+                      </div>
+
+                      {/* Formula Breakdown Badge */}
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-200/60 dark:border-zinc-800/80 font-mono text-xs">
+                        <span className="text-gray-400 text-[11px]">Calculation:</span>
+                        <span className="font-semibold text-gray-800 dark:text-zinc-200 bg-white dark:bg-zinc-800 px-2 py-0.5 rounded border border-gray-200 dark:border-zinc-700 text-[11.5px]">
+                          {mathFormula}
+                        </span>
+                      </div>
+
+                      {/* Deduction warning if exceeds stock */}
+                      {adjustType === "remove" && hasEnteredQty && inputQty > currentStock && (
+                        <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-[11px] flex items-center gap-2">
+                          <svg className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <span>Deduction exceeds current stock ({currentStock} units). Stock will be clamped to 0.</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Streamlined Operation Selector */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Operation Mode
+                      </label>
+                      <div className="grid grid-cols-3 p-1 rounded-xl bg-gray-100 dark:bg-zinc-800/90 border border-gray-200/80 dark:border-zinc-700/80">
+                        <button
+                          type="button"
+                          onClick={() => handleModeChange("add")}
+                          className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                            adjustType === "add"
+                              ? "bg-white dark:bg-zinc-900 text-gray-900 dark:text-[#EDCF5D] shadow-xs"
+                              : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                          }`}
+                        >
+                          <span className="text-emerald-500 font-extrabold text-sm leading-none">+</span>
+                          <span>Add Stock</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleModeChange("remove")}
+                          className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                            adjustType === "remove"
+                              ? "bg-white dark:bg-zinc-900 text-gray-900 dark:text-rose-400 shadow-xs"
+                              : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                          }`}
+                        >
+                          <span className="text-rose-500 font-extrabold text-sm leading-none">−</span>
+                          <span>Remove</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleModeChange("set")}
+                          className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                            adjustType === "set"
+                              ? "bg-white dark:bg-zinc-900 text-gray-900 dark:text-[#EDCF5D] shadow-xs"
+                              : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                          }`}
+                        >
+                          <span className="text-blue-500 font-extrabold text-sm leading-none">=</span>
+                          <span>Set Total</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Quantity Controls & Quick Presets */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="adjust-qty-input" className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                          {adjustType === "set" ? "New Total Count" : "Units to Adjust"}
+                        </label>
+                        <span className="font-mono text-[11px] text-gray-400">
+                          {adjustType === "set" ? "Sets exact physical count" : "Units added or deducted"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleStepQuantity(-1)}
+                          disabled={!adjustQty || parseInt(adjustQty, 10) <= 0}
+                          aria-label="Decrement quantity"
+                          className="w-11 h-11 rounded-xl border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/80 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-700 flex items-center justify-center font-bold text-lg disabled:opacity-30 disabled:pointer-events-none cursor-pointer transition-colors shrink-0"
+                        >
+                          −
+                        </button>
+                        <div className="relative flex-1">
+                          <input
+                            id="adjust-qty-input"
+                            type="number"
+                            required
+                            min="0"
+                            value={adjustQty}
+                            onChange={(e) => setAdjustQty(e.target.value)}
+                            placeholder="0"
+                            className="w-full h-11 px-3 rounded-xl bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 text-center font-mono text-base font-bold text-gray-900 dark:text-white focus:outline-none focus:border-[#EDCF5D] focus:ring-1 focus:ring-[#EDCF5D]"
+                          />
+                          <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 font-mono pointer-events-none">
+                            units
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleStepQuantity(1)}
+                          aria-label="Increment quantity"
+                          className="w-11 h-11 rounded-xl border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/80 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-700 flex items-center justify-center font-bold text-lg cursor-pointer transition-colors shrink-0"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      {/* Quick Booster Presets */}
+                      <div className="pt-1">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[11px] text-gray-400">Quick presets:</span>
+                          {adjustQty && (
+                            <button
+                              type="button"
+                              onClick={() => setAdjustQty("")}
+                              className="text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {[5, 10, 25, 50, 100].map((num) => (
+                            <button
+                              key={num}
+                              type="button"
+                              onClick={() => handleAddPreset(num)}
+                              className="py-1.5 px-2 rounded-lg bg-gray-100 dark:bg-zinc-800/80 hover:bg-amber-100 dark:hover:bg-[#EDCF5D]/20 text-gray-700 dark:text-gray-300 hover:text-amber-800 dark:hover:text-[#EDCF5D] border border-gray-200/60 dark:border-zinc-700/60 text-xs font-mono font-semibold transition-colors cursor-pointer text-center"
+                            >
+                              +{num}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Reason Selector */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="adjust-reason-select" className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                          Reason for Adjustment
+                        </label>
+                        <span className="text-[11px] text-gray-400">
+                          {adjustType === "add"
+                            ? "Default: Restock"
+                            : adjustType === "remove"
+                            ? "Default: Damaged/Expired"
+                            : "Default: Audit Count"}
+                        </span>
+                      </div>
+                      <select
+                        id="adjust-reason-select"
+                        value={adjustReason}
+                        onChange={(e) => setAdjustReason(e.target.value)}
+                        className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-[#EDCF5D] focus:ring-1 focus:ring-[#EDCF5D] cursor-pointer"
                       >
-                        +{num}
-                      </button>
-                    ))}
+                        <option value="restock">Restock / New Warehouse Shipment</option>
+                        <option value="write_off">Damaged / Expired / Write Off</option>
+                        <option value="adjustment">Stock Count Audit Reconciliation</option>
+                        <option value="correction">Inventory Entry Correction</option>
+                        <option value="sale_pos">POS Terminal Offline Sale</option>
+                        <option value="return">Customer Return to Stock</option>
+                      </select>
+                    </div>
+
+                    {/* Audit Note / PO Reference Field */}
+                    <div className="space-y-1.5">
+                      <label htmlFor="adjust-notes-input" className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Audit Note / PO Reference <span className="font-normal text-gray-400">(Optional)</span>
+                      </label>
+                      <input
+                        id="adjust-notes-input"
+                        type="text"
+                        value={adjustNotes}
+                        onChange={(e) => setAdjustNotes(e.target.value)}
+                        placeholder="e.g., PO #8841 or Warehouse Bay 4 stock check"
+                        className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-[#EDCF5D] focus:ring-1 focus:ring-[#EDCF5D]"
+                      />
+                    </div>
                   </div>
-                )}
-              </div>
 
-              {/* Live Preview Box */}
-              {adjustQty && !isNaN(parseInt(adjustQty, 10)) && (
-                <div className="p-3 rounded-xl bg-[#F8F7F4] dark:bg-[#161616] border border-gray-200 dark:border-[#2A2A2A] flex items-center justify-between font-mono text-xs">
-                  <span className="text-gray-500 dark:text-gray-400">Projected Stock Level:</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-400">{adjustModalItem.quantity}</span>
-                    <span className="text-gray-400">→</span>
-                    <span className="font-bold text-emerald-600 dark:text-[#EDCF5D] text-sm">
-                      {adjustType === "add"
-                        ? adjustModalItem.quantity + parseInt(adjustQty, 10)
-                        : adjustType === "remove"
-                        ? Math.max(0, adjustModalItem.quantity - parseInt(adjustQty, 10))
-                        : parseInt(adjustQty, 10)}{" "}
-                      Units
-                    </span>
+                  {/* Sticky Footer */}
+                  <div className="p-4 sm:p-5 border-t border-gray-200/80 dark:border-zinc-800 bg-white dark:bg-[#161618] mt-auto flex items-center justify-end gap-3 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setAdjustModalItem(null)}
+                      disabled={adjustSubmitting}
+                      className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-800 text-gray-700 dark:text-gray-300 text-xs font-semibold hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      aria-label="Save Stock Adjustment"
+                      disabled={isSubmitDisabled}
+                      className="flex-1 py-2.5 px-4 rounded-xl bg-[#010101] dark:bg-[#EDCF5D] text-white dark:text-black text-xs font-bold shadow-md hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      {adjustSubmitting ? (
+                        <>
+                          <svg className="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          <span>Updating Stock...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Confirm &amp; Save ({projectedStock} Units)</span>
+                          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </>
+                      )}
+                    </button>
                   </div>
-                </div>
-              )}
-
-              {/* Reason Selector */}
-              <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                  Reason for Adjustment
-                </label>
-                <select
-                  value={adjustReason}
-                  onChange={(e) => setAdjustReason(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#333333] text-xs text-gray-900 dark:text-white focus:outline-none focus:border-[#EDCF5D] cursor-pointer"
-                >
-                  <option value="restock">Restock / New Warehouse Shipment</option>
-                  <option value="sale_pos">POS Terminal Offline Sale</option>
-                  <option value="adjustment">Stock Count Audit Reconciliation</option>
-                  <option value="correction">Inventory Entry Correction</option>
-                  <option value="write_off">Damaged / Expired / Write Off</option>
-                  <option value="return">Customer Return to Stock</option>
-                </select>
+                </form>
               </div>
-
-              {/* Notes Field */}
-              <div>
-                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                  Audit Notes / Reference (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={adjustNotes}
-                  onChange={(e) => setAdjustNotes(e.target.value)}
-                  placeholder="e.g., PO #8841 or Warehouse Bay 4 stock check"
-                  className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-[#161616] border border-gray-200 dark:border-[#333333] text-xs text-gray-900 dark:text-white focus:outline-none focus:border-[#EDCF5D]"
-                />
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100 dark:border-[#282828]">
-                <button
-                  type="button"
-                  onClick={() => setAdjustModalItem(null)}
-                  className="px-4 py-2 rounded-xl border border-gray-200 dark:border-[#333] text-gray-600 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-[#252525] cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={adjustSubmitting || !adjustQty}
-                  className="px-5 py-2 rounded-xl bg-[#010101] dark:bg-[#EDCF5D] text-white dark:text-black font-bold shadow-md hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
-                >
-                  {adjustSubmitting ? "Updating..." : "Save Stock Adjustment"}
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ────── EDIT LOW STOCK THRESHOLD MODAL ────── */}
       {thresholdModalItem && (

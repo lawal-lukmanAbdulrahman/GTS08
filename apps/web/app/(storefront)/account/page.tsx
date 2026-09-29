@@ -16,14 +16,19 @@ import {
 } from "../_components/auth/passkey-client";
 import { checkPasskeySupport } from "../_components/auth/webauthn-utils";
 import { PinInput } from "../_components/auth/pin-input";
-import { validateSqlSafe, sanitizeSafeText, idempotentFetch } from "@gts/utils";
+import { validateSqlSafe, sanitizeSafeText, idempotentFetch, getOrderPickupPin, formatPickupPin } from "@gts/utils";
 import {
   getStoredCookiePreferences,
   saveCookiePreferences,
 } from "@/../lib/cookie-preferences";
 import {
   getCustomerNotifications,
+  getCustomerDeletedNotifIds,
   markCustomerInboxSeen,
+  markCustomerNotificationRead,
+  archiveCustomerNotification,
+  deleteCustomerNotification,
+  saveCustomerNotifications,
 } from "../../../lib/notifications";
 
 interface OrderItem {
@@ -46,14 +51,21 @@ interface OrderRecord {
   id: string;
   order_number: string;
   channel: string;
-  status: "pending_payment" | "paid" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "completed";
+  status: string;
+  payment_status?: "unpaid" | "paid";
   subtotal: number;
   delivery_fee: number;
   discount_amount: number;
   total: number;
   created_at: string;
+  updated_at?: string | null;
+  ready_for_pickup_at?: string | null;
+  delivered_at?: string | null;
+  cancel_reason?: string | null;
   carrier_name?: string | null;
   tracking_number?: string | null;
+  pickup_deadline?: string | null;
+  pickup_station?: any;
   items?: OrderItem[];
   address?: any;
 }
@@ -69,7 +81,28 @@ const GTS_PICKUP_STATIONS = [
   { id: "ps_6", name: "GTS Hub - Tanke, Ilorin", address: "10 Rex Alaya Str, Balogun, Tanke", state: "Kwara", hours: "Mon - Sat (8am - 6pm)" },
 ];
 
+function cleanNoEmojis(text?: string | null): string {
+  if (!text) return "";
+  return text
+    .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
+function formatInboxDate(isoDate?: string | null): string {
+  if (!isoDate) return "";
+  try {
+    const d = new Date(isoDate);
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const day = d.getDate();
+    const month = months[d.getMonth()];
+    const hours = String(d.getHours()).padStart(2, "0");
+    const mins = String(d.getMinutes()).padStart(2, "0");
+    return `${day} ${month}, ${hours}:${mins}`;
+  } catch {
+    return "";
+  }
+}
 
 function AccountContent() {
   const router = useRouter();
@@ -245,6 +278,13 @@ function AccountContent() {
     reference?: string;
     orderNumber?: string;
     orderStatus?: string;
+    pickupPin?: string;
+    pickupStationName?: string;
+    pickupStationAddress?: string;
+    pickupDeadline?: string;
+    pickupHours?: string;
+    totalKobo?: number;
+    paymentStatus?: "unpaid" | "paid";
     productId: string;
     productName: string;
     productSlug: string;
@@ -259,11 +299,43 @@ function AccountContent() {
     messageCount?: number;
     senderName?: string;
     targetTab: "discussion" | "reviews" | "tracking";
+    isRead?: boolean;
+    isArchived?: boolean;
+    isDeleted?: boolean;
   }
 
   const [inboxItems, setInboxItems] = useState<InboxItem[]>([]);
   const [inboxLoading, setInboxLoading] = useState(false);
-  const [inboxFilter, setInboxFilter] = useState<"inquiries" | "orders" | "replies">("inquiries");
+  const [inboxTab, setInboxTab] = useState<"all" | "archived">("all");
+  const [selectedInboxItem, setSelectedInboxItem] = useState<InboxItem | null>(null);
+  const [activeInboxMenuId, setActiveInboxMenuId] = useState<string | null>(null);
+  const [modalQrCodeUrl, setModalQrCodeUrl] = useState<string | null>(null);
+  const [copiedModalPin, setCopiedModalPin] = useState(false);
+
+  useEffect(() => {
+    if (selectedInboxItem) {
+      const pin = selectedInboxItem.pickupPin;
+      const orderNumber = selectedInboxItem.orderNumber;
+      if (pin || orderNumber) {
+        const payload = pin
+          ? `GTS-COLLECT:${orderNumber || ""}:${pin}`
+          : `GTS-ORDER:${orderNumber || ""}`;
+        import("qrcode")
+          .then((QRCode) => {
+            QRCode.toDataURL(payload, {
+              width: 256,
+              margin: 1,
+              color: { dark: "#010101", light: "#FFFFFF" },
+            })
+              .then(setModalQrCodeUrl)
+              .catch(() => setModalQrCodeUrl(null));
+          })
+          .catch(() => setModalQrCodeUrl(null));
+        return;
+      }
+    }
+    setModalQrCodeUrl(null);
+  }, [selectedInboxItem]);
 
   // Automatically clear notification badges when user visits inbox
   useEffect(() => {
@@ -357,6 +429,139 @@ function AccountContent() {
     }
   }, [customer, user]);
 
+  // Synchronize orders into customer notifications for every milestone reached
+  const syncOrdersToInbox = (currentOrders: OrderRecord[]) => {
+    if (!Array.isArray(currentOrders)) return;
+    try {
+      const activeUserKey = user?.id || customer?.id;
+      const orderNumbers = new Set(currentOrders.map((o) => o.order_number).filter(Boolean));
+      const existingSaved = getCustomerNotifications(activeUserKey);
+      const deletedIds = getCustomerDeletedNotifIds(activeUserKey);
+      
+      // Clean out any notifications that don't belong to the current customer's orders
+      const updatedSaved = existingSaved.filter((n) => {
+        if (n.type === "order_advance") {
+          return n.orderNumber && orderNumbers.has(n.orderNumber);
+        }
+        return true;
+      });
+      let hasChanges = updatedSaved.length !== existingSaved.length;
+
+      for (const o of currentOrders) {
+        if (!o.id || !o.order_number) continue;
+        const pin = getOrderPickupPin(o);
+        const stationName = o.pickup_station?.name || "Main Store Collection Desk";
+        const stationAddress = o.pickup_station
+          ? [o.pickup_station.address_line1, o.pickup_station.city, o.pickup_station.state].filter(Boolean).join(", ")
+          : undefined;
+        const img = o.items?.[0]?.product_snapshot?.image || null;
+        const isPaid = o.status === "paid" || o.payment_status === "paid";
+
+        // Determine milestones this order has reached
+        const milestones: Array<{
+          step: string;
+          title: string;
+          message: string;
+          timestamp: string;
+        }> = [];
+
+        // 1. Placed (every active or completed order reached placed)
+        milestones.push({
+          step: "placed",
+          title: `Order #${o.order_number} Received & Awaiting Verification`,
+          message: `We have received your order #${o.order_number}. Our store team will verify availability and begin packaging shortly.`,
+          timestamp: o.created_at || new Date().toISOString(),
+        });
+
+        // 2. Confirmed (reached if confirmed, ready_for_pickup, collected, processing, paid, shipped, delivered)
+        if (["confirmed", "ready_for_pickup", "collected", "processing", "paid", "shipped", "delivered"].includes(o.status)) {
+          milestones.push({
+            step: "confirmed",
+            title: `Order #${o.order_number} Confirmed & Packaging Underway`,
+            message: `Your order #${o.order_number} has been confirmed! Our staff are packaging your items for collection.`,
+            timestamp: o.updated_at || o.created_at || new Date().toISOString(),
+          });
+        }
+
+        // 3. Ready for pickup (reached if ready_for_pickup, collected)
+        if (["ready_for_pickup", "collected"].includes(o.status)) {
+          milestones.push({
+            step: "ready_for_pickup",
+            title: `Order #${o.order_number} Ready for Pickup`,
+            message: `Your order #${o.order_number} is packaged and ready for collection! Bring your 6-digit collection PIN (${formatPickupPin(pin)}) or QR code to the pickup counter.`,
+            timestamp: o.ready_for_pickup_at || o.updated_at || o.created_at || new Date().toISOString(),
+          });
+        }
+
+        // 4. Collected (reached if collected or delivered)
+        if (o.status === "collected" || o.status === "delivered") {
+          milestones.push({
+            step: "collected",
+            title: `Order #${o.order_number} Collected - Thank You`,
+            message: `Your package has been successfully collected and verified. Thank you for shopping with GTS!`,
+            timestamp: o.delivered_at || o.updated_at || o.created_at || new Date().toISOString(),
+          });
+        }
+
+        // 5. Cancelled (if cancelled)
+        if (o.status === "cancelled") {
+          milestones.push({
+            step: "cancelled",
+            title: `Order #${o.order_number} Cancelled`,
+            message: `Order #${o.order_number} has been cancelled.${o.cancel_reason ? ` Reason: ${o.cancel_reason}` : ""}`,
+            timestamp: o.updated_at || o.created_at || new Date().toISOString(),
+          });
+        }
+
+        for (const m of milestones) {
+          const notifId = `order-msg-${o.id}-${m.step}`;
+          if (deletedIds.includes(notifId)) continue;
+
+          const existingIdx = updatedSaved.findIndex((n) => n.id === notifId);
+          if (existingIdx === -1) {
+            updatedSaved.push({
+              id: notifId,
+              type: "order_advance",
+              title: m.title,
+              message: m.message,
+              link: `/track?order_number=${o.order_number}`,
+              orderNumber: o.order_number,
+              orderStatus: m.step,
+              pickupPin: pin,
+              pickupStationName: stationName,
+              pickupStationAddress: stationAddress,
+              pickupDeadline: o.pickup_deadline || undefined,
+              pickupHours: o.pickup_station?.operating_hours || undefined,
+              totalKobo: o.total,
+              paymentStatus: isPaid ? "paid" : "unpaid",
+              productId: "",
+              productName: `Order #${o.order_number}`,
+              productSlug: o.order_number,
+              productImage: img,
+              createdAt: m.timestamp,
+              isRead: false,
+              isArchived: false,
+            });
+            hasChanges = true;
+          } else if (existingIdx >= 0 && updatedSaved[existingIdx]) {
+            const target = updatedSaved[existingIdx]!;
+            if (target.title !== m.title || target.message !== m.message) {
+              target.title = m.title;
+              target.message = m.message;
+              hasChanges = true;
+            }
+          }
+        }
+      }
+
+      if (hasChanges) {
+        saveCustomerNotifications(updatedSaved, activeUserKey);
+      }
+    } catch (err) {
+      console.warn("Failed to sync orders to inbox notifications:", err);
+    }
+  };
+
   // Fetch Customer Inbox from API & Realtime WebSockets
   useEffect(() => {
     const customerId = customer?.id;
@@ -419,23 +624,42 @@ function AccountContent() {
         } catch {}
 
         // Order advancement notifications & extra customer notifications
-        const customerNotifs = getCustomerNotifications();
+        const activeUserKey = user?.id || customer?.id;
+        const customerNotifs = getCustomerNotifications(activeUserKey);
+        const deletedIds = getCustomerDeletedNotifIds(activeUserKey);
+        const activeOrderNumbers = new Set(orders.map((o) => o.order_number).filter(Boolean));
         const orderNotifs: InboxItem[] = customerNotifs
-          .filter((n: any) => n.type === "order_advance")
+          .filter(
+            (n: any) =>
+              n.type === "order_advance" &&
+              !n.isDeleted &&
+              !deletedIds.includes(n.id) &&
+              (!n.orderNumber || activeOrderNumbers.size === 0 || activeOrderNumbers.has(n.orderNumber))
+          )
           .map((n: any) => ({
             id: n.id,
             type: "order_advance" as const,
             orderNumber: n.orderNumber,
             orderStatus: n.orderStatus,
+            pickupPin: n.pickupPin,
+            pickupStationName: n.pickupStationName,
+            pickupStationAddress: n.pickupStationAddress,
+            pickupDeadline: n.pickupDeadline,
+            pickupHours: n.pickupHours,
+            totalKobo: n.totalKobo,
+            paymentStatus: n.paymentStatus,
             productId: "",
             productName: `Order #${n.orderNumber || ""}`,
             productSlug: n.orderNumber || "",
-            productImage: null,
-            subject: n.title,
-            lastMessage: n.message,
+            productImage: n.productImage || null,
+            subject: cleanNoEmojis(n.title),
+            lastMessage: cleanNoEmojis(n.message),
             lastMessageAt: n.createdAt,
             lastSenderType: "staff" as const,
             targetTab: "tracking" as const,
+            isRead: !!n.isRead,
+            isArchived: !!n.isArchived,
+            isDeleted: !!n.isDeleted,
           }));
 
         const combined = [...inquiries, ...reviewNotifs, ...orderNotifs].sort(
@@ -452,6 +676,14 @@ function AccountContent() {
     };
 
     loadInbox(inboxLoadedRef.current);
+
+    const handleNotificationsUpdated = () => {
+      loadInbox(true);
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("gts_notifications_updated", handleNotificationsUpdated);
+      window.addEventListener("gts_notification_received", handleNotificationsUpdated);
+    }
 
     // ── Supabase Realtime WebSocket for Inbox / Discussions ──
     const inboxChannel = supabase.channel(`customer_inbox_${customerId || userId}`, {
@@ -490,19 +722,67 @@ function AccountContent() {
       loadInbox(true);
     });
 
+    inboxChannel.on("broadcast", { event: "order_status_updated" }, () => {
+      loadInbox(true);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("gts_order_placed"));
+      }
+    });
+
     inboxChannel.subscribe();
 
     return () => {
       supabase.removeChannel(inboxChannel);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("gts_notifications_updated", handleNotificationsUpdated);
+        window.removeEventListener("gts_notification_received", handleNotificationsUpdated);
+      }
     };
   }, [customer?.id, user?.id]);
 
-  const filteredInboxItems = inboxItems.filter((it) => {
-    if (inboxFilter === "inquiries") return it.type === "inquiry";
-    if (inboxFilter === "orders") return it.type === "order_advance";
-    if (inboxFilter === "replies") return it.type === "review_reply";
-    return true;
-  });
+  const activeInboxItems = inboxItems.filter((it) => !it.isDeleted && !it.isArchived);
+  const archivedInboxItems = inboxItems.filter((it) => !it.isDeleted && !!it.isArchived);
+  const currentInboxList = inboxTab === "all" ? activeInboxItems : archivedInboxItems;
+
+  const handleArchiveItem = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setActiveInboxMenuId(null);
+    const activeUserKey = user?.id || customer?.id;
+    setInboxItems((prev) =>
+      prev.map((it) => {
+        if (it.id === id) {
+          const nextArchived = !it.isArchived;
+          archiveCustomerNotification(id, nextArchived, activeUserKey);
+          return { ...it, isArchived: nextArchived };
+        }
+        return it;
+      })
+    );
+    if (selectedInboxItem?.id === id) {
+      setSelectedInboxItem((prev) => (prev ? { ...prev, isArchived: !prev.isArchived } : null));
+    }
+  };
+
+  const handleDeleteItem = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setActiveInboxMenuId(null);
+    const activeUserKey = user?.id || customer?.id;
+    deleteCustomerNotification(id, activeUserKey);
+    setInboxItems((prev) => prev.filter((it) => it.id !== id));
+    if (selectedInboxItem?.id === id) {
+      setSelectedInboxItem(null);
+    }
+  };
+
+  const handleOpenItem = (item: InboxItem) => {
+    setActiveInboxMenuId(null);
+    const activeUserKey = user?.id || customer?.id;
+    markCustomerNotificationRead(item.id, activeUserKey);
+    setInboxItems((prev) =>
+      prev.map((it) => (it.id === item.id ? { ...it, isRead: true } : it))
+    );
+    setSelectedInboxItem({ ...item, isRead: true });
+  };
 
   // Fetch Customer Orders from API & Subscribe via WebSockets (Realtime)
   useEffect(() => {
@@ -528,7 +808,9 @@ function AccountContent() {
         if (email) params.set("email", email);
         if (userId) params.set("userId", userId);
 
-        const token = typeof window !== "undefined" ? localStorage.getItem("gts_token") : null;
+        const token = typeof window !== "undefined"
+          ? (localStorage.getItem("gts_customer_token") || localStorage.getItem("gts_token"))
+          : null;
         const res = await fetch(`/api/v1/orders/customer?${params.toString()}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
@@ -536,8 +818,10 @@ function AccountContent() {
         if (res.ok) {
           const json = await res.json();
           if (Array.isArray(json.data)) {
-            setOrders(json.data as OrderRecord[]);
+            const list = json.data as OrderRecord[];
+            setOrders(list);
             ordersLoadedRef.current = true;
+            syncOrdersToInbox(list);
           }
         } else {
           console.warn("Orders API returned non-OK status:", res.status);
@@ -594,6 +878,10 @@ function AccountContent() {
       loadOrders(true);
     });
 
+    ordersChannel.on("broadcast", { event: "order_status_updated" }, () => {
+      loadOrders(true);
+    });
+
     ordersChannel.subscribe();
 
     return () => {
@@ -603,6 +891,12 @@ function AccountContent() {
       supabase.removeChannel(ordersChannel);
     };
   }, [customer?.id, user?.id, customer?.email, user?.email]);
+
+  useEffect(() => {
+    if (orders.length > 0) {
+      syncOrdersToInbox(orders);
+    }
+  }, [orders]);
 
   const handleSaveAddress = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1474,11 +1768,11 @@ function AccountContent() {
                 </svg>
                 <span>Inbox</span>
               </div>
-              {inboxItems.length > 0 && (
+              {activeInboxItems.length > 0 && (
                 <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
                   activeTab === "inbox" ? "bg-white/20 text-white" : "bg-[#010101] text-white"
                 }`}>
-                  {inboxItems.length}
+                  {activeInboxItems.length}
                 </span>
               )}
             </button>
@@ -2281,11 +2575,11 @@ function AccountContent() {
 
                   {/* Sub-tabs: ONGOING/DELIVERED (X) | CANCELED/RETURNED (Y) */}
                   {(() => {
-                    const ongoingOrders = orders.filter((o) =>
-                      ["pending_payment", "paid", "confirmed", "processing", "shipped", "delivered", "completed"].includes(o.status)
-                    );
                     const canceledOrders = orders.filter((o) =>
-                      ["cancelled", "refunded", "returned"].includes(o.status)
+                      ["cancelled", "refunded", "returned", "expired"].includes(o.status)
+                    );
+                    const ongoingOrders = orders.filter(
+                      (o) => !["cancelled", "refunded", "returned", "expired"].includes(o.status)
                     );
                     const currentOrdersList = ordersSubTab === "ongoing" ? ongoingOrders : canceledOrders;
 
@@ -2346,134 +2640,216 @@ function AccountContent() {
                             )}
                           </div>
                         ) : (
-                          <div className="space-y-3">
-                            {currentOrdersList.flatMap((order) => {
-                        const dateShort = (() => {
-                          try {
-                            const d = new Date(order.created_at);
-                            const day = String(d.getDate()).padStart(2, "0");
-                            const month = String(d.getMonth() + 1).padStart(2, "0");
-                            return `${day}-${month}`;
-                          } catch {
-                            return "";
-                          }
-                        })();
+                          <div className="space-y-4">
+                            {currentOrdersList.map((order) => {
+                              const dateShort = (() => {
+                                try {
+                                  const d = new Date(order.created_at);
+                                  const day = String(d.getDate()).padStart(2, "0");
+                                  const month = String(d.getMonth() + 1).padStart(2, "0");
+                                  return `${day}-${month}`;
+                                } catch {
+                                  return "";
+                                }
+                              })();
 
-                        const itemsList = order.items && order.items.length > 0 ? order.items : [null];
+                              const items = order.items && order.items.length > 0 ? order.items : [];
+                              const totalItemsCount = items.reduce((acc, it) => acc + (it.quantity || 1), 0);
 
-                        return itemsList.map((item, idx) => {
-                          const snap = item?.product_snapshot;
-                          const title = snap?.name || snap?.title || `Order ${order.order_number}`;
-                          const variation = [snap?.size, snap?.color].filter(Boolean).join(" / ");
-                          const qty = item?.quantity || 1;
+                              const getStatusPill = () => {
+                                switch (order.status) {
+                                  case "cancelled":
+                                    return (
+                                      <span className="bg-[#5A6268] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        CANCELLED
+                                      </span>
+                                    );
+                                  case "placed":
+                                  case "pending":
+                                    return (
+                                      <span className="bg-[#EDCF5D] text-[#010101] text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        ORDER PLACED
+                                      </span>
+                                    );
+                                  case "pending_payment":
+                                    return (
+                                      <span className="bg-[#EDCF5D] text-[#010101] text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        PENDING PAYMENT
+                                      </span>
+                                    );
+                                  case "paid":
+                                  case "confirmed":
+                                    return (
+                                      <span className="bg-[#15803D] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        CONFIRMED
+                                      </span>
+                                    );
+                                  case "ready_for_pickup":
+                                    return (
+                                      <span className="bg-[#EDCF5D] text-[#010101] text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wide inline-flex items-center gap-1 shadow-2xs">
+                                         <svg className="w-3 h-3 text-[#010101]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                           <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                                         </svg>
+                                         <span>READY FOR PICKUP</span>
+                                       </span>
+                                    );
+                                  case "processing":
+                                    return (
+                                      <span className="bg-[#2563EB] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        PROCESSING
+                                      </span>
+                                    );
+                                  case "shipped":
+                                    return (
+                                      <span className="bg-[#4F46E5] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        SHIPPED - IN TRANSIT
+                                      </span>
+                                    );
+                                  case "collected":
+                                  case "delivered":
+                                  case "completed":
+                                    return (
+                                      <span className="bg-[#15803D] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        {order.status === "collected" ? "COLLECTED" : "DELIVERED"}
+                                      </span>
+                                    );
+                                  default:
+                                    return (
+                                      <span className="bg-[#5A6268] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide inline-block">
+                                        {String(order.status).replace(/_/g, " ").toUpperCase()}
+                                      </span>
+                                    );
+                                }
+                              };
 
-                          const getStatusPill = () => {
-                            switch (order.status) {
-                              case "cancelled":
-                                return (
-                                  <span className="bg-[#5A6268] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    CANCELLED - PAYMENT UNSUCCESSFUL
-                                  </span>
-                                );
-                              case "pending_payment":
-                                return (
-                                  <span className="bg-[#EDCF5D] text-[#010101] text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    PENDING - AWAITING PAYMENT
-                                  </span>
-                                );
-                              case "paid":
-                              case "confirmed":
-                                return (
-                                  <span className="bg-[#15803D] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    CONFIRMED
-                                  </span>
-                                );
-                              case "processing":
-                                return (
-                                  <span className="bg-[#2563EB] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    PROCESSING
-                                  </span>
-                                );
-                              case "shipped":
-                                return (
-                                  <span className="bg-[#4F46E5] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    SHIPPED - IN TRANSIT
-                                  </span>
-                                );
-                              case "delivered":
-                              case "completed":
-                                return (
-                                  <span className="bg-[#15803D] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    DELIVERED
-                                  </span>
-                                );
-                              default:
-                                return (
-                                  <span className="bg-[#5A6268] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    {String(order.status).replace(/_/g, " ").toUpperCase()}
-                                  </span>
-                                );
-                            }
-                          };
+                              return (
+                                <div
+                                  key={order.id}
+                                  className="rounded-xl border border-gray-200 bg-white overflow-hidden hover:border-gray-300 transition-all shadow-2xs"
+                                >
+                                  {/* Top Header of the Order */}
+                                  <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2.5">
+                                    <div className="flex items-center gap-2.5 flex-wrap">
+                                      <span className="font-bold text-xs sm:text-sm text-[#010101]">
+                                        Order #{order.order_number}
+                                      </span>
+                                      <span className="text-gray-300">•</span>
+                                      <span className="text-xs text-gray-500 font-medium">
+                                        On {dateShort}
+                                      </span>
+                                      {getStatusPill()}
+                                    </div>
 
-                          return (
-                            <div
-                              key={`${order.id}-${item?.id || idx}`}
-                              className="rounded-md border border-gray-200 bg-white p-3.5 sm:p-4 hover:border-gray-300 transition-all flex items-start justify-between gap-3.5 sm:gap-4 relative"
-                            >
-                              <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
-                                {/* Left Thumbnail */}
-                                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-sm bg-gray-50 border border-gray-100 relative overflow-hidden shrink-0 flex items-center justify-center">
-                                  {snap?.image ? (
-                                    <Image
-                                      src={snap.image}
-                                      alt={title}
-                                      fill
-                                      className="object-contain p-1"
-                                    />
-                                  ) : (
-                                    <span className="text-gray-400 font-bold text-xs">GTS</span>
-                                  )}
-                                </div>
-
-                                {/* Middle Details */}
-                                <div className="min-w-0 flex-1 pr-2">
-                                  <h4 className="text-xs sm:text-sm font-medium text-[#010101] leading-snug line-clamp-2">
-                                    {title}
-                                  </h4>
-                                  <p className="text-xs text-gray-500 mt-1 font-normal">
-                                    Order {order.order_number}
-                                  </p>
-                                  {variation && (
-                                    <p className="text-xs text-gray-500 mt-0.5 font-normal">
-                                      Variation: {variation}
-                                    </p>
-                                  )}
-                                  <p className="text-xs text-gray-500 mt-0.5 font-normal">
-                                    Qty: {qty}
-                                  </p>
-                                  <div className="mt-1.5">
-                                    {getStatusPill()}
+                                    <div className="flex items-center gap-3">
+                                      <span className="font-bold text-xs sm:text-sm text-[#010101]">
+                                        ₦{((order.total || 0) / 100).toLocaleString()}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedOrder(order)}
+                                        className="text-[#010101] hover:text-[#8D730C] text-xs sm:text-sm font-bold cursor-pointer underline decoration-[#EDCF5D] decoration-2 underline-offset-4 transition-colors"
+                                      >
+                                        See Details
+                                      </button>
+                                    </div>
                                   </div>
-                                  <p className="text-xs font-semibold text-[#010101] mt-1.5">
-                                    On {dateShort}
-                                  </p>
-                                </div>
-                              </div>
 
-                              {/* Top Right Action */}
-                              <button
-                                type="button"
-                                onClick={() => setSelectedOrder(order)}
-                                className="text-[#010101] hover:text-[#8D730C] text-xs sm:text-sm font-bold shrink-0 cursor-pointer underline decoration-[#EDCF5D] decoration-2 underline-offset-4 self-start pt-0.5 transition-colors"
-                              >
-                                See Details
-                              </button>
-                            </div>
-                          );
-                        });
-                      })}
-                    </div>
+                                  {/* List of Items Inside This Order */}
+                                  <div className="p-3.5 sm:p-4 divide-y divide-gray-100 space-y-3">
+                                    {items.length === 0 ? (
+                                      <div className="flex items-center justify-between text-xs text-gray-500 py-1">
+                                        <span>Order items package</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelectedOrder(order)}
+                                          className="text-[#010101] font-semibold underline"
+                                        >
+                                          View Details
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      items.map((item, idx) => {
+                                        const snap = item.product_snapshot;
+                                        const title = snap?.name || snap?.title || `Item ${idx + 1}`;
+                                        const variation = [snap?.size, snap?.color].filter(Boolean).join(" / ");
+                                        const qty = item.quantity || 1;
+                                        const priceNaira = Math.round((item.unit_price || 0) / 100);
+
+                                        return (
+                                          <div
+                                            key={item.id || idx}
+                                            className={`flex items-start justify-between gap-3 sm:gap-4 ${
+                                              idx > 0 ? "pt-3" : ""
+                                            }`}
+                                          >
+                                            <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
+                                              {/* Left Thumbnail */}
+                                              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg bg-gray-50 border border-gray-100 relative overflow-hidden shrink-0 flex items-center justify-center">
+                                                {snap?.image ? (
+                                                  <Image
+                                                    src={snap.image}
+                                                    alt={title}
+                                                    fill
+                                                    unoptimized
+                                                    className="object-contain p-1"
+                                                  />
+                                                ) : (
+                                                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25c-.669 0-1.189-.578-1.119-1.243l1.263-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119.993z" />
+                                                  </svg>
+                                                )}
+                                              </div>
+
+                                              {/* Middle Details */}
+                                              <div className="min-w-0 flex-1 pr-2">
+                                                <h4 className="text-xs sm:text-sm font-semibold text-[#010101] leading-snug line-clamp-1">
+                                                  {title}
+                                                </h4>
+                                                <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500 flex-wrap">
+                                                  {variation && <span>Variation: {variation}</span>}
+                                                  {variation && <span>•</span>}
+                                                  <span>Qty: {qty}</span>
+                                                  {priceNaira > 0 && <span>•</span>}
+                                                  {priceNaira > 0 && (
+                                                    <span className="font-medium text-gray-700">
+                                                      ₦{priceNaira.toLocaleString()} each
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            {/* Item Total Price */}
+                                            <div className="shrink-0 text-right self-center">
+                                              <span className="text-xs sm:text-sm font-bold text-[#010101]">
+                                                ₦{Math.round((item.line_total || priceNaira * qty * 100) / 100).toLocaleString()}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+
+                                  {/* Bottom Strip: Items summary & tracking */}
+                                  <div className="bg-gray-50/50 px-4 py-2.5 border-t border-gray-100 flex items-center justify-between text-xs">
+                                    <span className="text-gray-500 font-medium">
+                                      {totalItemsCount} {totalItemsCount === 1 ? "item" : "items"} in this package
+                                    </span>
+                                    <Link
+                                      href={`/track?order_number=${encodeURIComponent(order.order_number)}`}
+                                      className="text-gray-700 hover:text-[#010101] font-bold flex items-center gap-1 transition-colors"
+                                    >
+                                      <span>Track Order</span>
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                      </svg>
+                                    </Link>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                   )}
                 </>
               );
@@ -4288,199 +4664,362 @@ function AccountContent() {
             {/* TAB 4: INBOX & REPLIES */}
             {activeTab === "inbox" && (
               <div className="space-y-6">
-                <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
-                  <button
-                    type="button"
-                    onClick={() => router.push("/account")}
-                    className="lg:hidden p-1 -ml-1 text-gray-700 hover:text-[#010101] rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
-                    aria-label="Back to Account"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-                    </svg>
-                  </button>
-                  <div>
-                    <h2 className="font-bold text-base sm:text-lg text-[#010101]">Inbox & Messages</h2>
-                  </div>
-                </div>
+                {selectedInboxItem ? (
+                  <div className="space-y-6">
+                    {/* Header with back button */}
+                    <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedInboxItem(null)}
+                        className="inline-flex items-center gap-2 text-base sm:text-lg font-bold text-[#010101] hover:text-[#8D730C] transition-colors cursor-pointer"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                        </svg>
+                        <span>Message Details</span>
+                      </button>
 
-                {/* Sub-tabs: Messages | Order Updates | Replies */}
-                <div className="grid grid-cols-3 border-b border-gray-200 bg-white">
-                  <button
-                    type="button"
-                    onClick={() => setInboxFilter("inquiries")}
-                    className={`py-3 text-center text-xs sm:text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer border-b-2 ${
-                      inboxFilter === "inquiries"
-                        ? "text-[#010101] border-[#EDCF5D]"
-                        : "text-gray-400 border-transparent hover:text-gray-700"
-                    }`}
-                  >
-                    Messages ({inboxItems.filter((it) => it.type === "inquiry").length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInboxFilter("orders")}
-                    className={`py-3 text-center text-xs sm:text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer border-b-2 ${
-                      inboxFilter === "orders"
-                        ? "text-[#010101] border-[#EDCF5D]"
-                        : "text-gray-400 border-transparent hover:text-gray-700"
-                    }`}
-                  >
-                    Orders ({inboxItems.filter((it) => it.type === "order_advance").length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInboxFilter("replies")}
-                    className={`py-3 text-center text-xs sm:text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer border-b-2 ${
-                      inboxFilter === "replies"
-                        ? "text-[#010101] border-[#EDCF5D]"
-                        : "text-gray-400 border-transparent hover:text-gray-700"
-                    }`}
-                  >
-                    Replies ({inboxItems.filter((it) => it.type === "review_reply").length})
-                  </button>
-                </div>
-
-                {inboxLoading ? (
-                  <div className="py-16 text-center">
-                    <div className="w-8 h-8 border-3 border-black border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                    <p className="text-xs font-semibold text-gray-500">Loading your inbox...</p>
-                  </div>
-                ) : filteredInboxItems.length === 0 ? (
-                  <div className="py-12 px-4 text-center max-w-md mx-auto">
-                    <div className="w-16 h-16 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center mx-auto mb-4">
-                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                      </svg>
-                    </div>
-                    <h3 className="font-bold text-base text-[#010101] mb-1">
-                      {inboxFilter === "inquiries"
-                        ? "No Messages Yet"
-                        : inboxFilter === "orders"
-                        ? "No Order Notifications"
-                        : "No Replies Yet"}
-                    </h3>
-                    <p className="text-xs sm:text-sm text-gray-500 max-w-sm mx-auto mb-6">
-                      {inboxFilter === "inquiries"
-                        ? "When you ask a question or chat on any product page, customer support messages will show up here."
-                        : inboxFilter === "orders"
-                        ? "When your order status advances (confirmed, processing, shipped, delivered), live tracking updates will appear here."
-                        : "When someone or our team replies to your product reviews, notifications will appear here."}
-                    </p>
-                    <Link
-                      href="/shop"
-                      className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#010101] text-white font-bold text-xs sm:text-sm hover:bg-[#EDCF5D] hover:text-[#010101] transition-all shadow-md cursor-pointer"
-                    >
-                      Browse Products
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {filteredInboxItems.map((item) => {
-                      const isReview = item.type === "review_reply";
-                      const isOrder = item.type === "order_advance";
-
-                      const handleItemClick = () => {
-                        if (isOrder) {
-                          if (item.orderNumber) {
-                            router.push(`/track?order_number=${encodeURIComponent(item.orderNumber)}`);
-                          } else {
-                            router.push("/account?tab=orders");
-                          }
-                        } else {
-                          router.push(`/product/${item.productSlug}?tab=${item.targetTab}#${item.targetTab}`);
-                        }
-                      };
-
-                      return (
-                        <div
-                          key={item.id}
-                          onClick={handleItemClick}
-                          className="group rounded-md border border-gray-200 bg-white p-3.5 sm:p-4 hover:border-gray-300 transition-all flex items-start justify-between gap-3.5 sm:gap-4 cursor-pointer relative"
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            handleArchiveItem(selectedInboxItem.id, e);
+                            setSelectedInboxItem((prev) => (prev ? { ...prev, isArchived: !prev.isArchived } : null));
+                          }}
+                          className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors"
                         >
-                          <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
-                            {/* Left Thumbnail */}
-                            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-sm bg-gray-50 border border-gray-100 relative overflow-hidden shrink-0 flex items-center justify-center">
-                              {isOrder ? (
-                                <div className="w-full h-full bg-[#010101] text-[#EDCF5D] flex items-center justify-center">
-                                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0c-.565.058-.987.538-.987 1.106v.958m12 0A2.25 2.25 0 0116.5 9.75v5.25m-12 0V9.75A2.25 2.25 0 016.75 7.5h7.5" />
-                                  </svg>
-                                </div>
-                              ) : item.productImage ? (
-                                <Image
-                                  src={item.productImage}
-                                  alt={item.productName}
-                                  fill
-                                  unoptimized
-                                  className="object-contain p-1"
-                                />
-                              ) : (
-                                <span className="text-xl">🛍️</span>
+                          {selectedInboxItem.isArchived ? "Unarchive" : "Archive"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            handleDeleteItem(selectedInboxItem.id, e);
+                            setSelectedInboxItem(null);
+                          }}
+                          className="px-3 py-1.5 rounded-lg border border-rose-200 text-xs font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Message Header Details */}
+                    <div>
+                      <h3 className="text-base sm:text-xl font-bold text-[#010101]">
+                        {cleanNoEmojis(selectedInboxItem.subject || selectedInboxItem.productName)}
+                      </h3>
+                      <div className="flex items-center gap-3 text-xs text-gray-500 mt-1 flex-wrap">
+                        <span>
+                          {new Date(selectedInboxItem.lastMessageAt).toLocaleDateString("en-NG", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                        {selectedInboxItem.orderNumber && (
+                          <>
+                            <span>•</span>
+                            <span className="font-mono">Order n° {selectedInboxItem.orderNumber}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Detail Card matching Image 2 style */}
+                    <div className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6 space-y-6">
+                      {/* Message Content */}
+                      <div className="text-xs sm:text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                        {cleanNoEmojis(selectedInboxItem.lastMessage)}
+                      </div>
+
+                      {/* Code and QR Code section */}
+                      {(selectedInboxItem.pickupPin || modalQrCodeUrl) && (
+                        <div className="p-4 sm:p-5 rounded-xl bg-gray-50 border border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-6">
+                          <div className="space-y-2 text-center sm:text-left flex-1">
+                            <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                              Collection Code
+                            </span>
+                            <div className="flex items-center justify-center sm:justify-start gap-3">
+                              <span className="font-mono text-2xl sm:text-3xl font-black tracking-widest text-[#010101]">
+                                {formatPickupPin(selectedInboxItem.pickupPin || "")}
+                              </span>
+                              {selectedInboxItem.pickupPin && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(selectedInboxItem.pickupPin!);
+                                    setCopiedModalPin(true);
+                                    setTimeout(() => setCopiedModalPin(false), 2000);
+                                  }}
+                                  className="text-xs px-2.5 py-1 rounded-md border border-gray-300 font-bold hover:bg-white text-gray-700 cursor-pointer transition-colors"
+                                >
+                                  {copiedModalPin ? "Copied" : "Copy Code"}
+                                </button>
                               )}
                             </div>
-
-                            {/* Middle Details */}
-                            <div className="min-w-0 flex-1 pr-1">
-                              <div className="flex items-center gap-2 flex-wrap mb-1">
-                                {isOrder ? (
-                                  <span className="bg-[#010101] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block font-mono">
-                                    {item.orderStatus ? `Order ${item.orderStatus}` : "Order Update"}
-                                  </span>
-                                ) : isReview ? (
-                                  <span className="bg-[#010101] text-[#EDCF5D] text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    Review Reply
-                                  </span>
-                                ) : item.lastSenderIsStaff ? (
-                                  <span className="bg-emerald-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    Staff Replied
-                                  </span>
-                                ) : (
-                                  <span className="bg-gray-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    Inquiry Sent
-                                  </span>
-                                )}
-                                <span className="text-[11px] text-gray-400 font-normal">
-                                  {new Date(item.lastMessageAt).toLocaleDateString("en-NG", {
-                                    month: "short",
-                                    day: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
-                                </span>
-                              </div>
-
-                              <h4 className="text-xs sm:text-sm font-semibold text-[#010101] leading-snug line-clamp-1">
-                                {item.productName}
-                              </h4>
-
-                              <p className="text-xs text-gray-600 line-clamp-2 mt-1 leading-relaxed">
-                                {item.lastSenderIsStaff && (
-                                  <strong className="text-[#010101] font-semibold">GTS Staff: </strong>
-                                )}
-                                {isReview && (
-                                  <strong className="text-[#010101] font-semibold">@{item.senderName || "User"}: </strong>
-                                )}
-                                {!item.lastSenderIsStaff && !isReview && !isOrder && (
-                                  <strong className="text-gray-500 font-normal">You: </strong>
-                                )}
-                                <span>{item.lastMessage || "No message content"}</span>
+                            <p className="text-xs text-gray-500">
+                              Present this 6-digit code at the store pickup counter to verify and collect your order.
+                            </p>
+                            {selectedInboxItem.pickupDeadline && (
+                              <p className="text-xs text-amber-800 font-medium pt-0.5">
+                                Collect before: {new Date(selectedInboxItem.pickupDeadline).toLocaleDateString("en-NG", {
+                                  weekday: "short",
+                                  day: "numeric",
+                                  month: "short",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
                               </p>
-                            </div>
+                            )}
                           </div>
 
-                          {/* Top Right Action */}
-                          <div className="shrink-0 self-start pt-0.5">
-                            <span className="text-[#010101] group-hover:text-[#8D730C] text-xs sm:text-sm font-bold underline decoration-[#EDCF5D] decoration-2 underline-offset-4 flex items-center gap-1 transition-colors">
-                              <span>{isOrder ? "Track Order" : isReview ? "View Reply" : "Open Chat"}</span>
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                              </svg>
-                            </span>
-                          </div>
+                          {modalQrCodeUrl && (
+                            <div className="text-center shrink-0">
+                              <div className="bg-white p-2.5 rounded-xl border border-gray-200 w-36 h-36 mx-auto flex items-center justify-center shadow-2xs">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={modalQrCodeUrl}
+                                  alt="Collection QR Code"
+                                  className="w-full h-full object-contain"
+                                />
+                              </div>
+                              <span className="font-mono text-[10px] text-gray-400 uppercase tracking-wider block mt-1.5">
+                                QR Code Pass
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      );
-                    })}
+                      )}
+
+                      {/* Pickup Station Information */}
+                      {selectedInboxItem.pickupStationName && (
+                        <div className="pt-3 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                          <div>
+                            <span className="font-bold text-gray-900 block">Pickup Station</span>
+                            <p className="text-gray-600 font-medium">{selectedInboxItem.pickupStationName}</p>
+                            {selectedInboxItem.pickupStationAddress && (
+                              <p className="text-gray-500">{selectedInboxItem.pickupStationAddress}</p>
+                            )}
+                          </div>
+                          {selectedInboxItem.pickupHours && (
+                            <div className="sm:text-right">
+                              <span className="font-bold text-gray-900 block">Operating Hours</span>
+                              <p className="text-gray-600 font-medium">{selectedInboxItem.pickupHours}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="pt-4 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
+                        {selectedInboxItem.orderNumber ? (
+                          <Link
+                            href={`/track?order_number=${encodeURIComponent(selectedInboxItem.orderNumber)}`}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#010101] text-white hover:bg-[#EDCF5D] hover:text-black font-bold text-xs transition-colors cursor-pointer"
+                          >
+                            <span>Track Order</span>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                            </svg>
+                          </Link>
+                        ) : selectedInboxItem.productSlug ? (
+                          <Link
+                            href={`/product/${selectedInboxItem.productSlug}?tab=discussion#discussion`}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#010101] text-white hover:bg-gray-800 font-bold text-xs transition-colors cursor-pointer"
+                          >
+                            <span>View Discussion</span>
+                          </Link>
+                        ) : null}
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedInboxItem(null)}
+                          className="text-xs font-semibold text-gray-600 hover:text-black hover:underline cursor-pointer"
+                        >
+                          Back to Inbox
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* ── INBOX LIST VIEW ── */
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
+                      <button
+                        type="button"
+                        onClick={() => router.push("/account")}
+                        className="lg:hidden p-1 -ml-1 text-gray-700 hover:text-[#010101] rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+                        aria-label="Back to Account"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                        </svg>
+                      </button>
+                      <h2 className="font-bold text-base sm:text-lg text-[#010101]">Inbox & Messages</h2>
+                    </div>
+
+                    {/* Tabs matching Orders Page layout: ALL | ARCHIVED */}
+                    <div className="grid grid-cols-2 border-b border-gray-200 bg-white">
+                      <button
+                        type="button"
+                        onClick={() => setInboxTab("all")}
+                        className={`py-3 text-center text-xs sm:text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer border-b-2 ${
+                          inboxTab === "all"
+                            ? "text-[#010101] border-[#EDCF5D]"
+                            : "text-gray-400 border-transparent hover:text-gray-700"
+                        }`}
+                      >
+                        All ({activeInboxItems.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInboxTab("archived")}
+                        className={`py-3 text-center text-xs sm:text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer border-b-2 ${
+                          inboxTab === "archived"
+                            ? "text-[#010101] border-[#EDCF5D]"
+                            : "text-gray-400 border-transparent hover:text-gray-700"
+                        }`}
+                      >
+                        Archived ({archivedInboxItems.length})
+                      </button>
+                    </div>
+
+                    {inboxLoading ? (
+                      <div className="py-16 text-center">
+                        <div className="w-8 h-8 border-3 border-black border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                        <p className="text-xs font-semibold text-gray-500">Loading your inbox...</p>
+                      </div>
+                    ) : currentInboxList.length === 0 ? (
+                      <div className="py-12 px-4 text-center max-w-md mx-auto">
+                        <div className="w-14 h-14 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mx-auto mb-3">
+                          <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                          </svg>
+                        </div>
+                        <h3 className="font-bold text-sm sm:text-base text-[#010101] mb-1">
+                          {inboxTab === "archived" ? "No Archived Messages" : "No Messages"}
+                        </h3>
+                        <p className="text-xs text-gray-500 max-w-xs mx-auto mb-4">
+                          {inboxTab === "archived"
+                            ? "Messages you archive will be stored here."
+                            : "You currently have no messages in your inbox."}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        {/* Backdrop to close active dropdown menu */}
+                        {activeInboxMenuId && (
+                          <div
+                            className="fixed inset-0 z-20"
+                            onClick={() => setActiveInboxMenuId(null)}
+                          />
+                        )}
+
+                        <div className="space-y-3 relative">
+                          {currentInboxList.map((item, idx) => {
+                            const isMenuOpen = activeInboxMenuId === item.id;
+                            const cleanTitle = cleanNoEmojis(item.subject || item.productName);
+                            const cleanSnippet = cleanNoEmojis(item.lastMessage || "");
+
+                            return (
+                              <div
+                                key={item.id}
+                                onClick={() => handleOpenItem(item)}
+                                className={`group p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer relative hover:shadow-xs ${
+                                  !item.isRead
+                                    ? "bg-amber-50/25 border-[#EDCF5D]/70 hover:border-[#EDCF5D]"
+                                    : "bg-white border-gray-200 hover:border-gray-300"
+                                }`}
+                              >
+                                {/* Top line: title on left, date + menu on right */}
+                                <div className="flex items-start justify-between gap-3 mb-1.5">
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    {!item.isRead && (
+                                      <span
+                                        className="w-2 h-2 rounded-full bg-[#EDCF5D] ring-2 ring-[#EDCF5D]/30 shrink-0"
+                                        title="Unread"
+                                      />
+                                    )}
+                                    <h4
+                                      className={`text-xs sm:text-sm leading-snug line-clamp-1 ${
+                                        !item.isRead ? "font-bold text-[#010101]" : "font-semibold text-gray-900"
+                                      }`}
+                                    >
+                                      {cleanTitle}
+                                    </h4>
+                                  </div>
+
+                                  {/* Right side: date + 3-dots action menu */}
+                                  <div
+                                    className="flex items-center gap-2 shrink-0 pt-0.5"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <span className="font-mono text-[11px] sm:text-xs text-gray-400 whitespace-nowrap">
+                                      {formatInboxDate(item.lastMessageAt)}
+                                    </span>
+
+                                    <div className="relative">
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveInboxMenuId(isMenuOpen ? null : item.id)}
+                                        className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 transition-colors cursor-pointer"
+                                        aria-label="Options"
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                          <circle cx="12" cy="5" r="2" />
+                                          <circle cx="12" cy="12" r="2" />
+                                          <circle cx="12" cy="19" r="2" />
+                                        </svg>
+                                      </button>
+
+                                      {isMenuOpen && (
+                                        <div
+                                          className={`absolute right-0 ${
+                                            idx === currentInboxList.length - 1 && currentInboxList.length > 1
+                                              ? "bottom-8"
+                                              : "top-8"
+                                          } w-36 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-40 animate-in fade-in zoom-in-95 duration-100`}
+                                        >
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenItem(item)}
+                                            className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
+                                          >
+                                            Open
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => handleArchiveItem(item.id, e)}
+                                            className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
+                                          >
+                                            {item.isArchived ? "Unarchive" : "Archive"}
+                                          </button>
+                                          <div className="border-t border-gray-100 my-1" />
+                                          <button
+                                            type="button"
+                                            onClick={(e) => handleDeleteItem(item.id, e)}
+                                            className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer"
+                                          >
+                                            Delete
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Message content snippet below title */}
+                                <p className="text-xs sm:text-sm text-gray-500 line-clamp-2 leading-relaxed">
+                                  {cleanSnippet}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -16,6 +16,10 @@ export const PERMISSION_GRANTS = [
   "can_manage_products",
   "can_handle_tickets",
   "can_manage_broadcasts",
+  "can_update_order_status",
+  "can_mark_orders_paid",
+  "can_complete_pickup",
+  "can_cancel_orders",
 ] as const;
 export type PermissionGrant = (typeof PERMISSION_GRANTS)[number];
 
@@ -37,7 +41,9 @@ export function defaultGrants(role: NewStaffRole): Record<PermissionGrant, boole
   const all = (on: boolean) => Object.fromEntries(PERMISSION_GRANTS.map((k) => [k, on])) as Record<PermissionGrant, boolean>;
   if (role === "admin") return all(true);
   const base = all(false);
-  if (role === "cashier") base.can_process_pos = true;
+  if (role === "cashier") {
+    base.can_process_pos = true;
+  }
   if (role === "inventory_staff") base.can_manage_inventory = true;
   return base;
 }

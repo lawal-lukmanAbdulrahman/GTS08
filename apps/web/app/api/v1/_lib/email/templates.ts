@@ -183,24 +183,126 @@ export function posReceiptEmail(o: {
 }
 
 const STATUS_WORDS: Record<string, { subject: (n: string) => string; title: string; line: string }> = {
-  confirmed: { subject: (n) => `Order ${n} is confirmed`, title: "Your order is confirmed", line: "We've confirmed your order and are getting it ready." },
-  shipped: { subject: (n) => `Order ${n} is on its way`, title: "Your order is on its way", line: "Your order has been handed to the courier." },
-  delivered: { subject: (n) => `Order ${n} was delivered`, title: "Your order was delivered", line: "Your order has been delivered. We hope you love it." },
-  cancelled: { subject: (n) => `Order ${n} was cancelled`, title: "Your order was cancelled", line: "Your order has been cancelled." },
+  confirmed: {
+    subject: (n) => `Order ${n} Confirmed & Packaging`,
+    title: "Your order is confirmed",
+    line: "Your order has been confirmed and is currently being packaged. We will notify you with collection hours and deadline as soon as it is ready for pickup.",
+  },
+  ready_for_pickup: {
+    subject: (n) => `Order ${n} is ready for pickup`,
+    title: "Your order is ready for pickup",
+    line: "Your order is ready for collection at our store. Please bring your order code.",
+  },
+  collected: {
+    subject: (n) => `Order ${n} has been collected`,
+    title: "Order collected",
+    line: "Your order has been collected. Thank you for shopping with us!",
+  },
+  cancelled: {
+    subject: (n) => `Order ${n} was cancelled`,
+    title: "Your order was cancelled",
+    line: "Your order has been cancelled.",
+  },
+  expired: {
+    subject: (n) => `Order ${n} pickup window expired`,
+    title: "Pickup window expired",
+    line: "The pickup window for your order has expired.",
+  },
+  on_hold: {
+    subject: (n) => `Order ${n} is on hold`,
+    title: "Your order is on hold",
+    line: "Your order has been placed on temporary hold. Our team will contact you shortly.",
+  },
 };
 
-/** A short update for the steps a customer cares about; null for internal steps (e.g. processing). */
-export function orderStatusEmail(o: { store: StoreInfo; name: string; orderNumber: string; status: string; trackUrl: string; carrierName?: string | null; trackingNumber?: string | null; trackingUrl?: string | null; paid?: boolean }): Rendered | null {
+/** A short update for pickup order lifecycle. */
+export function orderStatusEmail(o: {
+  store: StoreInfo;
+  name: string;
+  orderNumber: string;
+  status: string;
+  trackUrl: string;
+  paid?: boolean;
+  totalKobo?: number;
+  reason?: string | null;
+  storeAddress?: string | null;
+  pickupDeadlineText?: string | null;
+  operatingHours?: string | null;
+  pickupPin?: string | null;
+}): Rendered | null {
   const words = STATUS_WORDS[o.status];
   if (!words) return null;
-  const courier = o.status === "shipped" && (o.carrierName || o.trackingNumber)
-    ? p(`Courier: <strong>${esc(o.carrierName ?? "")}</strong>${o.trackingNumber ? `<br>Tracking number: <strong>${esc(o.trackingNumber)}</strong>` : ""}`) + (o.trackingUrl ? button(o.trackingUrl, "Track with the courier") : "")
-    : "";
-  const refund = o.status === "cancelled" && o.paid ? p("Since you'd already paid, we'll refund you. It can take a few working days to reach your account.") : "";
+
+  const pinBlock =
+    (o.status === "ready_for_pickup" || o.status === "confirmed") && o.pickupPin
+      ? `<div style="background:#fef9c3;border:1px solid #fde047;border-radius:12px;padding:16px;text-align:center;margin:18px 0;">
+          <p style="margin:0 0 6px;font-size:12px;font-weight:bold;color:#713f12;text-transform:uppercase;letter-spacing:1px;">Pickup Collection PIN</p>
+          <p style="margin:0;font-size:32px;font-weight:900;color:#000000;letter-spacing:4px;font-family:monospace;">${esc(o.pickupPin.replace(/\D/g, "").replace(/(\d{3})(\d{3})/, "$1 $2"))}</p>
+          <p style="margin:8px 0 0;font-size:12px;color:#854d0e;">Present this unique 6-digit PIN at the counter to verify and collect your order.</p>
+        </div>`
+      : "";
+
+  const addressText =
+    o.status === "ready_for_pickup" && o.storeAddress
+      ? p(`Pickup Location: <strong>${esc(o.storeAddress)}</strong>`)
+      : "";
+
+  const hoursText =
+    o.status === "ready_for_pickup" && o.operatingHours
+      ? p(`Collection Hours: <strong>${esc(o.operatingHours)}</strong>`)
+      : "";
+
+  const deadlineText =
+    o.status === "ready_for_pickup" && o.pickupDeadlineText
+      ? p(`Please collect your order by: <strong>${esc(o.pickupDeadlineText)}</strong>`)
+      : "";
+
+  const paymentNote =
+    o.status === "ready_for_pickup" && !o.paid
+      ? p(
+          `<strong>Payment due at pickup:</strong> ${esc(
+            formatKobo(o.totalKobo ?? 0)
+          )}. You can pay with cash, card, or transfer.`
+        )
+      : "";
+
+  const refund =
+    o.status === "cancelled" && o.paid
+      ? p("Since you'd already paid, we'll process your refund. It can take a few working days to reach your account.")
+      : "";
+
+  const reasonNote = o.reason ? p(`Note: ${esc(o.reason)}`) : "";
+
   return {
     subject: words.subject(o.orderNumber),
-    html: shell(o.store, words.title, p(`Hello ${esc(o.name)}. ${esc(words.line)} Order <strong>${esc(o.orderNumber)}</strong>.`) + courier + refund + button(o.trackUrl, "Track my order")),
-    text: [`Hello ${o.name}. ${words.line} Order ${o.orderNumber}.`, o.status === "shipped" && o.carrierName ? `Courier: ${o.carrierName}${o.trackingNumber ? `, tracking number ${o.trackingNumber}` : ""}` : "", o.trackingUrl && o.status === "shipped" ? `Track: ${o.trackingUrl}` : "", refund ? "Since you'd already paid, we'll refund you." : "", `Track your order: ${o.trackUrl}`].filter(Boolean).join("\n\n"),
+    html: shell(
+      o.store,
+      words.title,
+      p(`Hello ${esc(o.name)}. ${esc(words.line)}`) +
+        p(`Order reference: <strong>${esc(o.orderNumber)}</strong>`) +
+        pinBlock +
+        addressText +
+        hoursText +
+        deadlineText +
+        paymentNote +
+        reasonNote +
+        refund +
+        button(o.trackUrl, "Track my order")
+    ),
+    text: [
+      `Hello ${o.name}. ${words.line}`,
+      `Order reference: ${o.orderNumber}`,
+      (o.status === "ready_for_pickup" || o.status === "confirmed") && o.pickupPin ? `Pickup Collection PIN: ${o.pickupPin.replace(/\D/g, "").replace(/(\d{3})(\d{3})/, "$1 $2")}` : "",
+      o.status === "ready_for_pickup" && o.storeAddress ? `Pickup Location: ${o.storeAddress}` : "",
+      o.status === "ready_for_pickup" && o.operatingHours ? `Collection Hours: ${o.operatingHours}` : "",
+      o.status === "ready_for_pickup" && o.pickupDeadlineText ? `Collect by: ${o.pickupDeadlineText}` : "",
+      o.status === "ready_for_pickup" && !o.paid ? `Payment due at pickup: ${formatKobo(o.totalKobo ?? 0)}` : "",
+      o.reason ? `Note: ${o.reason}` : "",
+      refund ? "Since you'd already paid, we'll process your refund." : "",
+      `Track your order: ${o.trackUrl}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
   };
 }
 
@@ -232,36 +334,60 @@ export function ticketReplyEmail(o: { store: StoreInfo; name: string; reference:
   };
 }
 
-export function orderPaidEmail(o: { store: StoreInfo; name: string; orderNumber: string; items: Line[]; total: number; trackUrl: string }): Rendered {
+export function orderPaidEmail(o: { store: StoreInfo; name: string; orderNumber: string; items: Line[]; total: number; trackUrl: string; pickupPin?: string | null }): Rendered {
   const brand = receiptBrand({ name: o.store.name, phone: o.store.phone, website: o.store.website });
   const store = { ...o.store, name: brand.name, phone: brand.phone };
+  const pinBlock = o.pickupPin
+    ? `<div style="background:#fef9c3;border:1px solid #fde047;border-radius:12px;padding:16px;text-align:center;margin:18px 0;">
+        <p style="margin:0 0 6px;font-size:12px;font-weight:bold;color:#713f12;text-transform:uppercase;letter-spacing:1px;">Pickup Collection PIN</p>
+        <p style="margin:0;font-size:32px;font-weight:900;color:#000000;letter-spacing:4px;font-family:monospace;">${esc(o.pickupPin.replace(/\D/g, "").replace(/(\d{3})(\d{3})/, "$1 $2"))}</p>
+        <p style="margin:8px 0 0;font-size:12px;color:#854d0e;">Present this unique 6-digit PIN at the counter to verify and collect your order.</p>
+      </div>`
+    : "";
   return {
     subject: `Payment received: order ${o.orderNumber}`,
     html: shell(
       store,
       "We've received your payment",
       p(`Thank you, ${esc(o.name)}. Your payment for order <strong>${esc(o.orderNumber)}</strong> was successful.`) +
+        pinBlock +
         receiptTable(o.items) +
         p(`<strong>Total paid \u2192 ${esc(formatKobo(o.total))}</strong>`) +
         p("Track your order any time with your order number and this email address.") +
         button(o.trackUrl, "Track my order") +
         receiptFooterHtml(brand)
     ),
-    text: `Thank you, ${o.name}. Your payment for order ${o.orderNumber} was successful.\n\n${o.items.map(receiptLine).join("\n")}\n\nTotal paid -> ${formatKobo(o.total)}\n\nTrack your order: ${o.trackUrl}\n\n${brand.thanks}\n${brand.orderAlso}`,
+    text: [
+      `Thank you, ${o.name}. Your payment for order ${o.orderNumber} was successful.`,
+      o.pickupPin ? `Pickup Collection PIN: ${o.pickupPin.replace(/\D/g, "").replace(/(\d{3})(\d{3})/, "$1 $2")}\nPresent this 6-digit PIN at the counter to collect your order.` : "",
+      o.items.map(receiptLine).join("\n"),
+      `Total paid -> ${formatKobo(o.total)}`,
+      `Track your order: ${o.trackUrl}`,
+      brand.thanks,
+      brand.orderAlso,
+    ].filter(Boolean).join("\n\n"),
   };
 }
 
 /** A pay-on-pickup order: where to collect, what to bring (the amount) and the deadline before it is cancelled. */
-export function pickupOrderEmail(o: { store: StoreInfo; name: string; orderNumber: string; items: Line[]; total: number; address: string | null; deadlineText: string; trackUrl: string }): Rendered {
+export function pickupOrderEmail(o: { store: StoreInfo; name: string; orderNumber: string; items: Line[]; total: number; address: string | null; deadlineText: string; trackUrl: string; pickupPin?: string | null }): Rendered {
   const brand = receiptBrand({ name: o.store.name, phone: o.store.phone, website: o.store.website });
   const store = { ...o.store, name: brand.name, phone: brand.phone };
   const where = o.address ? `at ${o.address}` : `from ${brand.name} (call ${brand.phone} for directions)`;
+  const pinBlock = o.pickupPin
+    ? `<div style="background:#fef9c3;border:1px solid #fde047;border-radius:12px;padding:16px;text-align:center;margin:18px 0;">
+        <p style="margin:0 0 6px;font-size:12px;font-weight:bold;color:#713f12;text-transform:uppercase;letter-spacing:1px;">Pickup Collection PIN</p>
+        <p style="margin:0;font-size:32px;font-weight:900;color:#000000;letter-spacing:4px;font-family:monospace;">${esc(o.pickupPin.replace(/\D/g, "").replace(/(\d{3})(\d{3})/, "$1 $2"))}</p>
+        <p style="margin:8px 0 0;font-size:12px;color:#854d0e;">Present this unique 6-digit PIN to the staff member when you collect and pay for your order.</p>
+      </div>`
+    : "";
   return {
     subject: `Order ${o.orderNumber} is held for pickup`,
     html: shell(
       store,
       "Your order is held for pickup",
       p(`Thank you, ${esc(o.name)}. We're holding order <strong>${esc(o.orderNumber)}</strong> for you. Collect it ${esc(where)} and pay when you collect.`) +
+        pinBlock +
         receiptTable(o.items) +
         p(`<strong>To pay at pickup \u2192 ${esc(formatKobo(o.total))}</strong>`) +
         p(`Please collect by <strong>${esc(o.deadlineText)}</strong>. After that the order is cancelled and the items go back on sale.`) +
@@ -270,12 +396,13 @@ export function pickupOrderEmail(o: { store: StoreInfo; name: string; orderNumbe
     ),
     text: [
       `Thank you, ${o.name}. We're holding order ${o.orderNumber} for you. Collect it ${where} and pay when you collect.`,
+      o.pickupPin ? `Pickup Collection PIN: ${o.pickupPin.replace(/\D/g, "").replace(/(\d{3})(\d{3})/, "$1 $2")}\nPresent this 6-digit PIN to staff to verify and collect your order.` : "",
       o.items.map(receiptLine).join("\n"),
       `To pay at pickup -> ${formatKobo(o.total)}`,
       `Please collect by ${o.deadlineText}. After that the order is cancelled and the items go back on sale.`,
       `Check your order: ${o.trackUrl}`,
       `${brand.thanks}\n${brand.orderAlso}`,
-    ].join("\n\n"),
+    ].filter(Boolean).join("\n\n"),
   };
 }
 

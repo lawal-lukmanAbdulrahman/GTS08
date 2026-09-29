@@ -36,6 +36,25 @@ export async function createServerClient() {
 }
 
 /**
+ * Creates an isolated client without persisting session cookies into next/headers.
+ * Used for staff logins, password verification, and one-off authentication checks so
+ * that staff authentication does not pollute or override customer storefront cookies.
+ */
+export function createIsolatedAuthClient() {
+  return createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "http://localhost:54321",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "dummy",
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    }
+  );
+}
+
+/**
  * Service role client for server-only admin operations.
  * NEVER import this in client components or expose the key.
  *

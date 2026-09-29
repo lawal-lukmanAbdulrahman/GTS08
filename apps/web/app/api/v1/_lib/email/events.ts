@@ -1,8 +1,8 @@
-import { formatWAT } from "@gts/utils";
+import { formatWAT, getOrderPickupPin } from "@gts/utils";
 import { sendEmail, type SendResult } from "./send";
 import { pickupOrderEmail, customerWelcomeEmail, passwordResetEmail, accountAccessEmail, ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, type StoreInfo } from "./templates";
 
-type Client = { from(table: string): any };
+type Client = { from(table: string): any; channel?: (name: string, ...args: any[]) => any };
 
 const dashboardUrl = () => (process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:3001").replace(/\/+$/, "");
 const storefrontUrl = () => (process.env.NEXT_PUBLIC_STOREFRONT_URL || "http://localhost:3002").replace(/\/+$/, "");
@@ -83,12 +83,13 @@ export function notifyOrderPaid(client: Client, orderId: string): Promise<void> 
   return safely(async () => {
     const { data } = await client
       .from("orders")
-      .select("order_number, total, customer:customers(email, full_name), items:order_items(quantity, line_total, product_snapshot)")
+      .select("id, order_number, total, tracking_number, customer:customers(email, full_name), items:order_items(quantity, line_total, product_snapshot)")
       .eq("id", orderId)
       .maybeSingle();
-    const order = data as { order_number: string; total: number; customer: { email: string | null; full_name: string | null } | null; items: Array<{ quantity: number; line_total: number; product_snapshot: { name?: string } | null }> | null } | null;
+    const order = data as { id?: string; order_number: string; total: number; tracking_number?: string | null; customer: { email: string | null; full_name: string | null } | null; items: Array<{ quantity: number; line_total: number; product_snapshot: { name?: string } | null }> | null } | null;
     if (!order?.customer?.email) return;
     const store = await storeInfo(client);
+    const pickupPin = getOrderPickupPin({ id: order.id || orderId, order_number: order.order_number, tracking_number: order.tracking_number });
     await sendEmail({
       to: order.customer.email,
       ...orderPaidEmail({
@@ -98,6 +99,7 @@ export function notifyOrderPaid(client: Client, orderId: string): Promise<void> 
         items: (order.items ?? []).map((i) => ({ name: i.product_snapshot?.name || "Item", quantity: i.quantity, lineTotal: i.line_total })),
         total: order.total,
         trackUrl: `${storefrontUrl()}/track`,
+        pickupPin,
       }),
       idempotencyKey: `order-paid/${orderId}`,
     });
@@ -105,46 +107,293 @@ export function notifyOrderPaid(client: Client, orderId: string): Promise<void> 
 }
 
 /** A pay-on-pickup order was placed: where, what to pay and by when. Sent once per order. */
-export function notifyPickupOrder(client: Client, orderId: string): Promise<void> {
+export function notifyPickupOrder(client: Client, orderId: string, customKey?: string): Promise<void> {
   return safely(async () => {
-    const { data } = await client
+    let order: any = null;
+    let orderRes = await client
       .from("orders")
-      .select("order_number, total, pickup_deadline, customer:customers(email, full_name), items:order_items(quantity, line_total, product_snapshot)")
+      .select("id, order_number, total, tracking_number, pickup_pin, pickup_deadline, customer_id, customer:customers(id, email, full_name, user_id), items:order_items(quantity, line_total, product_snapshot), pickup_station_id, pickup_station:pickup_stations(name, address_line1, address_line2, city, state, phone, operating_hours)")
       .eq("id", orderId)
       .maybeSingle();
-    const order = data as { order_number: string; total: number; pickup_deadline: string | null; customer: { email: string | null; full_name: string | null } | null; items: Array<{ quantity: number; line_total: number; product_snapshot: { name?: string; size?: string | null; color?: string | null } | null }> | null } | null;
-    if (!order?.customer?.email) return;
+
+    if (orderRes.error && /pickup_pin/i.test(orderRes.error.message)) {
+      orderRes = await client
+        .from("orders")
+        .select("id, order_number, total, tracking_number, pickup_deadline, customer_id, customer:customers(id, email, full_name, user_id), items:order_items(quantity, line_total, product_snapshot), pickup_station_id, pickup_station:pickup_stations(name, address_line1, address_line2, city, state, phone, operating_hours)")
+        .eq("id", orderId)
+        .maybeSingle();
+      if (orderRes.data) {
+        (orderRes.data as any).pickup_pin = (orderRes.data as any).tracking_number;
+      }
+    }
+    order = orderRes.data;
+    if (!order) return;
+
+    let customer = Array.isArray(order.customer) ? order.customer[0] : order.customer;
+    if ((!customer || !customer.email) && order.customer_id) {
+      try {
+        const { data: cust } = await client
+          .from("customers")
+          .select("id, email, full_name, user_id")
+          .eq("id", order.customer_id)
+          .maybeSingle();
+        if (cust) customer = cust;
+      } catch {}
+    }
+
+    const customerEmail = customer?.email?.trim();
+    if (!customerEmail) return;
+    const customerName = customer?.full_name?.trim() || "there";
+
     const store = await storeInfo(client);
+
+    let pickupAddress = store.address ?? null;
+    let station = Array.isArray(order.pickup_station) ? order.pickup_station[0] : order.pickup_station;
+    if (!station && order.pickup_station_id) {
+      try {
+        const { data: st } = await client
+          .from("pickup_stations")
+          .select("name, address_line1, address_line2, city, state, phone, operating_hours")
+          .eq("id", order.pickup_station_id)
+          .maybeSingle();
+        if (st) station = st;
+      } catch {}
+    }
+    if (!station?.address_line1) {
+      try {
+        const { data: defaultStation } = await client
+          .from("pickup_stations")
+          .select("name, address_line1, address_line2, city, state, phone, operating_hours")
+          .eq("is_active", true)
+          .limit(1)
+          .maybeSingle();
+        if (defaultStation) station = defaultStation;
+      } catch {}
+    }
+
+    if (station?.address_line1) {
+      pickupAddress = [station.name, station.address_line1, station.address_line2, station.city, station.state].filter(Boolean).join(", ");
+    } else if (!pickupAddress) {
+      pickupAddress = store.name ? `${store.name} Main Store Collection Desk` : "Main Store Collection Desk";
+    }
+
+    const rawPin = order.pickup_pin || order.tracking_number;
+    const pickupPin = getOrderPickupPin({ id: order.id || orderId, order_number: order.order_number, pickup_pin: rawPin, tracking_number: rawPin });
+
+    if (order.tracking_number !== pickupPin || (order.pickup_pin && order.pickup_pin !== pickupPin)) {
+      try {
+        const { error: pinUpdateErr } = await client
+          .from("orders")
+          .update({ tracking_number: pickupPin, pickup_pin: pickupPin })
+          .eq("id", orderId);
+        if (pinUpdateErr && /pickup_pin/i.test(pinUpdateErr.message)) {
+          await client
+            .from("orders")
+            .update({ tracking_number: pickupPin })
+            .eq("id", orderId);
+        }
+      } catch {}
+    }
+
     await sendEmail({
-      to: order.customer.email,
+      to: customerEmail,
       ...pickupOrderEmail({
         store,
-        name: order.customer.full_name || "there",
+        name: customerName,
         orderNumber: order.order_number,
-        items: (order.items ?? []).map((i) => ({ name: i.product_snapshot?.name || "Item", size: i.product_snapshot?.size ?? null, color: i.product_snapshot?.color ?? null, quantity: i.quantity, lineTotal: i.line_total })),
+        items: (order.items ?? []).map((i: any) => ({ name: i.product_snapshot?.name || "Item", size: i.product_snapshot?.size ?? null, color: i.product_snapshot?.color ?? null, quantity: i.quantity, lineTotal: i.line_total })),
         total: order.total,
-        address: store.address ?? null,
-        deadlineText: order.pickup_deadline ? formatWAT(order.pickup_deadline) : "the deadline shown at checkout",
-        trackUrl: `${storefrontUrl()}/track`,
+        address: pickupAddress,
+        deadlineText: order.pickup_deadline
+          ? formatWAT(order.pickup_deadline)
+          : "Collection window will activate as soon as your order is packaged and marked ready for pickup.",
+        trackUrl: `${storefrontUrl()}/track?order_number=${encodeURIComponent(order.order_number)}&email=${encodeURIComponent(customerEmail)}`,
+        pickupPin,
       }),
-      idempotencyKey: `pickup-order/${orderId}`,
+      idempotencyKey: customKey || `pickup-order/${orderId}`,
     });
   }, undefined);
 }
 
-/** Tells the customer about the steps they care about (confirmed, shipped, delivered, cancelled). Internal steps are skipped. */
-export function notifyOrderStatus(client: Client, orderId: string, status: string): Promise<void> {
+/** Centralized hook point for order status change notifications. */
+export function onOrderStatusChanged(
+  client: Client,
+  orderId: string,
+  toStatus: string,
+  reason?: string
+): Promise<void> {
+  return notifyOrderStatus(client, orderId, toStatus, reason);
+}
+
+/** Tells the customer about the pickup status steps (confirmed, ready_for_pickup, collected, cancelled, expired, on_hold). */
+export function notifyOrderStatus(client: Client, orderId: string, status: string, reason?: string, customKey?: string): Promise<void> {
   return safely(async () => {
-    const { data } = await client
+    let o: any = null;
+    let oRes = await client
       .from("orders")
-      .select("order_number, paid_at, carrier_name, tracking_number, carrier_tracking_url, customer:customers(email, full_name)")
+      .select(
+        "id, order_number, total, payment_status, paid_at, tracking_number, pickup_pin, pickup_deadline, ready_for_pickup_at, customer_id, customer:customers(id, email, full_name, user_id), pickup_station_id, pickup_station:pickup_stations(name, address_line1, address_line2, city, state, phone, operating_hours)"
+      )
       .eq("id", orderId)
       .maybeSingle();
-    const o = data as { order_number: string; paid_at: string | null; carrier_name: string | null; tracking_number: string | null; carrier_tracking_url: string | null; customer: { email: string | null; full_name: string | null } | null } | null;
-    if (!o?.customer?.email) return;
+
+    if (oRes.error && /pickup_pin/i.test(oRes.error.message)) {
+      oRes = await client
+        .from("orders")
+        .select(
+          "id, order_number, total, payment_status, paid_at, tracking_number, pickup_deadline, ready_for_pickup_at, customer_id, customer:customers(id, email, full_name, user_id), pickup_station_id, pickup_station:pickup_stations(name, address_line1, address_line2, city, state, phone, operating_hours)"
+        )
+        .eq("id", orderId)
+        .maybeSingle();
+      if (oRes.data) {
+        (oRes.data as any).pickup_pin = (oRes.data as any).tracking_number;
+      }
+    }
+    o = oRes.data;
+    if (!o) return;
+
+    let customer = Array.isArray(o.customer) ? o.customer[0] : o.customer;
+    if ((!customer || !customer.email) && o.customer_id) {
+      try {
+        const { data: cust } = await client
+          .from("customers")
+          .select("id, email, full_name, user_id")
+          .eq("id", o.customer_id)
+          .maybeSingle();
+        if (cust) customer = cust;
+      } catch {}
+    }
+
+    const customerEmail = customer?.email?.trim();
+    if (!customerEmail) return;
+    const customerName = customer?.full_name?.trim() || "there";
+
     const store = await storeInfo(client);
-    const mail = orderStatusEmail({ store, name: o.customer.full_name || "there", orderNumber: o.order_number, status, trackUrl: `${storefrontUrl()}/track`, carrierName: o.carrier_name, trackingNumber: o.tracking_number, trackingUrl: o.carrier_tracking_url, paid: !!o.paid_at });
-    if (mail) await sendEmail({ to: o.customer.email, ...mail, idempotencyKey: `order-status/${orderId}/${status}` });
+    const isPaid = o.payment_status === "paid" || !!o.paid_at;
+
+    let storeAddress = store.address || null;
+    let operatingHours: string | null = null;
+    let station = Array.isArray(o.pickup_station) ? o.pickup_station[0] : o.pickup_station;
+
+    // If order has pickup_station_id but join failed, query pickup_stations directly
+    if (!station && o.pickup_station_id) {
+      try {
+        const { data: st } = await client
+          .from("pickup_stations")
+          .select("name, address_line1, address_line2, city, state, phone, operating_hours")
+          .eq("id", o.pickup_station_id)
+          .maybeSingle();
+        if (st) station = st;
+      } catch {}
+    }
+
+    // Fallback to active default station if no station on order
+    if (!station?.address_line1) {
+      try {
+        const { data: defaultStation } = await client
+          .from("pickup_stations")
+          .select("name, address_line1, address_line2, city, state, phone, operating_hours")
+          .eq("is_active", true)
+          .limit(1)
+          .maybeSingle();
+        if (defaultStation) station = defaultStation;
+      } catch {}
+    }
+
+    if (station?.address_line1) {
+      storeAddress = [station.name, station.address_line1, station.address_line2, station.city, station.state].filter(Boolean).join(", ");
+      if (station.operating_hours) operatingHours = station.operating_hours;
+    }
+    if (!operatingHours) {
+      operatingHours = "Mon - Sat: 9:00 AM - 6:00 PM";
+    }
+    if (!storeAddress) {
+      storeAddress = store.name ? `${store.name} Main Store Collection Desk` : "Main Store Collection Desk";
+    }
+
+    // Ensure 6-digit collection verification PIN is derived and synced to database
+    const rawPin = o.pickup_pin || o.tracking_number;
+    const pickupPin = getOrderPickupPin({
+      id: orderId,
+      order_number: o.order_number,
+      pickup_pin: rawPin,
+      tracking_number: rawPin,
+    });
+
+    if (o.tracking_number !== pickupPin || (o.pickup_pin && o.pickup_pin !== pickupPin)) {
+      try {
+        const { error: pinUpdateErr } = await client
+          .from("orders")
+          .update({ tracking_number: pickupPin, pickup_pin: pickupPin })
+          .eq("id", orderId);
+        if (pinUpdateErr && /pickup_pin/i.test(pinUpdateErr.message)) {
+          await client
+            .from("orders")
+            .update({ tracking_number: pickupPin })
+            .eq("id", orderId);
+        }
+      } catch {}
+    }
+
+    // Resolve deadline
+    let pickupDeadline = o.pickup_deadline;
+    if (status === "ready_for_pickup" && !pickupDeadline) {
+      try {
+        const { data: settings } = await client
+          .from("settings")
+          .select("pickup_hold_hours")
+          .eq("id", SETTINGS_ID)
+          .maybeSingle();
+        const holdHours = settings?.pickup_hold_hours && settings.pickup_hold_hours > 0 ? settings.pickup_hold_hours : 48;
+        pickupDeadline = new Date(Date.now() + holdHours * 3_600_000).toISOString();
+        await client.from("orders").update({ pickup_deadline: pickupDeadline }).eq("id", orderId);
+      } catch {}
+    }
+    const pickupDeadlineText = pickupDeadline ? formatWAT(pickupDeadline) : null;
+
+    const trackUrl = `${storefrontUrl()}/track?order_number=${encodeURIComponent(o.order_number)}&email=${encodeURIComponent(customerEmail)}`;
+
+    const mail = orderStatusEmail({
+      store,
+      name: customerName,
+      orderNumber: o.order_number,
+      status,
+      trackUrl,
+      paid: isPaid,
+      totalKobo: o.total,
+      storeAddress,
+      operatingHours,
+      pickupDeadlineText,
+      pickupPin,
+      reason,
+    });
+    if (mail) {
+      await sendEmail({
+        to: customerEmail,
+        ...mail,
+        idempotencyKey: customKey || `order-status/${orderId}/${status}`,
+      });
+    }
+
+    // Supabase Realtime broadcast to notify open customer inbox / storefront session
+    try {
+      if (typeof client.channel === "function") {
+        const channelIds = [customer?.id, customer?.user_id, o.customer_id].filter(Boolean);
+        for (const targetId of channelIds) {
+          const ch = client.channel(`customer_inbox_${targetId}`);
+          await ch.send({
+            type: "broadcast",
+            event: "order_status_updated",
+            payload: {
+              orderId,
+              orderNumber: o.order_number,
+              status,
+              pickupPin,
+            },
+          });
+        }
+      }
+    } catch {}
   }, undefined);
 }
 

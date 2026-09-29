@@ -95,10 +95,23 @@ describe("TodaysOrdersPanel (spec Part 6)", () => {
       expect(screen.getByRole("alert")).toHaveTextContent(/could not load the receipt/i);
     });
 
-    it("shows a centered spinner loader while loading instead of ghosting the user", () => {
-      render(<TodaysOrdersPanel orders={[]} loading={true} canVoid onVoid={vi.fn()} onReprint={vi.fn()} onClose={vi.fn()} />);
-      expect(screen.getByText(/loading today's orders/i)).toBeInTheDocument();
-      expect(screen.queryByText(/no orders yet today/i)).not.toBeInTheDocument();
+    it("shows download receipt button when expanded", () => {
+      const onDownload = vi.fn();
+      render(<TodaysOrdersPanel orders={ORDERS} canVoid onVoid={vi.fn()} onDownloadReceipt={onDownload} onClose={vi.fn()} />);
+      fireEvent.click(screen.getByText("GTS-202609-000001"));
+      const btn = screen.getByRole("button", { name: /download receipt/i });
+      expect(btn).toBeInTheDocument();
+      fireEvent.click(btn);
+      expect(onDownload).toHaveBeenCalledWith("o1");
+    });
+
+    it("offers receipt buttons for collected orders as well", () => {
+      const collectedOrders = [{ ...ORDERS[0]!, id: "o3", status: "collected" as const, order_number: "GTS-202609-000003" }];
+      render(<TodaysOrdersPanel orders={collectedOrders} canVoid onVoid={vi.fn()} onReprint={vi.fn()} onClose={vi.fn()} />);
+      expect(screen.getByText("Collected")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("GTS-202609-000003"));
+      expect(screen.getByRole("button", { name: /download receipt/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /print receipt/i })).toBeInTheDocument();
     });
   });
 });

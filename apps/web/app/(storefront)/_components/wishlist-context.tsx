@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from "react";
 import type { ProductItem } from "../_data/products";
 import { useCatalogue } from "./catalogue-context";
 import { AuthContext } from "./auth-context";
@@ -29,31 +29,20 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
   latest.current = wishlistIds;
   const syncedFor = useRef<string | null>(null);
 
-  const token = () => (typeof window !== "undefined" && userId ? localStorage.getItem("gts_token") : null);
+  const token = useCallback(() => {
+    if (typeof window === "undefined" || !userId) return null;
+    return localStorage.getItem("gts_customer_token") || localStorage.getItem("gts_token");
+  }, [userId]);
 
-  // On sign-in: take in what the account has saved, and save what was only in this browser.
-  useEffect(() => {
-    if (!hydrated || !userId || syncedFor.current === userId) return;
-    const t = token();
-    if (!t) return;
-    syncedFor.current = userId;
-    (async () => {
-      const server = await fetchWishlistSlugs(t);
-      if (server === null) return; // can't read the account's list: keep the browser's
-      const browserOnly = latest.current.filter((id) => !server.includes(id));
-      setWishlistIds((prev) => [...new Set([...prev, ...server])]);
-      await Promise.all(browserOnly.map((id) => saveWishlistSlug(t, id)));
-    })();
-    // token() reads storage at call time
-  }, [hydrated, userId]);
-
-  // Load wishlist from localStorage on client mount
+  // Load wishlist from localStorage on client mount (guest mode initial state)
   useEffect(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) setWishlistIds(parsed.filter((id): id is string => typeof id === "string"));
+        if (Array.isArray(parsed)) {
+          setWishlistIds(parsed.filter((id): id is string => typeof id === "string" && id.length > 0));
+        }
       }
     } catch (e) {
       console.error("Failed to load wishlist from localStorage", e);
@@ -61,7 +50,7 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
     setHydrated(true);
   }, []);
 
-  // Save to localStorage when wishlist changes
+  // Save to localStorage whenever wishlist changes
   useEffect(() => {
     if (!hydrated) return;
     try {
@@ -71,41 +60,112 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
     }
   }, [wishlistIds, hydrated]);
 
-  const isInWishlist = (productId: string) => wishlistIds.includes(productId);
-
-  const toggleWishlist = (productId: string) => {
+  // On sign-in: sync what the account has saved on the database with local items
+  useEffect(() => {
+    if (!hydrated || !userId || syncedFor.current === userId) return;
     const t = token();
-    if (t) void (latest.current.includes(productId) ? removeWishlistSlug(t, productId) : saveWishlistSlug(t, productId));
-    setWishlistIds((prev) =>
-      prev.includes(productId)
-        ? prev.filter((id) => id !== productId)
-        : [...prev, productId]
-    );
-  };
+    if (!t) return;
+    syncedFor.current = userId;
 
-  const removeFromWishlist = (productId: string) => {
-    const t = token();
-    if (t) void removeWishlistSlug(t, productId);
-    setWishlistIds((prev) => prev.filter((id) => id !== productId));
-  };
+    (async () => {
+      const serverSlugs = await fetchWishlistSlugs(t);
+      if (serverSlugs === null) return;
 
-  const clearWishlist = () => {
+      const currentLocal = latest.current;
+      const combined = [...new Set([...currentLocal, ...serverSlugs])];
+      setWishlistIds(combined);
+
+      // Save any local-only items to the database
+      const browserOnly = currentLocal.filter((id) => !serverSlugs.includes(id));
+      await Promise.all(browserOnly.map((id) => saveWishlistSlug(t, id)));
+    })();
+  }, [hydrated, userId, token]);
+
+  const isInWishlist = useCallback(
+    (productId: string) => {
+      if (!productId) return false;
+      if (wishlistIds.includes(productId)) return true;
+      const item = catalogue.find((p) => p.id === productId || p.productId === productId);
+      if (item) {
+        return wishlistIds.includes(item.id) || (item.productId ? wishlistIds.includes(item.productId) : false);
+      }
+      return false;
+    },
+    [wishlistIds, catalogue]
+  );
+
+  const toggleWishlist = useCallback(
+    (productId: string) => {
+      if (!productId) return;
+      const t = token();
+      const inList = isInWishlist(productId);
+      const item = catalogue.find((p) => p.id === productId || p.productId === productId);
+
+      if (inList) {
+        // Remove from wishlist
+        setWishlistIds((prev) =>
+          prev.filter((id) => id !== productId && (!item || (id !== item.id && id !== item.productId)))
+        );
+        if (t) {
+          void removeWishlistSlug(t, productId);
+        }
+      } else {
+        // Add to wishlist
+        setWishlistIds((prev) => (prev.includes(productId) ? prev : [...prev, productId]));
+        if (t) {
+          void saveWishlistSlug(t, productId);
+        }
+      }
+    },
+    [token, isInWishlist, catalogue]
+  );
+
+  const removeFromWishlist = useCallback(
+    (productId: string) => {
+      if (!productId) return;
+      const t = token();
+      const item = catalogue.find((p) => p.id === productId || p.productId === productId);
+      setWishlistIds((prev) =>
+        prev.filter((id) => id !== productId && (!item || (id !== item.id && id !== item.productId)))
+      );
+      if (t) {
+        void removeWishlistSlug(t, productId);
+      }
+    },
+    [token, catalogue]
+  );
+
+  const clearWishlist = useCallback(() => {
     const t = token();
-    if (t) latest.current.forEach((id) => void removeWishlistSlug(t, id));
+    const current = [...latest.current];
     setWishlistIds([]);
-  };
+    if (t) {
+      current.forEach((id) => void removeWishlistSlug(t, id));
+    }
+  }, [token]);
 
-  // Resolve product objects from catalog
-  const wishlistItems = wishlistIds
-    .map((id) => catalogue.find((p) => p.id === id))
-    .filter((p): p is ProductItem => p !== undefined);
+  // Resolve product objects from catalogue with deduplication
+  const wishlistItems = useMemo(() => {
+    const seen = new Set<string>();
+    const items: ProductItem[] = [];
+    for (const id of wishlistIds) {
+      const p = catalogue.find((item) => item.id === id || item.productId === id);
+      if (p && !seen.has(p.id)) {
+        seen.add(p.id);
+        items.push(p);
+      }
+    }
+    return items;
+  }, [wishlistIds, catalogue]);
+
+  const wishlistCount = wishlistItems.length > 0 ? wishlistItems.length : wishlistIds.length;
 
   return (
     <WishlistContext.Provider
       value={{
         wishlistIds,
         wishlistItems,
-        wishlistCount: wishlistIds.length,
+        wishlistCount,
         isInWishlist,
         toggleWishlist,
         removeFromWishlist,

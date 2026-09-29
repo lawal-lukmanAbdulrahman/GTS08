@@ -184,6 +184,11 @@ export default function EditProductPage() {
             setStatus(p.status || "active");
             setIsFeatured(Boolean(p.is_featured));
             setHasTransparentBg(Boolean(p.has_transparent_bg));
+            if (p.dominant_color) {
+              setDominantColor(p.dominant_color);
+            } else if (p.images?.find((img: any) => img.is_primary)?.dominant_color) {
+              setDominantColor(p.images.find((img: any) => img.is_primary).dominant_color);
+            }
 
             // Primary hero image
             const primaryImg =
@@ -272,7 +277,10 @@ export default function EditProductPage() {
     optimizedSize?: number;
     width?: number;
     height?: number;
+    hasTransparentBg?: boolean;
+    dominantColor?: string;
   } | null>(null);
+  const [dominantColor, setDominantColor] = useState<string>("");
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
   // Add Color Dialog State
@@ -401,7 +409,7 @@ export default function EditProductPage() {
   }, [
     name, slug, sku, brand, categoryName, subCategory,
     basePriceNaira, compareAtNaira, costPriceNaira,
-    status, isFeatured, hasTransparentBg,
+    status, isFeatured, hasTransparentBg, dominantColor,
     imageUrl, shortDescription, description, tags, tagsList,
     variants, descriptionImages,
   ]);
@@ -437,6 +445,7 @@ export default function EditProductPage() {
             status: status,
             is_featured: isFeatured,
             has_transparent_bg: hasTransparentBg,
+            dominant_color: dominantColor || undefined,
             image_url: imageUrl.trim() || undefined,
             short_description: sanitiseText(shortDescription, 500),
             description: description.trim().slice(0, 50000),
@@ -780,11 +789,16 @@ export default function EditProductPage() {
       if (!imageUrl) {
         setImageUrl(res.url);
         setHasTransparentBg(res.hasTransparentBg);
+        if (res.dominantColor) {
+          setDominantColor(res.dominantColor);
+        }
         setHeroImageStats({
           originalSize: res.originalSize,
           optimizedSize: res.optimizedSize,
           width: res.width,
           height: res.height,
+          hasTransparentBg: res.hasTransparentBg,
+          dominantColor: res.dominantColor,
         });
       }
 
@@ -827,6 +841,9 @@ export default function EditProductPage() {
       if (!imageUrl) {
         setImageUrl(res.url);
         setHasTransparentBg(res.hasTransparentBg);
+        if (res.dominantColor) {
+          setDominantColor(res.dominantColor);
+        }
       }
       hasUnsavedChanges.current = true;
     } catch (err: any) {
@@ -1107,6 +1124,7 @@ export default function EditProductPage() {
       status: targetStatus,
       is_featured: isFeatured,
       has_transparent_bg: hasTransparentBg,
+      dominant_color: dominantColor || undefined,
       primary_image_url: effectiveImageUrl,
       short_description: sanitiseText(shortDescription, 500),
       description: description.trim().slice(0, 50000),

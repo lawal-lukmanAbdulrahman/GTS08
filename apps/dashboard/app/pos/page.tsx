@@ -19,6 +19,7 @@ import { looksLikeSku, skuLookupToProduct } from "./sku-scan";
 import { usePosCatalogue } from "./use-pos-catalogue";
 import { useCartStockSync } from "./use-cart-stock-sync";
 import { resolveManualDiscount } from "./manual-discount-input";
+import { resolveProductImageUrl } from "./product-image";
 import { parseNairaInput, type FlagReason } from "@gts/utils";
 import { parseWhatsAppContact } from "./receipt-layout";
 import type { ReceiptData, ReceiptStore } from "./receipt";
@@ -50,6 +51,7 @@ interface FoundWhatsAppOrder {
   order_number: string;
   total: number;
   internal_notes: string | null;
+  pickup_pin?: string;
   items: Array<{
     id: string;
     quantity: number;
@@ -123,11 +125,16 @@ export default function PosPage() {
   const [waCart, setWaCart] = useState<CartLine[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [createdOrderNumber, setCreatedOrderNumber] = useState<string | null>(null);
+  const [isCreatingWaOrder, setIsCreatingWaOrder] = useState(false);
   const [lookupOrderNumber, setLookupOrderNumber] = useState("");
+  const [isLookingUpWaOrder, setIsLookingUpWaOrder] = useState(false);
+  const [selectingOrderNumber, setSelectingOrderNumber] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [foundOrder, setFoundOrder] = useState<FoundWhatsAppOrder | null>(null);
   const [waPaymentMethod, setWaPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [isConfirmingWaPayment, setIsConfirmingWaPayment] = useState(false);
   const [cancelledOrderNumber, setCancelledOrderNumber] = useState<string | null>(null);
   const [pendingOrders, setPendingOrders] = useState<PendingWhatsAppOrder[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
@@ -180,6 +187,8 @@ export default function PosPage() {
           unitPrice: product.base_price + variant.price_modifier,
           quantity,
           available: variant.available,
+          primary_image: product.primary_image ?? null,
+          imageUrl: resolveProductImageUrl(product.primary_image?.cloudinary_id) ?? null,
         },
       ];
     });
@@ -393,40 +402,60 @@ export default function PosPage() {
   }
 
   const createWhatsAppOrder = useCallback(async () => {
-    const result = await apiCall<{ order_number: string }>("/pos/whatsapp-orders", {
-      method: "POST",
-      json: {
-        items: waCart.map((l) => ({ variant_id: l.variantId, quantity: l.quantity })),
-        customer_name: customerName,
-        customer_phone: customerPhone,
-      },
-    });
-    if (!result.ok) {
-      setSaleError(result.message);
-      return;
-    }
+    if (isCreatingWaOrder) return;
+    setIsCreatingWaOrder(true);
     setSaleError(null);
-    setCreatedOrderNumber(result.data.order_number);
-    setWaCart([]);
-    setCustomerName("");
-    setCustomerPhone("");
-  }, [waCart, customerName, customerPhone]);
+    try {
+      const result = await apiCall<{ order_number: string }>("/pos/whatsapp-orders", {
+        method: "POST",
+        headers: { "Idempotency-Key": `wa_create_${crypto.randomUUID()}` },
+        json: {
+          items: waCart.map((l) => ({ variant_id: l.variantId, quantity: l.quantity })),
+          customer_name: customerName,
+          customer_phone: customerPhone,
+          customer_email: customerEmail,
+        },
+      });
+      if (!result.ok) {
+        setSaleError(result.message);
+        return;
+      }
+      setSaleError(null);
+      setCreatedOrderNumber(result.data.order_number);
+      setWaCart([]);
+      setCustomerName("");
+      setCustomerPhone("");
+      setCustomerEmail("");
+    } finally {
+      setIsCreatingWaOrder(false);
+    }
+  }, [isCreatingWaOrder, waCart, customerName, customerPhone, customerEmail]);
 
   async function lookupWhatsAppOrder(ref: string = lookupOrderNumber) {
+    setIsLookingUpWaOrder(true);
     setLookupError(null);
     setCancelledOrderNumber(null);
     setFoundOrder(null);
-    const result = await apiCall<FoundWhatsAppOrder>(`/pos/whatsapp-orders/${encodeURIComponent(ref.trim())}`);
-    if (!result.ok) {
-      setLookupError(result.message);
-      return;
+    try {
+      const result = await apiCall<FoundWhatsAppOrder>(`/pos/whatsapp-orders/${encodeURIComponent(ref.trim())}`);
+      if (!result.ok) {
+        setLookupError(result.message);
+        return;
+      }
+      setFoundOrder(result.data);
+    } finally {
+      setIsLookingUpWaOrder(false);
     }
-    setFoundOrder(result.data);
   }
 
-  function selectPendingOrder(orderNumber: string) {
+  async function selectPendingOrder(orderNumber: string) {
+    setSelectingOrderNumber(orderNumber);
     setLookupOrderNumber(orderNumber);
-    void lookupWhatsAppOrder(orderNumber);
+    try {
+      await lookupWhatsAppOrder(orderNumber);
+    } finally {
+      setSelectingOrderNumber(null);
+    }
   }
 
   async function cancelWhatsAppOrder(reason: string) {
@@ -443,47 +472,52 @@ export default function PosPage() {
     setWaPaymentMethod(null);
   }
 
-  async function confirmWhatsAppPayment() {
-    if (!foundOrder || !waPaymentMethod) return;
-    const result = await apiCall<{ order_number: string; total: number }>(
-      `/pos/whatsapp-orders/${foundOrder.id}/confirm`,
-      {
-        method: "POST",
-        headers: { "Idempotency-Key": `wa_${crypto.randomUUID()}` },
-        json: { payment_method: waPaymentMethod },
+  async function confirmWhatsAppPayment(code: string) {
+    if (!foundOrder || !waPaymentMethod || isConfirmingWaPayment) return;
+    setIsConfirmingWaPayment(true);
+    try {
+      const result = await apiCall<{ order_number: string; total: number }>(
+        `/pos/whatsapp-orders/${foundOrder.id}/confirm`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": `wa_${crypto.randomUUID()}` },
+          json: { payment_method: waPaymentMethod, code },
+        }
+      );
+      if (!result.ok) {
+        setSaleError(result.message);
+        return;
       }
-    );
-    if (!result.ok) {
-      setSaleError(result.message);
-      return;
+      const contact = parseWhatsAppContact(foundOrder.internal_notes);
+      setCompletedSale({
+        orderNumber: result.data.order_number,
+        items: foundOrder.items.map((i) => ({
+          variantId: i.id,
+          productId: i.id,
+          productName: i.product_snapshot.name,
+          size: i.product_snapshot.size ?? null,
+          color: i.product_snapshot.color ?? null,
+          unitPrice: i.unit_price,
+          quantity: i.quantity,
+          available: i.quantity,
+        })),
+        subtotal: result.data.total,
+        discountAmount: 0,
+        total: result.data.total,
+        paymentMethod: waPaymentMethod,
+        cashierName,
+        createdAt: new Date().toISOString(),
+        channel: "whatsapp",
+        customerName: contact?.name,
+        customerPhone: contact?.phone,
+      });
+      setFoundOrder(null);
+      setLookupOrderNumber("");
+      setWaPaymentMethod(null);
+      refreshStore();
+    } finally {
+      setIsConfirmingWaPayment(false);
     }
-    const contact = parseWhatsAppContact(foundOrder.internal_notes);
-    setCompletedSale({
-      orderNumber: result.data.order_number,
-      items: foundOrder.items.map((i) => ({
-        variantId: i.id,
-        productId: i.id,
-        productName: i.product_snapshot.name,
-        size: i.product_snapshot.size ?? null,
-        color: i.product_snapshot.color ?? null,
-        unitPrice: i.unit_price,
-        quantity: i.quantity,
-        available: i.quantity,
-      })),
-      subtotal: result.data.total,
-      discountAmount: 0,
-      total: result.data.total,
-      paymentMethod: waPaymentMethod,
-      cashierName,
-      createdAt: new Date().toISOString(),
-      channel: "whatsapp",
-      customerName: contact?.name,
-      customerPhone: contact?.phone,
-    });
-    setFoundOrder(null);
-    setLookupOrderNumber("");
-    setWaPaymentMethod(null);
-    refreshStore();
   }
 
   const lockScreen = (
@@ -518,32 +552,32 @@ export default function PosPage() {
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#F8F7F4] dark:bg-[#1C1C1C] font-sans">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-[#262626] bg-white dark:bg-[#1C1C1C]">
+      <div className="flex items-center justify-between px-4 py-2.5 sm:px-6 sm:py-3 border-b border-gray-200 dark:border-[#262626] bg-white dark:bg-[#1C1C1C]">
         <div className="flex items-center gap-2">
           <SidebarToggle className="hidden lg:inline-flex -ml-2 mr-0.5" />
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
             aria-label="Open menu"
-            className="lg:hidden min-w-[36px] min-h-[36px] -ml-2 text-xl text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors cursor-pointer flex items-center justify-center"
+            className="lg:hidden min-w-[32px] min-h-[32px] -ml-1 text-lg text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors cursor-pointer flex items-center justify-center"
           >
             ☰
           </button>
           <h1 className="text-base font-bold text-gray-900 dark:text-white">POS</h1>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
           <div className="flex gap-1 bg-gray-100 dark:bg-[#242424] rounded-full p-0.5">
             <button
               type="button"
               onClick={() => setMode("walkin")}
-              className={`px-4 py-1.5 rounded-full text-sm font-semibold ${mode === "walkin" ? "bg-white dark:bg-[#1C1C1C] shadow-sm" : "text-gray-500"}`}
+              className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-colors ${mode === "walkin" ? "bg-white dark:bg-[#1C1C1C] shadow-sm text-gray-900 dark:text-white" : "text-gray-500 hover:text-gray-700"}`}
             >
               Walk-in
             </button>
             <button
               type="button"
               onClick={() => setMode("whatsapp")}
-              className={`px-4 py-1.5 rounded-full text-sm font-semibold ${mode === "whatsapp" ? "bg-white dark:bg-[#1C1C1C] shadow-sm" : "text-gray-500"}`}
+              className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-colors ${mode === "whatsapp" ? "bg-white dark:bg-[#1C1C1C] shadow-sm text-gray-900 dark:text-white" : "text-gray-500 hover:text-gray-700"}`}
             >
               WhatsApp
             </button>
@@ -551,7 +585,7 @@ export default function PosPage() {
           <button
             type="button"
             onClick={openTodaysOrders}
-            className="px-4 py-2 text-sm font-semibold rounded-[8px] bg-gray-100 dark:bg-[#242424]"
+            className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold rounded-[8px] bg-gray-100 hover:bg-gray-200 dark:bg-[#242424] dark:hover:bg-[#2e2e2e] transition-colors cursor-pointer"
           >
             Today&apos;s Orders
           </button>
@@ -561,7 +595,7 @@ export default function PosPage() {
               setReprintError(null);
               setShowFindSale(true);
             }}
-            className="px-4 py-2 text-sm font-semibold rounded-[8px] bg-gray-100 dark:bg-[#242424]"
+            className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold rounded-[8px] bg-gray-100 hover:bg-gray-200 dark:bg-[#242424] dark:hover:bg-[#2e2e2e] transition-colors cursor-pointer"
           >
             Find a sale
           </button>
@@ -571,7 +605,7 @@ export default function PosPage() {
       <ErrorBanner message={banner} onDismiss={() => setSaleError(null)} />
       <HeldSalesBar sales={heldSales} onResume={resumeHeldSale} onDiscard={discardHeld} />
 
-      <div className="flex-1 min-h-0 grid grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[60%_40%] lg:grid-rows-[minmax(0,1fr)] overflow-hidden">
+      <div className="flex-1 min-h-0 grid grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[1fr_390px] xl:grid-cols-[1fr_420px] lg:grid-rows-[minmax(0,1fr)] overflow-hidden">
         <SearchPanel
           query={query}
           onQueryChange={setQuery}
@@ -615,25 +649,31 @@ export default function PosPage() {
             cartLines={waCart}
             customerName={customerName}
             customerPhone={customerPhone}
+            customerEmail={customerEmail}
             onCustomerNameChange={setCustomerName}
             onCustomerPhoneChange={setCustomerPhone}
+            onCustomerEmailChange={setCustomerEmail}
             onIncrement={incrementLine}
             onDecrement={decrementLine}
             onRemove={removeLine}
             onCreateOrder={createWhatsAppOrder}
+            isCreatingOrder={isCreatingWaOrder}
             createdOrderNumber={createdOrderNumber}
             lookupOrderNumber={lookupOrderNumber}
             onLookupOrderNumberChange={setLookupOrderNumber}
             onLookup={() => void lookupWhatsAppOrder()}
+            isLookingUp={isLookingUpWaOrder}
             lookupError={lookupError}
             foundOrder={foundOrder}
             paymentMethod={waPaymentMethod}
             onPaymentMethodChange={setWaPaymentMethod}
             onConfirmPayment={confirmWhatsAppPayment}
+            isConfirmingPayment={isConfirmingWaPayment}
             onCancelOrder={cancelWhatsAppOrder}
             cancelledOrderNumber={cancelledOrderNumber}
             pendingOrders={pendingOrders}
             pendingLoading={pendingLoading}
+            selectingOrderNumber={selectingOrderNumber}
             onSelectPending={selectPendingOrder}
             onRefreshPending={() => void refreshPending()}
           />
@@ -667,6 +707,7 @@ export default function PosPage() {
         <TodaysOrdersPanel
           orders={todaysOrders}
           loading={todaysOrdersLoading}
+          store={store}
           canVoid={canVoid}
           reprintError={reprintError}
           onVoid={voidOrder}

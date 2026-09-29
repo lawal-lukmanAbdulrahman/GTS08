@@ -30,11 +30,31 @@ function readCache(): ApiProduct[] | null {
     if (!Array.isArray(saved.products) || typeof saved.at !== "number" || Date.now() - saved.at >= CACHE_TTL_MS) {
       return null;
     }
-    // Discard cache if it contains test/mock products
-    const hasTestItems = saved.products.some((p) => (p as { is_test?: boolean }).is_test === true);
-    if (hasTestItems) {
+    let isDemoMode = false;
+    try {
+      const userStr = typeof window !== "undefined" ? localStorage.getItem("gts_customer_user") : null;
+      isDemoMode =
+        (typeof window !== "undefined" &&
+          (localStorage.getItem("gts_demo_mode") === "true" ||
+            document.cookie.includes("gts_demo_mode=true"))) ||
+        (userStr ? JSON.parse(userStr)?.is_demo === true : false);
+    } catch {
+      // ignore
+    }
+
+    const expectedMode = isDemoMode ? "test" : "live";
+    if (saved.mode && saved.mode !== expectedMode) {
       sessionStorage.removeItem(CACHE_KEY);
       return null;
+    }
+
+    // Only discard test items if we are in LIVE mode
+    if (!isDemoMode) {
+      const hasTestItems = saved.products.some((p) => (p as { is_test?: boolean }).is_test === true);
+      if (hasTestItems) {
+        sessionStorage.removeItem(CACHE_KEY);
+        return null;
+      }
     }
     return saved.products;
   } catch {
@@ -53,6 +73,40 @@ export function CatalogueProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchCatalogue = useCallback(async (_isBackground = false) => {
+    try {
+      const res = await fetch(CATALOGUE_URL);
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !Array.isArray(body?.data)) throw new Error("bad response");
+      const freshData = body.data as ApiProduct[];
+
+      setApi((prev) => {
+        // If IDs or items have changed (e.g. product deleted or archived), invalidate cache & update
+        const prevIds = prev.map((p) => p.id).sort().join(",");
+        const freshIds = freshData.map((p) => p.id).sort().join(",");
+        if (prevIds !== freshIds) {
+          try {
+            sessionStorage.removeItem(CACHE_KEY);
+          } catch {
+            // ignore
+          }
+        }
+        return freshData;
+      });
+
+      setError(null);
+      try {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), mode: body.meta?.mode || "live", products: freshData }));
+      } catch {
+        // storage full or blocked: the list just isn't kept for next time
+      }
+    } catch {
+      setError("We couldn't load the products just now.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const cached = readCache();
@@ -60,29 +114,42 @@ export function CatalogueProvider({ children }: { children: React.ReactNode }) {
       setApi(cached);
       setLoading(false);
     }
-    (async () => {
-      try {
-        const res = await fetch(CATALOGUE_URL);
-        const body = await res.json().catch(() => null);
-        if (cancelled) return;
-        if (!res.ok || !Array.isArray(body?.data)) throw new Error("bad response");
-        setApi(body.data as ApiProduct[]);
-        setError(null);
-        try {
-          sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), mode: body.meta?.mode || "live", products: body.data }));
-        } catch {
-          // storage full or blocked: the list just isn't kept for next time
-        }
-      } catch {
-        if (!cancelled) setError("We couldn't load the products just now.");
-      } finally {
-        if (!cancelled) setLoading(false);
+
+    void fetchCatalogue(Boolean(cached));
+
+    // Live watcher: periodically poll every 15 seconds to catch deleted/archived items
+    const interval = setInterval(() => {
+      if (!cancelled) void fetchCatalogue(true);
+    }, 15_000);
+
+    // Refresh instantly when user switches back to this tab
+    const handleFocus = () => {
+      if (!cancelled && document.visibilityState === "visible") {
+        void fetchCatalogue(true);
       }
-    })();
+    };
+    window.addEventListener("visibilitychange", handleFocus);
+    window.addEventListener("focus", handleFocus);
+
+    // Listen for manual cache invalidation events (e.g. product deletion event)
+    const handleInvalidation = () => {
+      try {
+        sessionStorage.removeItem(CACHE_KEY);
+      } catch {
+        // ignore
+      }
+      if (!cancelled) void fetchCatalogue(true);
+    };
+    window.addEventListener("gts_catalogue_invalidated", handleInvalidation);
+
     return () => {
       cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener("visibilitychange", handleFocus);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("gts_catalogue_invalidated", handleInvalidation);
     };
-  }, []);
+  }, [fetchCatalogue]);
 
   const products = useMemo(() => api.map(dbProductToItem), [api]);
   const getProduct = useCallback(

@@ -16,6 +16,13 @@ export interface CustomerNotification {
   link: string;
   orderNumber?: string;
   orderStatus?: string;
+  pickupPin?: string;
+  pickupStationName?: string;
+  pickupStationAddress?: string;
+  pickupDeadline?: string;
+  pickupHours?: string;
+  totalKobo?: number;
+  paymentStatus?: "unpaid" | "paid";
   productId?: string;
   productSlug?: string;
   productName?: string;
@@ -24,6 +31,8 @@ export interface CustomerNotification {
   replyText?: string;
   createdAt: string;
   isRead?: boolean;
+  isArchived?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface CanvasElement {
@@ -322,11 +331,17 @@ export function markCustomerInboxSeen(): void {
 /**
  * Retrieve saved customer notifications (order updates, review replies, inquiries)
  */
-export function getCustomerNotifications(): CustomerNotification[] {
+export function getCustomerNotifications(userId?: string | null): CustomerNotification[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(CUSTOMER_NOTIFS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const key = userId ? `${CUSTOMER_NOTIFS_KEY}_${userId}` : CUSTOMER_NOTIFS_KEY;
+    const raw = localStorage.getItem(key);
+    if (raw) return JSON.parse(raw);
+    if (!userId) {
+      const fallback = localStorage.getItem(CUSTOMER_NOTIFS_KEY);
+      return fallback ? JSON.parse(fallback) : [];
+    }
+    return [];
   } catch {
     return [];
   }
@@ -336,7 +351,8 @@ export function getCustomerNotifications(): CustomerNotification[] {
  * Save a new customer notification
  */
 export function addCustomerNotification(
-  notif: Omit<CustomerNotification, "id" | "createdAt">
+  notif: Omit<CustomerNotification, "id" | "createdAt">,
+  userId?: string | null
 ): CustomerNotification {
   const newNotif: CustomerNotification = {
     ...notif,
@@ -346,9 +362,10 @@ export function addCustomerNotification(
 
   if (typeof window !== "undefined") {
     try {
-      const existing = getCustomerNotifications();
+      const key = userId ? `${CUSTOMER_NOTIFS_KEY}_${userId}` : CUSTOMER_NOTIFS_KEY;
+      const existing = getCustomerNotifications(userId);
       const updated = [newNotif, ...existing.filter((n) => n.id !== newNotif.id)].slice(0, 100);
-      localStorage.setItem(CUSTOMER_NOTIFS_KEY, JSON.stringify(updated));
+      localStorage.setItem(key, JSON.stringify(updated));
       window.dispatchEvent(
         new CustomEvent("gts_notification_received", {
           detail: { notification: newNotif },
@@ -360,6 +377,99 @@ export function addCustomerNotification(
   }
 
   return newNotif;
+}
+
+/**
+ * Save customer notifications array
+ */
+export function saveCustomerNotifications(
+  notifications: CustomerNotification[],
+  userId?: string | null
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    const key = userId ? `${CUSTOMER_NOTIFS_KEY}_${userId}` : CUSTOMER_NOTIFS_KEY;
+    localStorage.setItem(key, JSON.stringify(notifications.slice(0, 100)));
+    window.dispatchEvent(
+      new CustomEvent("gts_notifications_updated", {
+        detail: { notifications },
+      })
+    );
+  } catch (err) {
+    console.error("Failed to save customer notifications:", err);
+  }
+}
+
+/**
+ * Mark a customer notification as read
+ */
+export function markCustomerNotificationRead(id: string, userId?: string | null): void {
+  const current = getCustomerNotifications(userId);
+  const updated = current.map((n) => (n.id === id ? { ...n, isRead: true } : n));
+  saveCustomerNotifications(updated, userId);
+}
+
+/**
+ * Archive or unarchive a customer notification
+ */
+export function archiveCustomerNotification(
+  id: string,
+  archived = true,
+  userId?: string | null
+): void {
+  const current = getCustomerNotifications(userId);
+  const updated = current.map((n) => (n.id === id ? { ...n, isArchived: archived } : n));
+  saveCustomerNotifications(updated, userId);
+}
+
+const CUSTOMER_DELETED_NOTIFS_KEY = "gts_customer_deleted_notif_ids";
+
+export function getCustomerDeletedNotifIds(userId?: string | null): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const key = userId ? `${CUSTOMER_DELETED_NOTIFS_KEY}_${userId}` : CUSTOMER_DELETED_NOTIFS_KEY;
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Delete a customer notification permanently
+ */
+export function deleteCustomerNotification(id: string, userId?: string | null): void {
+  const current = getCustomerNotifications(userId);
+  const updated = current.filter((n) => n.id !== id);
+  saveCustomerNotifications(updated, userId);
+
+  if (typeof window !== "undefined") {
+    try {
+      const deleted = getCustomerDeletedNotifIds(userId);
+      const key = userId ? `${CUSTOMER_DELETED_NOTIFS_KEY}_${userId}` : CUSTOMER_DELETED_NOTIFS_KEY;
+      if (!deleted.includes(id)) {
+        localStorage.setItem(key, JSON.stringify([...deleted, id]));
+      }
+    } catch {}
+  }
+}
+
+/**
+ * Clear customer notifications on sign out
+ */
+export function clearCustomerNotifications(userId?: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (userId) {
+      localStorage.removeItem(`${CUSTOMER_NOTIFS_KEY}_${userId}`);
+      localStorage.removeItem(`${CUSTOMER_DELETED_NOTIFS_KEY}_${userId}`);
+      localStorage.removeItem(`${CUSTOMER_INBOX_SEEN_KEY}_${userId}`);
+    }
+    localStorage.removeItem(CUSTOMER_NOTIFS_KEY);
+    localStorage.removeItem(CUSTOMER_DELETED_NOTIFS_KEY);
+    localStorage.removeItem(CUSTOMER_INBOX_SEEN_KEY);
+    localStorage.removeItem("gts_inbox_notifications");
+  } catch {}
 }
 
 /**

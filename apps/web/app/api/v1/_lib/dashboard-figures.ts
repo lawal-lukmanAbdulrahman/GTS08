@@ -18,6 +18,7 @@ export interface DashboardInput {
     total: number;
     channel: string;
     status: string;
+    payment_status?: string | null;
     created_at: string;
     customer_id: string | null;
     cashier_id: string | null;
@@ -26,7 +27,7 @@ export interface DashboardInput {
     items: Line[] | null;
   }>;
   /** Orders created in the period before, for comparison. */
-  previousOrders: Array<{ total: number; channel: string; status: string; created_at: string }>;
+  previousOrders: Array<{ total: number; channel: string; status: string; payment_status?: string | null; created_at: string }>;
   /** customer_id of every paid order ever, for repeat buyers. */
   paidCustomerIds: Array<string | null>;
   transactions: Array<{ payment_method: string; payment_status: string; amount: number; created_at: string }>;
@@ -44,7 +45,11 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const TOP = 6;
 
-const isPaid = (status: string) => PAID_STATUSES.includes(status);
+const isPaid = (o: { status: string; payment_status?: string | null } | string) => {
+  if (typeof o === "string") return PAID_STATUSES.includes(o) || o === "collected";
+  if (o.payment_status?.toLowerCase() === "paid") return true;
+  return PAID_STATUSES.includes(o.status) || o.status === "collected";
+};
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 /** Money that lands in the bank: card, transfer, USSD and QR online, and the card terminal in store. */
@@ -65,8 +70,8 @@ export function buildDashboard(input: DashboardInput) {
   const { period, now } = input;
   const byWeekday = (period.to.getTime() - period.from.getTime()) / 86_400_000 <= 7;
 
-  const paid = input.orders.filter((o) => isPaid(o.status));
-  const previousPaid = input.previousOrders.filter((o) => isPaid(o.status));
+  const paid = input.orders.filter((o) => isPaid(o));
+  const previousPaid = input.previousOrders.filter((o) => isPaid(o));
   const lines = paid.flatMap((o) => o.items ?? []);
 
   // ── The four summary cards
@@ -106,7 +111,7 @@ export function buildDashboard(input: DashboardInput) {
   const carts = distinctSessions(input.views, "cart_add");
   // Storefront checkouts: paid online, or held for pay-on-pickup.
   const online = input.orders.filter((o) => o.channel === "online" || o.channel === "pickup");
-  const onlinePaid = online.filter((o) => isPaid(o.status)).length;
+  const onlinePaid = online.filter((o) => isPaid(o)).length;
   const previousVisitors = distinctSessions(input.previousViews).size;
   const visitSeries = dailySeries([], period.from, period.to).map((d) => ({
     date: d.date,

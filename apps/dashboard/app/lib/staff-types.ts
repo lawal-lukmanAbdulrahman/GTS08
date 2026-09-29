@@ -49,6 +49,10 @@ export interface PermissionsView {
   can_void_orders: boolean;
   can_apply_discounts: boolean;
   can_manage_broadcasts: boolean;
+  can_update_order_status: boolean;
+  can_mark_orders_paid: boolean;
+  can_complete_pickup: boolean;
+  can_cancel_orders: boolean;
 }
 
 export interface StaffProfileView {

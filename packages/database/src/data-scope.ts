@@ -132,6 +132,9 @@ export function accessTokenFromRequest(authorization: string | null, cookies: Ar
   const bearer = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   if (bearer) return bearer;
 
+  const directToken = cookies.find((c) => c.name === "gts_customer_token" || c.name === "gts_access_token")?.value?.trim();
+  if (directToken) return directToken;
+
   // @supabase/ssr stores the session as sb-<ref>-auth-token, split into .0, .1... when it is long.
   const parts = cookies
     .map((c) => ({ c, m: c.name.match(/^sb-[a-z0-9]+-auth-token(?:\.(\d+))?$/i) }))
@@ -209,16 +212,17 @@ const scopedTablesReady = createCachedLookup(
 );
 
 /** The signed-in caller of the current request, from its bearer token or session cookie. */
-async function requestUserId(): Promise<string | null> {
+async function requestCaller(): Promise<{ userId: string | null; isDemoCookie: boolean }> {
   try {
     // next/headers comes from the app that runs this package (as in server.ts).
     // @ts-ignore -- resolved by the Next.js app, not a dependency of this package
     const { headers, cookies } = await import("next/headers");
     const [h, c] = await Promise.all([headers(), cookies()]);
+    const isDemoCookie = c.get("gts_demo_mode")?.value === "true";
     const token = accessTokenFromRequest(h.get("authorization"), c.getAll());
-    return token ? subjectFromJwt(token) : null;
+    return { userId: token ? subjectFromJwt(token) : null, isDemoCookie };
   } catch {
-    return null; // outside a request (scheduled jobs, scripts): the live shop
+    return { userId: null, isDemoCookie: false }; // outside a request (scheduled jobs, scripts): the live shop
   }
 }
 
@@ -226,7 +230,8 @@ async function requestUserId(): Promise<string | null> {
 export async function getRequestDataMode(): Promise<DataMode> {
   const pinned = currentDataModeOverride();
   if (pinned) return pinned;
-  const userId = await requestUserId();
+  const { userId, isDemoCookie } = await requestCaller();
+  if (isDemoCookie) return "test";
   if (!userId) return "live";
   try {
     return (await isDemoUser(userId)) ? "test" : "live";

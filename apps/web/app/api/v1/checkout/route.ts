@@ -10,7 +10,7 @@ import { DELIVERY_FEE_KOBO, resolveCartLines } from "../_lib/checkout-cart";
 import { initializePayment } from "../_lib/paystack";
 import { afterResponse } from "../_lib/email/after";
 import { notifyPickupOrder } from "../_lib/email/events";
-import { computePromoDiscount, normalizePromoCode, type PromoRow } from "@gts/utils";
+import { computePromoDiscount, normalizePromoCode, type PromoRow, getOrderPickupPin } from "@gts/utils";
 
 /** Every one of these is paid through Paystack, whose webhook is the only thing that marks an order paid. */
 const PREPAID_METHODS = ["paystack", "card-transfer", "palmpay", "opay"];
@@ -30,7 +30,13 @@ interface VariantRow {
   price_modifier: number;
   is_active: boolean;
   inventory: { quantity: number; reserved_quantity: number } | null;
-  product: { id: string; name: string; base_price: number; status: string } | null;
+  product: {
+    id: string;
+    name: string;
+    base_price: number;
+    status: string;
+    product_images?: Array<{ cloudinary_public_id: string; is_primary?: boolean; sort_order?: number; variant_id?: string | null }>;
+  } | null;
 }
 
 /**
@@ -48,7 +54,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     } catch {
       return NextResponse.json({ error: "Invalid JSON body.", code: "INVALID_BODY" }, { status: 400 });
     }
-    const { customer: customerInput, address: addressInput, items: rawItems, deliveryOption, paymentMethod, notes } = body;
+    const { customer: customerInput, address: addressInput, items: rawItems, deliveryOption, paymentMethod, notes, pickupStationId } = body;
 
     // How the customer pays decides everything else, so it is checked first, before anything is read or held.
     const isPickup = paymentMethod === PAY_ON_PICKUP;
@@ -169,13 +175,84 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       addressId = addrRecord?.id || null;
     }
 
-    // Where and by when a pickup order is collected (Store Details). "*" so a database without the newer columns still answers.
-    let pickup: { hold_hours: number; deadline: string; store_name: string; address: string | null } | null = null;
+    // Where and by when a pickup order is collected (Store Details or selected Pickup Station).
+    let pickup: {
+      hold_hours: number;
+      deadline: string | null;
+      store_name: string;
+      address: string | null;
+      station_id?: string | null;
+      phone?: string | null;
+      operating_hours?: string | null;
+    } | null = null;
+    let selectedStationId: string | null = null;
+
     if (isPickup) {
       const { data: settings } = await serviceClient.from("settings").select("*").eq("id", SETTINGS_ID).maybeSingle();
-      const row = (settings ?? {}) as { pickup_hold_hours?: number | null; store_name?: string | null; store_address?: string | null };
+      const row = (settings ?? {}) as { pickup_hold_hours?: number | null; store_name?: string | null; store_address?: string | null; support_phone?: string | null };
       const holdHours = row.pickup_hold_hours && row.pickup_hold_hours > 0 ? row.pickup_hold_hours : DEFAULT_PICKUP_HOLD_HOURS;
-      pickup = { hold_hours: holdHours, deadline: new Date(Date.now() + holdHours * 3_600_000).toISOString(), store_name: row.store_name || "GTS", address: row.store_address ?? null };
+
+      let stationName = row.store_name || "GTS";
+      let stationAddress = row.store_address ?? null;
+      let stationPhone = row.support_phone ?? null;
+      let stationHours: string | null = null;
+
+      try {
+        if (pickupStationId) {
+          const { data: station } = await serviceClient
+            .from("pickup_stations")
+            .select("*")
+            .eq("id", pickupStationId)
+            .maybeSingle();
+
+          if (station) {
+            selectedStationId = station.id;
+            stationName = station.name;
+            stationAddress = [station.address_line1, station.address_line2, station.city, station.state].filter(Boolean).join(", ");
+            if (station.phone) stationPhone = station.phone;
+            if (station.operating_hours) stationHours = station.operating_hours;
+          }
+        } else {
+          // If no specific station requested, check for active default station
+          const { data: defaultStation } = await serviceClient
+            .from("pickup_stations")
+            .select("*")
+            .eq("is_active", true)
+            .order("is_default", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (defaultStation) {
+            selectedStationId = defaultStation.id;
+            stationName = defaultStation.name;
+            stationAddress = [defaultStation.address_line1, defaultStation.address_line2, defaultStation.city, defaultStation.state].filter(Boolean).join(", ");
+            if (defaultStation.phone) stationPhone = defaultStation.phone;
+            if (defaultStation.operating_hours) stationHours = defaultStation.operating_hours;
+          }
+        }
+      } catch {
+        // DB error or table issue
+      }
+
+      if (!selectedStationId) {
+        return NextResponse.json(
+          {
+            error: "No active pickup stations are currently available for collection. An administrator must configure a pickup station before orders can be placed.",
+            code: "NO_PICKUP_STATION",
+          },
+          { status: 400 }
+        );
+      }
+
+      pickup = {
+        hold_hours: holdHours,
+        deadline: null,
+        store_name: stationName,
+        address: stationAddress,
+        station_id: selectedStationId,
+        phone: stationPhone,
+        operating_hours: stationHours,
+      };
     }
 
     // 3. Price the cart from the database.
@@ -185,7 +262,10 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
         `
         id, size, color, sku, price_modifier, is_active,
         inventory(quantity, reserved_quantity),
-        product:products(id, name, base_price, status)
+        product:products(
+          id, name, base_price, status,
+          product_images(cloudinary_public_id, is_primary, sort_order, variant_id)
+        )
         `
       )
       .in("id", items.map((i) => i.variant_id));
@@ -213,6 +293,15 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       const unitPrice = v.product!.base_price + v.price_modifier;
       const lineTotal = unitPrice * i.quantity;
       subtotalKobo += lineTotal;
+
+      const imgs = v.product?.product_images ?? [];
+      const variantImg = imgs.find((img) => img.variant_id === v.id);
+      const primaryImg =
+        variantImg?.cloudinary_public_id ||
+        imgs.find((img) => img.is_primary)?.cloudinary_public_id ||
+        imgs.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0]?.cloudinary_public_id ||
+        null;
+
       return {
         variant_id: i.variant_id,
         quantity: i.quantity,
@@ -224,6 +313,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
           size: v.size,
           color: v.color,
           sku: v.sku,
+          image: primaryImg,
         },
       };
     });
@@ -251,10 +341,22 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     const holds: InventoryChange[] = items.map((i) => ({ variantId: i.variant_id, deltaReserved: i.quantity, requireAvailable: i.quantity }));
     const held = await adjustAll(serviceClient, holds);
     if (!held.ok) {
-      if (held.reason === "DATABASE_ERROR") return serverError(new Error(held.message));
+      if (held.reason === "DATABASE_ERROR") {
+        if (/foreign key|violates foreign key|23503|not-null|does not exist|violates not-null/i.test(held.message)) {
+          return NextResponse.json(
+            {
+              error: "An item in your order is no longer available.",
+              code: "ITEM_UNAVAILABLE",
+              details: { variant_id: held.failedVariantId },
+            },
+            { status: 409 }
+          );
+        }
+        return serverError(new Error(held.message));
+      }
       return NextResponse.json(
         {
-          error: "One or more items no longer have enough stock.",
+          error: "One or more items no longer have enough stock or are no longer available.",
           code: "INSUFFICIENT_STOCK",
           details: { variant_id: held.failedVariantId, ...(held.reason === "INSUFFICIENT_STOCK" ? { available: held.available } : {}) },
         },
@@ -265,24 +367,43 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     const releaseHolds = () => rollback(serviceClient, holds);
 
     // 5. The order, unpaid. (The database assigns the order number.)
-    const { data: order, error: orderErr } = await serviceClient
+    const orderPayload: Record<string, any> = {
+      channel: isPickup ? "pickup" : "online",
+      status: isPickup ? "placed" : "pending_payment",
+      payment_status: "unpaid",
+      pickup_deadline: null,
+      customer_id: customerId,
+      address_id: addressId,
+      promo_code: appliedCode,
+      subtotal: subtotalKobo,
+      delivery_fee: deliveryFeeKobo,
+      discount_amount: discountAmountKobo,
+      total: grandTotalKobo,
+      paid_at: null,
+      internal_notes: notes ? sanitizeSqlInput(notes) : null,
+    };
+    if (selectedStationId) {
+      orderPayload.pickup_station_id = selectedStationId;
+    }
+
+    let { data: order, error: orderErr } = await serviceClient
       .from("orders")
-      .insert({
-        channel: isPickup ? "pickup" : "online",
-        status: "pending_payment",
-        ...(pickup ? { pickup_deadline: pickup.deadline } : {}),
-        customer_id: customerId,
-        address_id: addressId,
-        promo_code: appliedCode,
-        subtotal: subtotalKobo,
-        delivery_fee: deliveryFeeKobo,
-        discount_amount: discountAmountKobo,
-        total: grandTotalKobo,
-        paid_at: null,
-        internal_notes: notes ? sanitizeSqlInput(notes) : null,
-      })
+      .insert(orderPayload)
       .select("id, order_number, status, subtotal, delivery_fee, discount_amount, total")
       .single();
+
+    // Fallback if test DB does not have newer pickup_station_id column
+    if (orderErr && /pickup_station_id|payment_status/i.test(orderErr.message)) {
+      delete orderPayload.pickup_station_id;
+      delete orderPayload.payment_status;
+      const retry = await serviceClient
+        .from("orders")
+        .insert(orderPayload)
+        .select("id, order_number, status, subtotal, delivery_fee, discount_amount, total")
+        .single();
+      order = retry.data;
+      orderErr = retry.error;
+    }
 
     if (orderErr || !order) {
       await releaseHolds();
@@ -296,11 +417,35 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       // An order with no lines can never be fulfilled: cancel it and free the stock.
       await serviceClient.from("orders").update({ status: "cancelled", internal_notes: "Cancelled: order lines could not be saved." }).eq("id", order.id);
       await releaseHolds();
+      if (/foreign key|violates foreign key|23503|not-null|does not exist|violates not-null/i.test(itemsErr.message)) {
+        return NextResponse.json(
+          {
+            error: "An item in your order is no longer available.",
+            code: "ITEM_UNAVAILABLE",
+          },
+          { status: 409 }
+        );
+      }
       return serverError(new Error(itemsErr.message));
     }
 
     // A pickup order is paid at the till (POS), which confirms it; nothing is charged online.
     if (isPickup && pickup) {
+      const pickupPin = getOrderPickupPin(order);
+      try {
+        const { error: pinErr } = await serviceClient
+          .from("orders")
+          .update({ tracking_number: pickupPin, pickup_pin: pickupPin })
+          .eq("id", order.id);
+        if (pinErr && /pickup_pin/i.test(pinErr.message)) {
+          await serviceClient
+            .from("orders")
+            .update({ tracking_number: pickupPin })
+            .eq("id", order.id);
+        }
+      } catch (pinErr) {
+        console.warn("Failed to set tracking_number/pickup_pin on pickup order:", pinErr);
+      }
       afterResponse(() => notifyPickupOrder(serviceClient, order.id));
       return NextResponse.json({
         success: true,

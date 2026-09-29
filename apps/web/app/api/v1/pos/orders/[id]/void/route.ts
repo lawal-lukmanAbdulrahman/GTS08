@@ -93,14 +93,14 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       { status: 409 }
     );
   }
-  if (found.status !== "completed") {
+  if (found.status !== "completed" && found.status !== "collected") {
     return NextResponse.json(
       { error: `Only completed orders can be voided (this one is '${found.status}').`, code: "NOT_VOIDABLE" },
       { status: 409 }
     );
   }
 
-  const claimed = await transitionOrderStatus(serviceClient, id, "completed", {
+  const claimed = await transitionOrderStatus(serviceClient, id, found.status, {
     status: "voided",
     internal_notes: reason,
   });

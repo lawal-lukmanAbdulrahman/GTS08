@@ -1,33 +1,82 @@
 import { describe, it, expect } from "vitest";
-import { canTransition, nextStatuses, stockEffectOfCancel } from "../app/api/v1/_lib/order-machine";
+import {
+  canTransition,
+  nextStatuses,
+  stockEffectOfCancel,
+  validateTransition,
+  requiresReason,
+  FORWARD_NEXT,
+  BACKWARD_STEP,
+} from "../app/api/v1/_lib/order-machine";
 
-describe("order status machine (admin route)", () => {
-  it("moves forward one step at a time", () => {
-    expect(nextStatuses("paid")).toEqual(["confirmed", "cancelled"]);
-    expect(nextStatuses("confirmed")).toEqual(["processing", "cancelled"]);
-    expect(nextStatuses("processing")).toEqual(["shipped", "cancelled"]);
-    expect(nextStatuses("shipped")).toEqual(["delivered"]);
+describe("pickup order status machine", () => {
+  it("defines forward transitions for the 4-step pickup flow", () => {
+    expect(FORWARD_NEXT.placed).toBe("confirmed");
+    expect(FORWARD_NEXT.confirmed).toBe("ready_for_pickup");
+    expect(FORWARD_NEXT.ready_for_pickup).toBe("collected");
+    expect(FORWARD_NEXT.collected).toBeNull();
   });
 
-  it("never lets an admin mark an order paid, and only cancels an unpaid one", () => {
-    expect(nextStatuses("pending_payment")).toEqual(["cancelled"]);
-    expect(canTransition("pending_payment", "paid")).toBe(false);
+  it("defines backward steps with reason requirements", () => {
+    expect(BACKWARD_STEP.ready_for_pickup).toBe("confirmed");
+    expect(BACKWARD_STEP.confirmed).toBe("placed");
+    expect(BACKWARD_STEP.placed).toBeNull();
+
+    expect(requiresReason("ready_for_pickup", "confirmed")).toBe(true);
+    expect(requiresReason("confirmed", "placed")).toBe(true);
+    expect(requiresReason("placed", "confirmed")).toBe(false);
   });
 
-  it("refuses skipped steps and backward moves", () => {
-    expect(canTransition("paid", "shipped")).toBe(false);
-    expect(canTransition("processing", "confirmed")).toBe(false);
-    expect(canTransition("delivered", "shipped")).toBe(false);
+  it("enforces payment before collected transition", () => {
+    // Unpaid cannot be collected
+    const unpaidResult = validateTransition("ready_for_pickup", "collected", "unpaid");
+    expect(unpaidResult.ok).toBe(false);
+    if (!unpaidResult.ok) {
+      expect(unpaidResult.code).toBe("PAYMENT_REQUIRED");
+    }
+
+    // Paid can be collected
+    const paidResult = validateTransition("ready_for_pickup", "collected", "paid");
+    expect(paidResult.ok).toBe(true);
   });
 
-  it("treats finished and unknown states as closed", () => {
-    for (const s of ["delivered", "cancelled", "completed", "voided", "nonsense"]) expect(nextStatuses(s)).toEqual([]);
-    expect(canTransition("paid", "voided")).toBe(false);
-    expect(canTransition("paid", "nonsense")).toBe(false);
+  it("treats collected as terminal", () => {
+    expect(nextStatuses("collected")).toEqual([]);
+    expect(canTransition("collected", "ready_for_pickup")).toBe(false);
+    expect(canTransition("collected", "cancelled")).toBe(false);
+
+    const res = validateTransition("collected", "cancelled", "paid", "customer request");
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.code).toBe("ALREADY_COLLECTED");
+    }
   });
 
-  it("says what a cancellation does to stock: release a hold if unpaid, put stock back if paid", () => {
+  it("requires a reason when cancelling or placing on hold", () => {
+    expect(requiresReason("placed", "cancelled")).toBe(true);
+    expect(requiresReason("confirmed", "on_hold")).toBe(true);
+
+    const withoutReason = validateTransition("confirmed", "cancelled", "paid", "");
+    expect(withoutReason.ok).toBe(false);
+    if (!withoutReason.ok) {
+      expect(withoutReason.code).toBe("REASON_REQUIRED");
+    }
+
+    const withReason = validateTransition("confirmed", "cancelled", "paid", "Customer changed mind");
+    expect(withReason.ok).toBe(true);
+  });
+
+  it("allows reopening an expired order with a reason", () => {
+    expect(canTransition("expired", "ready_for_pickup")).toBe(true);
+    expect(requiresReason("expired", "ready_for_pickup")).toBe(true);
+
+    const res = validateTransition("expired", "ready_for_pickup", "paid", "Customer arrived to collect");
+    expect(res.ok).toBe(true);
+  });
+
+  it("computes stock effect of cancellation based on payment or status", () => {
+    expect(stockEffectOfCancel("unpaid")).toBe("release");
+    expect(stockEffectOfCancel("paid")).toBe("restock");
     expect(stockEffectOfCancel("pending_payment")).toBe("release");
-    for (const s of ["paid", "confirmed", "processing"]) expect(stockEffectOfCancel(s)).toBe("restock");
   });
 });

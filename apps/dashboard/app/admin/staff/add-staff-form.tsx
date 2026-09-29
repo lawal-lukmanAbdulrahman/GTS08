@@ -44,6 +44,10 @@ const GRANT_LABELS: Record<PermissionGrant, string> = {
   can_manage_products: "Manage products",
   can_handle_tickets: "Handle support tickets",
   can_manage_broadcasts: "Manage broadcasts & popups",
+  can_update_order_status: "Update order status",
+  can_mark_orders_paid: "Mark orders as paid",
+  can_complete_pickup: "Complete order pickup",
+  can_cancel_orders: "Cancel customer orders",
 };
 
 const FIELD = "w-full px-3 py-2 text-base rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent";

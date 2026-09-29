@@ -177,6 +177,15 @@ describe("ReceiptScreen", () => {
     openSpy.mockRestore();
   });
 
+  it("downloads receipt pdf when download button is clicked", async () => {
+    const receiptPdf = await import("./receipt-pdf");
+    const downloadSpy = vi.spyOn(receiptPdf, "downloadReceiptPdf").mockImplementation(() => {});
+    render(<ReceiptScreen sale={SALE} onNewTransaction={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /download receipt/i }));
+    expect(downloadSpy).toHaveBeenCalledWith(expect.objectContaining({ orderNumber: SALE.orderNumber }));
+    downloadSpy.mockRestore();
+  });
+
   it("clears the till for the next customer on New Transaction", () => {
     const onNewTransaction = vi.fn();
     render(<ReceiptScreen sale={SALE} onNewTransaction={onNewTransaction} />);

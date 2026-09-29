@@ -7,39 +7,78 @@ import { clientIp, logActivity } from "../../_lib/activity";
 import { nextStatuses } from "../../_lib/order-machine";
 import { validateCourierFields } from "../../_lib/order-admin";
 import { readJson, serverError } from "../../_lib/http";
+import { afterResponse } from "../../_lib/email/after";
+import { notifyPickupOrder } from "../../_lib/email/events";
 
 type Context = { params: Promise<{ id: string }> };
 const notFound = () => NextResponse.json({ error: "Order not found.", code: "NOT_FOUND" }, { status: 404 });
 
-/** One order in full, for staff who can see all orders. */
+/** One order in full with audit log history, for staff who can see all orders. */
 export async function GET(request: NextRequest, { params }: Context) {
   const access = await requirePermission(request, "can_view_all_orders");
   if (!access.ok) return access.response;
   try {
     const { id } = await params;
     if (!isUuid(id)) return notFound();
-    const { data, error } = await createServiceClient()
+    const serviceClient = createServiceClient();
+
+    const { data, error } = await serviceClient
       .from("orders")
       .select(
-        `id, order_number, channel, status, subtotal, delivery_fee, discount_amount, total, promo_code,
-         carrier_name, tracking_number, carrier_tracking_url, internal_notes, paid_at, shipped_at, delivered_at, created_at, updated_at,
+        `id, order_number, channel, status, payment_status, payment_method, paid_confirmed_by, cashier_id,
+         cancel_reason, cancelled_by, hold_reason, ready_for_pickup_at, pickup_deadline, tracking_number,
+         subtotal, delivery_fee, discount_amount, total, promo_code,
+         internal_notes, paid_at, delivered_at, created_at, updated_at,
          customer:customers(id, full_name, email, phone),
          address:addresses(full_name, phone, address_line1, address_line2, city, state),
          items:order_items(id, variant_id, quantity, unit_price, line_total, product_snapshot),
-         payments:transactions(payment_method, payment_status, amount, paystack_channel, created_at)`
+         payments:transactions(payment_method, payment_status, amount, paystack_channel, created_at),
+         pickup_station:pickup_stations(id, name, address_line1, address_line2, city, state, phone, operating_hours, notes)`
       )
       .eq("id", id)
       .maybeSingle();
+
     if (error) return serverError(new Error(error.message));
     if (!data) return notFound();
-    const order = data as { status: string; channel: string };
-    return NextResponse.json({ data: { ...order, allowed_next: order.channel === "walk_in" ? [] : nextStatuses(order.status) } });
+    const order = data as { status: string; channel: string; cashier_id?: string | null; paid_confirmed_by?: string | null };
+
+    // Resolve staff name who processed or confirmed the order
+    const staffId = order.paid_confirmed_by || order.cashier_id;
+    let cashierName: string | null = null;
+    if (staffId) {
+      const { data: staffUser } = await serviceClient
+        .from("users")
+        .select("full_name, email")
+        .eq("id", staffId)
+        .maybeSingle();
+      if (staffUser) {
+        cashierName = (staffUser as any).full_name || (staffUser as any).email || null;
+      }
+    }
+
+    // Fetch append-only audit trail
+    const { data: logs } = await serviceClient
+      .from("activity_logs")
+      .select("id, actor_id, action, changes, ip_address, created_at, actor:users!activity_logs_actor_id_fkey(full_name, email)")
+      .eq("target_type", "order")
+      .eq("target_id", id)
+      .order("created_at", { ascending: true });
+
+    return NextResponse.json({
+      data: {
+        ...order,
+        cashier_name: cashierName,
+        order_status: order.status,
+        allowed_next: order.channel === "walk_in" ? [] : nextStatuses(order.status),
+        audit_log: logs || [],
+      },
+    });
   } catch (err) {
     return serverError(err);
   }
 }
 
-/** Notes and courier details. The status has its own route, because it has rules. */
+/** Internal notes update. Status and payment updates have their own dedicated routes. */
 export async function PATCH(request: NextRequest, { params }: Context) {
   const access = await requirePermission(request, "can_view_all_orders");
   if (!access.ok) return access.response;
@@ -57,12 +96,25 @@ export async function PATCH(request: NextRequest, { params }: Context) {
       .from("orders")
       .update({ ...check.value, updated_at: new Date().toISOString() })
       .eq("id", id)
-      .select("id, order_number, status, carrier_name, tracking_number, carrier_tracking_url, internal_notes")
+      .select("id, order_number, status, payment_status, carrier_name, tracking_number, carrier_tracking_url, internal_notes, pickup_deadline, updated_at")
       .maybeSingle();
+
     if (error) return serverError(new Error(error.message));
     if (!data) return notFound();
 
-    await logActivity(client, { actorId: access.user.id, action: "order.update", targetType: "order", targetId: id, changes: { fields: Object.keys(check.value) }, ip: clientIp(request) });
+    if (check.value.pickup_deadline !== undefined) {
+      afterResponse(() => notifyPickupOrder(client, id, `pickup-deadline-update/${id}-${Date.now()}`));
+    }
+
+    await logActivity(client, {
+      actorId: access.user.id,
+      action: "order.update",
+      targetType: "order",
+      targetId: id,
+      changes: { fields: Object.keys(check.value) },
+      ip: clientIp(request),
+    });
+
     return NextResponse.json({ data });
   } catch (err) {
     return serverError(err);

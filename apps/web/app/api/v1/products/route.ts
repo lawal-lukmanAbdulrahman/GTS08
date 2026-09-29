@@ -7,6 +7,7 @@ import { requirePermission } from "../_lib/staff-access";
 import { serverError, dbError } from "../_lib/http";
 import { invalidateStorefrontCaches } from "../_lib/storefront-cache";
 import { publicCache } from "../_lib/public-cache";
+import { logActivity } from "../_lib/activity";
 
 export async function GET(request: NextRequest) {
   try {
@@ -347,29 +348,40 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     const isTest = dataMode === "test";
 
     // Create Product
-    const { data: product, error: prodErr } = await serviceClient
+    const cleanDominantColor = body.dominant_color ? String(body.dominant_color).trim().slice(0, 10) : null;
+    const prodInsertPayload: any = {
+      name: finalName,
+      slug: finalSlug,
+      sku: finalSku,
+      brand: cleanBrand || null,
+      sub_category: cleanSubCategory || null,
+      has_transparent_bg: Boolean(has_transparent_bg),
+      base_price: parsedBasePrice ?? 0,
+      compare_at_price: compare_at_price ? Math.max(0, Math.round(Number(compare_at_price))) : null,
+      cost_price: cost_price ? Math.max(0, Math.round(Number(cost_price))) : null,
+      category_id: resolvedCategoryId,
+      description: description ? String(description).slice(0, 50000) : null,
+      short_description: short_description ? String(short_description).slice(0, 500) : (description ? String(description).slice(0, 180) : null),
+      status: ["active", "draft", "archived"].includes(status) ? status : "active",
+      is_featured: Boolean(is_featured),
+      tags: finalTags,
+      is_test: isTest,
+      created_by: user.id,
+    };
+    if (cleanDominantColor) prodInsertPayload.dominant_color = cleanDominantColor;
+
+    let { data: product, error: prodErr } = await serviceClient
       .from("products")
-      .insert({
-        name: finalName,
-        slug: finalSlug,
-        sku: finalSku,
-        brand: cleanBrand || null,
-        sub_category: cleanSubCategory || null,
-        has_transparent_bg: Boolean(has_transparent_bg),
-        base_price: parsedBasePrice ?? 0,
-        compare_at_price: compare_at_price ? Math.max(0, Math.round(Number(compare_at_price))) : null,
-        cost_price: cost_price ? Math.max(0, Math.round(Number(cost_price))) : null,
-        category_id: resolvedCategoryId,
-        description: description ? String(description).slice(0, 50000) : null,
-        short_description: short_description ? String(short_description).slice(0, 500) : (description ? String(description).slice(0, 180) : null),
-        status: ["active", "draft", "archived"].includes(status) ? status : "active",
-        is_featured: Boolean(is_featured),
-        tags: finalTags,
-        is_test: isTest,
-        created_by: user.id,
-      })
+      .insert(prodInsertPayload)
       .select()
       .single();
+
+    if (prodErr && /dominant_color/i.test(prodErr.message)) {
+      delete prodInsertPayload.dominant_color;
+      const retry = await serviceClient.from("products").insert(prodInsertPayload).select().single();
+      product = retry.data;
+      prodErr = retry.error;
+    }
 
     if (prodErr) {
       return dbError(prodErr, "DATABASE_ERROR", 400);
@@ -384,13 +396,20 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     // Attach Primary Image if provided (fallback to first description image)
     const targetHeroImg = primary_image_url || image_url || firstDescUrl;
     if (targetHeroImg) {
-      await serviceClient.from("product_images").insert({
+      const imgPayload: any = {
         product_id: product.id,
         cloudinary_public_id: targetHeroImg,
         alt_text: product.name,
         is_primary: true,
         sort_order: 0,
-      });
+        has_transparent_bg: Boolean(has_transparent_bg),
+      };
+      if (cleanDominantColor) imgPayload.dominant_color = cleanDominantColor;
+      const { error: imgErr } = await serviceClient.from("product_images").insert(imgPayload);
+      if (imgErr && /dominant_color/i.test(imgErr.message)) {
+        delete imgPayload.dominant_color;
+        await serviceClient.from("product_images").insert(imgPayload);
+      }
     }
 
     if (Array.isArray(descriptionImages) && descriptionImages.length > 0) {
@@ -556,6 +575,9 @@ export const PUT = withIdempotency(async function PUT(request: NextRequest) {
     if (cleanStatus) updatePayload.status = cleanStatus;
     if (is_featured !== undefined) updatePayload.is_featured = Boolean(is_featured);
     if (has_transparent_bg !== undefined) updatePayload.has_transparent_bg = Boolean(has_transparent_bg);
+    if (body.dominant_color !== undefined) {
+      updatePayload.dominant_color = body.dominant_color ? String(body.dominant_color).trim().slice(0, 10) : null;
+    }
     const cleanShortDesc = sanitiseStr(short_description, 500);
     if (cleanShortDesc !== undefined) updatePayload.short_description = cleanShortDesc;
     if (description !== undefined) updatePayload.description = String(description).slice(0, 50000);
@@ -585,12 +607,19 @@ export const PUT = withIdempotency(async function PUT(request: NextRequest) {
       }
     }
 
-    const { data: updatedProduct, error: updateErr } = await serviceClient
+    let { data: updatedProduct, error: updateErr } = await serviceClient
       .from("products")
       .update(updatePayload)
       .eq("id", id)
       .select()
       .single();
+
+    if (updateErr && /dominant_color/i.test(updateErr.message)) {
+      delete updatePayload.dominant_color;
+      const retry = await serviceClient.from("products").update(updatePayload).eq("id", id).select().single();
+      updatedProduct = retry.data;
+      updateErr = retry.error;
+    }
 
     if (updateErr) {
       return dbError(updateErr, "DATABASE_ERROR", 400);
@@ -606,19 +635,36 @@ export const PUT = withIdempotency(async function PUT(request: NextRequest) {
         .eq("is_primary", true)
         .maybeSingle();
 
+      const imgUpdate: any = { cloudinary_public_id: targetImage, alt_text: name || "Product" };
+      if (has_transparent_bg !== undefined) imgUpdate.has_transparent_bg = Boolean(has_transparent_bg);
+      if (body.dominant_color !== undefined) {
+        imgUpdate.dominant_color = body.dominant_color ? String(body.dominant_color).trim().slice(0, 10) : null;
+      }
+
       if (existingImg) {
-        await serviceClient
+        const { error: eErr } = await serviceClient
           .from("product_images")
-          .update({ cloudinary_public_id: targetImage, alt_text: name || "Product" })
+          .update(imgUpdate)
           .eq("id", existingImg.id);
+        if (eErr && /dominant_color/i.test(eErr.message)) {
+          delete imgUpdate.dominant_color;
+          await serviceClient.from("product_images").update(imgUpdate).eq("id", existingImg.id);
+        }
       } else {
-        await serviceClient.from("product_images").insert({
+        const insertImg: any = {
           product_id: id,
           cloudinary_public_id: targetImage,
           alt_text: name || "Product",
           is_primary: true,
           sort_order: 0,
-        });
+          has_transparent_bg: Boolean(has_transparent_bg),
+        };
+        if (body.dominant_color) insertImg.dominant_color = String(body.dominant_color).trim().slice(0, 10);
+        const { error: insErr } = await serviceClient.from("product_images").insert(insertImg);
+        if (insErr && /dominant_color/i.test(insErr.message)) {
+          delete insertImg.dominant_color;
+          await serviceClient.from("product_images").insert(insertImg);
+        }
       }
     }
 
@@ -696,6 +742,109 @@ export const PUT = withIdempotency(async function PUT(request: NextRequest) {
 
     invalidateStorefrontCaches();
     return NextResponse.json({ data: updatedProduct });
+  } catch (err: any) {
+    return serverError(err);
+  }
+});
+
+export const DELETE = withIdempotency(async function DELETE(request: NextRequest) {
+  try {
+    const access = await requirePermission(request, "can_manage_products");
+    if (!access.ok) return access.response;
+    const user = access.user;
+
+    const { searchParams } = new URL(request.url);
+    const queryId = searchParams.get("id");
+    const queryIds = searchParams.get("ids");
+
+    let ids: string[] = [];
+    if (queryId) {
+      ids.push(queryId.trim());
+    }
+    if (queryIds) {
+      ids.push(...queryIds.split(",").map((s) => s.trim()).filter(Boolean));
+    }
+
+    if (ids.length === 0) {
+      try {
+        const body = await request.json();
+        if (body?.id && typeof body.id === "string") ids.push(body.id.trim());
+        if (Array.isArray(body?.ids)) {
+          ids.push(...body.ids.map((s: unknown) => String(s).trim()).filter(Boolean));
+        }
+      } catch {
+        // Body is optional when query params are provided
+      }
+    }
+
+    ids = Array.from(new Set(ids)).filter(Boolean);
+    if (ids.length === 0) {
+      return NextResponse.json(
+        { error: "Product ID is required for deletion.", code: "BAD_REQUEST" },
+        { status: 400 }
+      );
+    }
+
+    const serviceClient = createServiceClient();
+
+    // 1. Fetch all variant IDs for these products
+    const { data: variants } = await serviceClient
+      .from("product_variants")
+      .select("id")
+      .in("product_id", ids);
+
+    const variantIds = (variants || []).map((v: any) => v.id);
+
+    if (variantIds.length > 0) {
+      // Delete stock_movements (since stock_movements has ON DELETE RESTRICT on variant_id)
+      await serviceClient.from("stock_movements").delete().in("variant_id", variantIds);
+      // Clean up cart items and reservations
+      await serviceClient.from("cart_items").delete().in("variant_id", variantIds);
+      await serviceClient.from("checkout_reservations").delete().in("variant_id", variantIds);
+      // Clean up inventory & variant flags
+      await serviceClient.from("inventory").delete().in("variant_id", variantIds);
+      await serviceClient.from("product_flags").delete().in("variant_id", variantIds);
+      // Clean up variants
+      await serviceClient.from("product_variants").delete().in("id", variantIds);
+    }
+
+    // 2. Clean up product-level relations
+    await serviceClient.from("product_images").delete().in("product_id", ids);
+    await serviceClient.from("product_drafts").delete().in("product_id", ids);
+    await serviceClient.from("product_flags").delete().in("product_id", ids);
+    await serviceClient.from("hero_carousel").delete().in("product_id", ids);
+    await serviceClient.from("product_views").delete().in("product_id", ids);
+    await serviceClient.from("reviews").delete().in("product_id", ids);
+    await serviceClient.from("wishlists").delete().in("product_id", ids);
+
+    // 3. Delete products
+    const { error: delError } = await serviceClient
+      .from("products")
+      .delete()
+      .in("id", ids);
+
+    if (delError) {
+      return dbError(delError);
+    }
+
+    // Invalidate caches
+    invalidateStorefrontCaches();
+
+    // Audit log
+    for (const prodId of ids) {
+      await logActivity(serviceClient, {
+        actorId: user.id,
+        action: "product.delete",
+        targetType: "product",
+        targetId: prodId,
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully deleted ${ids.length} product${ids.length === 1 ? "" : "s"}`,
+      deleted_ids: ids,
+    });
   } catch (err: any) {
     return serverError(err);
   }

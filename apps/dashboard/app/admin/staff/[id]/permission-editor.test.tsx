@@ -13,6 +13,10 @@ const PERMS: PermissionsView = {
   can_void_orders: false,
   can_apply_discounts: false,
   can_manage_broadcasts: false,
+  can_update_order_status: false,
+  can_mark_orders_paid: false,
+  can_complete_pickup: false,
+  can_cancel_orders: false,
 };
 
 function setup(over: Partial<React.ComponentProps<typeof PermissionEditor>> = {}) {
@@ -32,7 +36,7 @@ function setup(over: Partial<React.ComponentProps<typeof PermissionEditor>> = {}
 describe("PermissionEditor", () => {
   it("has a switch for every grant, reflecting what's currently allowed", () => {
     setup();
-    expect(screen.getAllByRole("checkbox")).toHaveLength(8);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(12);
     expect(screen.getByRole("checkbox", { name: /use the point of sale/i })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: /void/i })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: /discount/i })).not.toBeChecked();
@@ -123,5 +127,39 @@ describe("PermissionEditor", () => {
     const { onSetBlocked } = setup({ isAdminAccount: true, canBlockAdmin: true, isBlocked: true });
     fireEvent.click(screen.getByRole("button", { name: /unblock ada obi/i }));
     await waitFor(() => expect(onSetBlocked).toHaveBeenCalledWith(false));
+  });
+
+  it("shows Delete Staff button side-by-side when canDelete is true", () => {
+    setup({ canDelete: true });
+    expect(screen.getByRole("button", { name: /block ada obi/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /delete staff/i })).toBeInTheDocument();
+  });
+
+  it("asks before deleting, then deletes and calls onDeleted", async () => {
+    const onDelete = vi.fn().mockResolvedValue({ ok: true });
+    const onDeleted = vi.fn();
+    setup({ canDelete: true, onDelete, onDeleted });
+
+    fireEvent.click(screen.getByRole("button", { name: /delete staff/i }));
+    expect(screen.getByText(/disappears from the staff list/i)).toBeInTheDocument();
+    expect(onDelete).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /yes, delete/i }));
+    await waitFor(() => {
+      expect(onDelete).toHaveBeenCalledTimes(1);
+      expect(onDeleted).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("can cancel deletion to keep staff", () => {
+    const onDelete = vi.fn();
+    setup({ canDelete: true, onDelete });
+
+    fireEvent.click(screen.getByRole("button", { name: /delete staff/i }));
+    expect(screen.getByRole("button", { name: /keep ada obi/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /keep ada obi/i }));
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /delete staff/i })).toBeInTheDocument();
   });
 });

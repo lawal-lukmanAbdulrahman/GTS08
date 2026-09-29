@@ -68,7 +68,7 @@ export function clearSession(): void {
   }
 }
 
-export type SignOutReason = "blocked" | "expired" | "idle";
+export type SignOutReason = "blocked" | "expired" | "idle" | "customer_not_allowed";
 
 /**
  * Ends the session. Revokes it on the server when we still hold a valid one,
@@ -111,6 +111,8 @@ export function signOutMessage(reason: string | null): string | null {
       return "Your session has expired. Please sign in again.";
     case "idle":
       return "You were signed out after a period of inactivity.";
+    case "customer_not_allowed":
+      return "Customer accounts cannot access the Staff Portal. Please sign in with an Admin or Staff account.";
     default:
       return null;
   }

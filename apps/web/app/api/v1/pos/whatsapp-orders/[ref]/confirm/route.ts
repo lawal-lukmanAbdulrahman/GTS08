@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { isUuid } from "@gts/utils";
+import { isUuid, getOrderPickupPin } from "@gts/utils";
 import { requirePosAccess } from "../../../_lib/access";
 import { adjustAll, type InventoryChange } from "../../../_lib/inventory";
 import { transitionOrderStatus } from "../../../_lib/order-status";
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
   const { ref: id } = await context.params;
   if (!isUuid(id)) return NextResponse.json({ error: "Order not found.", code: "ORDER_NOT_FOUND" }, { status: 404 });
 
-  let body: { payment_method?: string };
+  let body: { payment_method?: string; code?: string; pickup_pin?: string };
   try {
     body = await request.json();
   } catch {
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
 
   const { data: order, error: orderError } = await serviceClient
     .from("orders")
-    .select("id, status, total, order_number, items:order_items(variant_id, quantity, unit_price)")
+    .select("id, status, total, order_number, tracking_number, items:order_items(variant_id, quantity, unit_price)")
     .eq("id", id)
     .maybeSingle();
 
@@ -59,6 +59,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
     status: string;
     total: number;
     order_number: string;
+    tracking_number?: string | null;
     items: Array<{ variant_id: string | null; quantity: number; unit_price: number }>;
   };
 
@@ -69,11 +70,28 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
     );
   }
 
+  // ── Anti-theft: 6-digit collection PIN verification ──
+  const enteredCode = typeof body.code === "string" ? body.code.trim().replace(/\s+/g, "") : (typeof body.pickup_pin === "string" ? body.pickup_pin.trim().replace(/\s+/g, "") : "");
+  const expectedCode = getOrderPickupPin(found);
+  if (!enteredCode || enteredCode !== expectedCode) {
+    return NextResponse.json(
+      {
+        error: "Invalid 6-digit verification code. Please collect the code from the customer's email.",
+        code: "INVALID_PICKUP_CODE",
+      },
+      { status: 400 }
+    );
+  }
+
   // Claim the order first: if a cancel (or another confirm) got there first
   // this returns false and no stock is touched.
+  const now = new Date().toISOString();
   const claimed = await transitionOrderStatus(serviceClient, id, "pending_payment", {
-    status: "completed",
-    paid_at: new Date().toISOString(),
+    status: "collected",
+    payment_status: "paid",
+    paid_confirmed_by: access.user.id,
+    paid_at: now,
+    delivered_at: now,
   });
   if (!claimed) {
     return NextResponse.json(
@@ -91,7 +109,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
     }));
   const stockResult = await adjustAll(serviceClient, stockChanges);
   if (!stockResult.ok) {
-    await transitionOrderStatus(serviceClient, id, "completed", { status: "pending_payment", paid_at: null });
+    await transitionOrderStatus(serviceClient, id, "collected", {
+      status: "pending_payment",
+      payment_status: "unpaid",
+      paid_confirmed_by: null,
+      paid_at: null,
+      delivered_at: null,
+    });
     return NextResponse.json(
       { error: "Could not update stock for this order. Nothing was charged; try again.", code: "STOCK_UPDATE_FAILED" },
       { status: 503 }
@@ -129,9 +153,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
     data: {
       order_id: found.id,
       order_number: found.order_number,
-      status: "completed",
+      status: "collected",
       total: found.total,
       payment_method: paymentMethod,
     },
   });
 }
+

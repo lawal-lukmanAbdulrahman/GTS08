@@ -60,16 +60,25 @@ export function UserAccountMenu() {
     checkInbox();
   }, [user]);
 
+  const isDemo =
+    typeof window !== "undefined" &&
+    (localStorage.getItem("gts_demo_mode") === "true" ||
+      document.cookie.includes("gts_demo_mode=true") ||
+      Boolean((user as any)?.is_demo));
+
   const resolvedFullName =
     customer?.full_name?.trim() ||
     (user?.user_metadata?.full_name as string)?.trim() ||
     (user?.user_metadata?.name as string)?.trim() ||
+    (user as any)?.full_name?.trim() ||
     "";
 
   const displayName = resolvedFullName
     ? `Hi, ${resolvedFullName.split(" ")[0]}`
     : user?.email
     ? `Hi, ${user.email.split("@")[0]}`
+    : isDemo
+    ? "Hi, Demo"
     : "Welcome shopper";
 
   return (
@@ -239,19 +248,20 @@ export function UserAccountMenu() {
             <div className="my-1.5 border-t border-gray-100" />
 
             {/* Bottom Button: Sign In when logged out, Sign Out when logged in */}
-            {user ? (
+            {user || isDemo ? (
               <button
                 type="button"
                 onClick={async () => {
                   setIsOpen(false);
                   await signOut();
+                  window.location.reload();
                 }}
                 className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-rose-50 text-gray-700 hover:text-rose-600 font-bold text-xs sm:text-sm py-2.5 px-4 rounded-xl transition-all active:scale-[0.98] cursor-pointer"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
                 </svg>
-                <span>Sign out</span>
+                <span>{isDemo ? "Exit Demo" : "Sign out"}</span>
               </button>
             ) : (
               <button

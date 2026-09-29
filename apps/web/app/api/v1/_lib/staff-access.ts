@@ -28,6 +28,10 @@ export interface StaffPermissions {
   can_void_orders: boolean;
   can_apply_discounts: boolean;
   can_manage_broadcasts: boolean;
+  can_update_order_status: boolean;
+  can_mark_orders_paid: boolean;
+  can_complete_pickup: boolean;
+  can_cancel_orders: boolean;
 }
 
 export type PermissionKey = keyof StaffPermissions;
@@ -61,6 +65,10 @@ export const PERMISSION_KEYS = [
   "can_void_orders",
   "can_apply_discounts",
   "can_manage_broadcasts",
+  "can_update_order_status",
+  "can_mark_orders_paid",
+  "can_complete_pickup",
+  "can_cancel_orders",
 ] as const;
 
 const NO_PERMISSIONS: StaffPermissions = {
@@ -72,6 +80,10 @@ const NO_PERMISSIONS: StaffPermissions = {
   can_void_orders: false,
   can_apply_discounts: false,
   can_manage_broadcasts: false,
+  can_update_order_status: false,
+  can_mark_orders_paid: false,
+  can_complete_pickup: false,
+  can_cancel_orders: false,
 };
 
 const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
@@ -83,6 +95,10 @@ const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
   can_handle_tickets: "handle support tickets",
   can_process_pos: "use the point of sale",
   can_manage_broadcasts: "manage broadcasts & popups",
+  can_update_order_status: "update order fulfillment status",
+  can_mark_orders_paid: "mark orders as paid",
+  can_complete_pickup: "complete customer order pickup",
+  can_cancel_orders: "cancel customer orders",
 };
 
 function deny(status: number, error: string, code: string): { ok: false; response: NextResponse } {

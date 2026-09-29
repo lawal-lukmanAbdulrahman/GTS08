@@ -28,8 +28,10 @@ function baseProps(overrides: Partial<Parameters<typeof WhatsAppPanel>[0]> = {})
     cartLines: [] as CartLine[],
     customerName: "",
     customerPhone: "",
+    customerEmail: "",
     onCustomerNameChange: vi.fn(),
     onCustomerPhoneChange: vi.fn(),
+    onCustomerEmailChange: vi.fn(),
     onIncrement: vi.fn(),
     onDecrement: vi.fn(),
     onRemove: vi.fn(),
@@ -55,9 +57,16 @@ describe("WhatsAppPanel create mode (D001)", () => {
     expect(screen.getByRole("button", { name: /create order/i })).toBeDisabled();
   });
 
-  it("enables Create Order once name, phone, and an item are all present", () => {
+  it("enables Create Order once name, phone, email, and an item are all present", () => {
     render(
-      <WhatsAppPanel {...baseProps({ cartLines: [LINE], customerName: "Chidinma O.", customerPhone: "08031234567" })} />
+      <WhatsAppPanel
+        {...baseProps({
+          cartLines: [LINE],
+          customerName: "Chidinma O.",
+          customerPhone: "08031234567",
+          customerEmail: "chidinma@example.com",
+        })}
+      />
     );
     expect(screen.getByRole("button", { name: /create order/i })).toBeEnabled();
   });
