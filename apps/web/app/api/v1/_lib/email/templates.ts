@@ -184,9 +184,9 @@ export function posReceiptEmail(o: {
 
 const STATUS_WORDS: Record<string, { subject: (n: string) => string; title: string; line: string }> = {
   confirmed: {
-    subject: (n) => `Order ${n} is confirmed`,
+    subject: (n) => `Order ${n} Confirmed & Packaging`,
     title: "Your order is confirmed",
-    line: "We've confirmed your order and are preparing it for pickup.",
+    line: "Your order has been confirmed and is currently being packaged. We will notify you with collection hours and deadline as soon as it is ready for pickup.",
   },
   ready_for_pickup: {
     subject: (n) => `Order ${n} is ready for pickup`,
