@@ -296,7 +296,30 @@ describe("pay on pickup", () => {
   beforeEach(() => {
     delete process.env.PAYSTACK_ENABLED;
     db.results.settings = { data: { pickup_hold_hours: 24, store_name: "GTS Wears", store_address: "12 Allen Avenue, Ikeja" }, error: null };
+    db.results.pickup_stations = {
+      data: {
+        id: "station-default",
+        name: "GTS Wears",
+        address_line1: "12 Allen Avenue, Ikeja",
+        address_line2: null,
+        city: null,
+        state: null,
+        phone: null,
+        operating_hours: null,
+        is_active: true,
+        is_default: true,
+      },
+      error: null,
+    };
     db.results.orders = { data: { id: "order-2", order_number: "GTS-202609-000010", status: "pending_payment", subtotal: 3100000, delivery_fee: 0, discount_amount: 0, total: 3100000 }, error: null };
+  });
+
+  it("rejects pickup orders with 400 when no active pickup stations are configured", async () => {
+    db.results.pickup_stations = { data: null, error: null };
+    const res = await post(PICKUP);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe("NO_PICKUP_STATION");
   });
 
   it("creates a pickup order that holds the items, with no address, delivery fee or online payment", async () => {

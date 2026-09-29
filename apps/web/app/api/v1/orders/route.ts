@@ -22,9 +22,12 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
+    const paymentStatus = searchParams.get("payment_status");
+    const queue = searchParams.get("queue");
+    const search = (searchParams.get("search") || searchParams.get("q") || "").trim();
     const channel = searchParams.get("channel");
     const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = Math.min(parseInt(searchParams.get("limit") || "25", 10), 50);
+    const limit = Math.min(parseInt(searchParams.get("limit") || "25", 10), 100);
     const offset = (page - 1) * limit;
 
     if (!isStaff) {
@@ -48,14 +51,17 @@ export async function GET(request: NextRequest) {
           `
           *,
           customer:customers(*),
-          items:order_items(*)
+          items:order_items(*),
+          pickup_station:pickup_stations(*)
         `,
           { count: "exact" }
         )
         .in("customer_id", customerIds);
 
-      if (status) custQuery = custQuery.eq("status", status);
-      if (channel) custQuery = custQuery.eq("channel", channel);
+      if (status && status !== "all") custQuery = custQuery.eq("status", status);
+      if (paymentStatus && paymentStatus !== "all") custQuery = custQuery.eq("payment_status", paymentStatus);
+      if (channel && channel !== "all") custQuery = custQuery.eq("channel", channel);
+      if (search) custQuery = custQuery.ilike("order_number", `%${search}%`);
 
       custQuery = custQuery.order("created_at", { ascending: false }).range(offset, offset + limit - 1);
       const { data: orders, count, error } = await custQuery;
@@ -78,17 +84,29 @@ export async function GET(request: NextRequest) {
         `
         *,
         customer:customers(*),
-        items:order_items(*)
+        items:order_items(*),
+        pickup_station:pickup_stations(*)
       `,
         { count: "exact" }
       );
 
-    if (status) {
-      query = query.eq("status", status);
+    if (queue === "ready_unpaid") {
+      query = query.eq("status", "ready_for_pickup").eq("payment_status", "unpaid");
+    } else {
+      if (status && status !== "all") {
+        query = query.eq("status", status);
+      }
+      if (paymentStatus && paymentStatus !== "all") {
+        query = query.eq("payment_status", paymentStatus);
+      }
     }
 
-    if (channel) {
+    if (channel && channel !== "all") {
       query = query.eq("channel", channel);
+    }
+
+    if (search) {
+      query = query.ilike("order_number", `%${search}%`);
     }
 
     query = query.order("created_at", { ascending: false }).range(offset, offset + limit - 1);

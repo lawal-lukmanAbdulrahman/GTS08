@@ -118,8 +118,11 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ received: true, flagged: "amount_mismatch" }, { status: 200 });
           }
 
-          const claimed = await transitionOrderStatus(serviceClient, orderId, "pending_payment", {
-            status: "paid",
+          const nextStatus = order.status === "pending_payment" ? "paid" : (order.status === "placed" ? "confirmed" : order.status);
+          const claimed = await transitionOrderStatus(serviceClient, orderId, order.status, {
+            status: nextStatus,
+            payment_status: "paid",
+            payment_method: payload.data?.channel || "paystack",
             paid_at: new Date().toISOString(),
           });
 
@@ -132,7 +135,7 @@ export async function POST(request: NextRequest) {
             const stock = await adjustAll(serviceClient, changes);
             if (!stock.ok) {
               // Undo the claim so the retry can try again; Paystack redelivers on a non-2xx.
-              await transitionOrderStatus(serviceClient, orderId, "paid", { status: "pending_payment", paid_at: null });
+              await transitionOrderStatus(serviceClient, orderId, nextStatus, { status: order.status, payment_status: "unpaid", paid_at: null });
               return NextResponse.json({ error: "Could not update stock; please retry.", code: "STOCK_UPDATE_FAILED" }, { status: 503 });
             }
 

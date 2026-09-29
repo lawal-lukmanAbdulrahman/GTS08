@@ -39,10 +39,32 @@ function FloatingInput({ id, label, type = "text", value, onChange, autoComplete
   );
 }
 
+export interface PickupStation {
+  id: string;
+  name: string;
+  address_line1: string;
+  address_line2?: string | null;
+  city: string;
+  state: string;
+  phone?: string | null;
+  operating_hours?: string | null;
+  notes?: string | null;
+  is_active: boolean;
+  is_default: boolean;
+}
+
 interface PlacedOrder {
   order_number: string;
   total: number;
-  pickup: { deadline: string; address: string | null; store_name: string; hold_hours: number };
+  pickup: {
+    deadline: string;
+    address: string | null;
+    store_name: string;
+    hold_hours: number;
+    phone?: string | null;
+    operating_hours?: string | null;
+    station_id?: string | null;
+  };
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -59,9 +81,37 @@ export default function CheckoutPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
 
+  const [stations, setStations] = useState<PickupStation[]>([]);
+  const [stationsLoading, setStationsLoading] = useState(true);
+  const [selectedStationId, setSelectedStationId] = useState<string>("");
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
+  const [copiedOrder, setCopiedOrder] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/v1/pickup-stations")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data?.data)) {
+          const list: PickupStation[] = data.data;
+          setStations(list);
+          if (list.length > 0) {
+            const def = list.find((s) => s.is_default) || list[0];
+            if (def) setSelectedStationId(def.id);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setStationsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Prefill from the signed-in customer.
   useEffect(() => {
@@ -90,7 +140,8 @@ export default function CheckoutPage() {
   const holdHours = store?.pickup_hold_hours ?? 48;
 
   const detailsReady = firstName.trim().length > 0 && lastName.trim().length > 0 && EMAIL.test(email.trim()) && phone.replace(/\D/g, "").length >= 7;
-  const canPlaceOrder = cartItems.length > 0 && !quoteLoading && quote?.all_available !== false && detailsReady && !isSubmitting;
+  const stationReady = !stationsLoading && stations.length > 0 && !!selectedStationId;
+  const canPlaceOrder = cartItems.length > 0 && !quoteLoading && quote?.all_available !== false && detailsReady && stationReady && !isSubmitting;
 
   const placeOrder = async () => {
     if (!canPlaceOrder) return;
@@ -106,6 +157,7 @@ export default function CheckoutPage() {
           items: toCheckoutLines(cartItems),
           fulfilment: "pickup",
           paymentMethod: "pay_on_pickup",
+          pickupStationId: selectedStationId || undefined,
         }),
       });
       const body = await res.json().catch(() => null);
@@ -131,15 +183,62 @@ export default function CheckoutPage() {
             <p className="text-xs font-bold tracking-[0.2em] uppercase text-emerald-700">Order placed</p>
             <h1 className="font-athelas text-2xl sm:text-3xl font-extrabold">We&apos;re holding your order</h1>
             <p className="text-sm text-gray-600">Your order number</p>
-            <p className="font-mono text-lg font-bold">{placed.order_number}</p>
+            <div className="flex items-center justify-center gap-2">
+              <span className="font-mono text-lg font-bold">{placed.order_number}</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!placed?.order_number) return;
+                  try {
+                    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                      await navigator.clipboard.writeText(placed.order_number);
+                    }
+                    setCopiedOrder(true);
+                    setTimeout(() => setCopiedOrder(false), 2000);
+                  } catch {
+                    setCopiedOrder(true);
+                    setTimeout(() => setCopiedOrder(false), 2000);
+                  }
+                }}
+                aria-label="Copy order code"
+                title="Copy order code"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-mono font-medium text-gray-700 bg-white border border-gray-200 hover:text-black hover:border-gray-300 transition-colors cursor-pointer shadow-2xs"
+              >
+                {copiedOrder ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    <span className="text-emerald-700 font-semibold">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+                    </svg>
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
+            </div>
             <div className="text-left rounded-xl bg-white border border-gray-200 p-4 space-y-2 text-sm">
               <p>
                 <strong>Pay when you collect:</strong> {formatKobo(placed.total)}
               </p>
               <p>
-                <strong>Collect from:</strong> {placed.pickup.store_name}
+                <strong>Pickup location:</strong> {placed.pickup.store_name}
                 {placed.pickup.address ? `, ${placed.pickup.address}` : ""}
               </p>
+              {placed.pickup.operating_hours && (
+                <p>
+                  <strong>Collection hours:</strong> {placed.pickup.operating_hours}
+                </p>
+              )}
+              {placed.pickup.phone && (
+                <p>
+                  <strong>Contact phone:</strong> {placed.pickup.phone}
+                </p>
+              )}
               <p>
                 <strong>Collect by:</strong> {formatWAT(placed.pickup.deadline)}
               </p>
@@ -149,7 +248,10 @@ export default function CheckoutPage() {
               <Link href={PRODUCT_LISTING} className="rounded-full bg-[#010101] text-white font-bold text-sm px-6 py-3">
                 Continue shopping
               </Link>
-              <Link href="/track" className="rounded-full border border-gray-300 font-bold text-sm px-6 py-3">
+              <Link
+                href={`/track?order_number=${encodeURIComponent(placed.order_number)}&email=${encodeURIComponent(email.trim())}`}
+                className="rounded-full border border-gray-300 font-bold text-sm px-6 py-3 hover:bg-gray-50 transition-colors"
+              >
                 Track my order
               </Link>
             </div>
@@ -202,9 +304,103 @@ export default function CheckoutPage() {
               </div>
             </section>
 
-            {/* 2. Contact details */}
+            {/* 2. Choose pickup location */}
             <section className="space-y-3">
-              <h2 className="font-athelas text-xl font-bold">2. Your details</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="font-athelas text-xl font-bold">2. Choose pickup location</h2>
+                {stations.length > 0 && (
+                  <span className="text-xs font-mono text-gray-500 font-semibold">
+                    {stations.length} {stations.length === 1 ? "station available" : "stations available"}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500">
+                Select the branch or pickup station where you will collect your items and pay at the till.
+              </p>
+
+              {stationsLoading ? (
+                <div className="rounded-2xl border border-gray-200 p-6 flex items-center justify-center gap-3 text-sm text-gray-500">
+                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  <span>Loading pickup stations...</span>
+                </div>
+              ) : stations.length > 0 ? (
+                <div className="space-y-3" role="radiogroup" aria-label="Pickup station selection">
+                  {stations.map((st) => {
+                    const isSelected = selectedStationId === st.id;
+                    const fullAddress = [st.address_line1, st.address_line2, st.city, st.state].filter(Boolean).join(", ");
+                    return (
+                      <label
+                        key={st.id}
+                        className={`flex gap-3 items-start rounded-2xl border-2 p-4 transition-all cursor-pointer ${
+                          isSelected
+                            ? "border-[#010101] bg-[#FFFBEB] ring-1 ring-[#010101]/20 shadow-xs"
+                            : "border-gray-200 hover:border-gray-300 bg-white"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="pickup-station"
+                          value={st.id}
+                          checked={isSelected}
+                          onChange={() => setSelectedStationId(st.id)}
+                          className="mt-1 accent-[#010101] shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-gray-900">{st.name}</span>
+                            {st.is_default && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-100 text-amber-900 uppercase">
+                                Main Hub
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-700 mt-1 font-medium">{fullAddress}</p>
+                          <div className="flex items-center gap-4 mt-2 text-[11px] text-gray-500 flex-wrap">
+                            {st.operating_hours && (
+                              <span className="flex items-center gap-1">
+                                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                {st.operating_hours}
+                              </span>
+                            )}
+                            {st.phone && (
+                              <span className="flex items-center gap-1 font-mono">
+                                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                                </svg>
+                                {st.phone}
+                              </span>
+                            )}
+                          </div>
+                          {st.notes && (
+                            <p className="text-[11px] text-gray-500 italic mt-1.5 pt-1.5 border-t border-gray-100">
+                              Note: {st.notes}
+                            </p>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50 p-5 space-y-2 text-amber-900" role="alert">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                    <p className="text-sm font-bold">No pickup stations available</p>
+                  </div>
+                  <p className="text-xs leading-relaxed text-amber-800">
+                    Orders cannot be placed right now because no collection stations have been set up by the store administrator. Please check back later or contact support.
+                  </p>
+                </div>
+              )}
+            </section>
+
+            {/* 3. Contact details */}
+            <section className="space-y-3">
+              <h2 className="font-athelas text-xl font-bold">3. Your details</h2>
               <p className="text-xs text-gray-500">So we know who&apos;s collecting and can send your order details.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FloatingInput id="first-name" label="First name" value={firstName} onChange={setFirstName} autoComplete="given-name" />
@@ -275,7 +471,12 @@ export default function CheckoutPage() {
                 {isSubmitting ? "Placing your order..." : quoteLoading ? "Checking stock..." : "Place order"}
               </button>
               {quoteLoading && <p className="text-[11px] text-gray-500 text-center mt-2">Verifying stock availability...</p>}
-              {!detailsReady && <p className="text-[11px] text-gray-500 text-center mt-2">Fill in your details to place the order.</p>}
+              {!stationsLoading && stations.length === 0 && (
+                <p className="text-[11px] text-amber-700 font-medium text-center mt-2">
+                  Orders disabled: Store has no pickup stations configured.
+                </p>
+              )}
+              {stations.length > 0 && !detailsReady && <p className="text-[11px] text-gray-500 text-center mt-2">Fill in your details to place the order.</p>}
 
               <p className="text-[11px] text-gray-400 text-center mt-4 leading-relaxed">
                 By placing your order you accept the{" "}

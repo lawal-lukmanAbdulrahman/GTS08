@@ -107,23 +107,40 @@ export function notifyOrderPaid(client: Client, orderId: string): Promise<void> 
 /** A pay-on-pickup order was placed: where, what to pay and by when. Sent once per order. */
 export function notifyPickupOrder(client: Client, orderId: string): Promise<void> {
   return safely(async () => {
-    const { data } = await client
-      .from("orders")
-      .select("order_number, total, pickup_deadline, customer:customers(email, full_name), items:order_items(quantity, line_total, product_snapshot)")
-      .eq("id", orderId)
-      .maybeSingle();
-    const order = data as { order_number: string; total: number; pickup_deadline: string | null; customer: { email: string | null; full_name: string | null } | null; items: Array<{ quantity: number; line_total: number; product_snapshot: { name?: string; size?: string | null; color?: string | null } | null }> | null } | null;
+    let order: any = null;
+    try {
+      const { data } = await client
+        .from("orders")
+        .select("order_number, total, pickup_deadline, customer:customers(email, full_name), items:order_items(quantity, line_total, product_snapshot), pickup_station:pickup_stations(name, address_line1, address_line2, city, state, phone)")
+        .eq("id", orderId)
+        .maybeSingle();
+      order = data;
+    } catch {
+      const { data } = await client
+        .from("orders")
+        .select("order_number, total, pickup_deadline, customer:customers(email, full_name), items:order_items(quantity, line_total, product_snapshot)")
+        .eq("id", orderId)
+        .maybeSingle();
+      order = data;
+    }
     if (!order?.customer?.email) return;
     const store = await storeInfo(client);
+
+    let pickupAddress = store.address ?? null;
+    const station = Array.isArray(order.pickup_station) ? order.pickup_station[0] : order.pickup_station;
+    if (station?.address_line1) {
+      pickupAddress = [station.name, station.address_line1, station.address_line2, station.city, station.state].filter(Boolean).join(", ");
+    }
+
     await sendEmail({
       to: order.customer.email,
       ...pickupOrderEmail({
         store,
         name: order.customer.full_name || "there",
         orderNumber: order.order_number,
-        items: (order.items ?? []).map((i) => ({ name: i.product_snapshot?.name || "Item", size: i.product_snapshot?.size ?? null, color: i.product_snapshot?.color ?? null, quantity: i.quantity, lineTotal: i.line_total })),
+        items: (order.items ?? []).map((i: any) => ({ name: i.product_snapshot?.name || "Item", size: i.product_snapshot?.size ?? null, color: i.product_snapshot?.color ?? null, quantity: i.quantity, lineTotal: i.line_total })),
         total: order.total,
-        address: store.address ?? null,
+        address: pickupAddress,
         deadlineText: order.pickup_deadline ? formatWAT(order.pickup_deadline) : "the deadline shown at checkout",
         trackUrl: `${storefrontUrl()}/track`,
       }),
@@ -132,18 +149,56 @@ export function notifyPickupOrder(client: Client, orderId: string): Promise<void
   }, undefined);
 }
 
-/** Tells the customer about the steps they care about (confirmed, shipped, delivered, cancelled). Internal steps are skipped. */
-export function notifyOrderStatus(client: Client, orderId: string, status: string): Promise<void> {
+/** Centralized hook point for order status change notifications. */
+export function onOrderStatusChanged(
+  client: Client,
+  orderId: string,
+  toStatus: string,
+  reason?: string
+): Promise<void> {
+  return notifyOrderStatus(client, orderId, toStatus, reason);
+}
+
+/** Tells the customer about the pickup status steps (confirmed, ready_for_pickup, collected, cancelled, expired, on_hold). */
+export function notifyOrderStatus(client: Client, orderId: string, status: string, reason?: string): Promise<void> {
   return safely(async () => {
-    const { data } = await client
-      .from("orders")
-      .select("order_number, paid_at, carrier_name, tracking_number, carrier_tracking_url, customer:customers(email, full_name)")
-      .eq("id", orderId)
-      .maybeSingle();
-    const o = data as { order_number: string; paid_at: string | null; carrier_name: string | null; tracking_number: string | null; carrier_tracking_url: string | null; customer: { email: string | null; full_name: string | null } | null } | null;
+    let o: any = null;
+    try {
+      const { data } = await client
+        .from("orders")
+        .select("order_number, total, payment_status, paid_at, customer:customers(email, full_name), pickup_station:pickup_stations(name, address_line1, address_line2, city, state, phone)")
+        .eq("id", orderId)
+        .maybeSingle();
+      o = data;
+    } catch {
+      const { data } = await client
+        .from("orders")
+        .select("order_number, total, payment_status, paid_at, customer:customers(email, full_name)")
+        .eq("id", orderId)
+        .maybeSingle();
+      o = data;
+    }
     if (!o?.customer?.email) return;
     const store = await storeInfo(client);
-    const mail = orderStatusEmail({ store, name: o.customer.full_name || "there", orderNumber: o.order_number, status, trackUrl: `${storefrontUrl()}/track`, carrierName: o.carrier_name, trackingNumber: o.tracking_number, trackingUrl: o.carrier_tracking_url, paid: !!o.paid_at });
+    const isPaid = o.payment_status === "paid" || !!o.paid_at;
+
+    let storeAddress = store.address;
+    const station = Array.isArray(o.pickup_station) ? o.pickup_station[0] : o.pickup_station;
+    if (station?.address_line1) {
+      storeAddress = [station.name, station.address_line1, station.address_line2, station.city, station.state].filter(Boolean).join(", ");
+    }
+
+    const mail = orderStatusEmail({
+      store,
+      name: o.customer.full_name || "there",
+      orderNumber: o.order_number,
+      status,
+      trackUrl: `${storefrontUrl()}/track`,
+      paid: isPaid,
+      totalKobo: o.total,
+      storeAddress,
+      reason,
+    });
     if (mail) await sendEmail({ to: o.customer.email, ...mail, idempotencyKey: `order-status/${orderId}/${status}` });
   }, undefined);
 }

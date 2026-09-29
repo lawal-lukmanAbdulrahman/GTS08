@@ -21,6 +21,10 @@ describe("validateNewStaff", () => {
           can_void_orders: false,
           can_apply_discounts: false,
           can_manage_broadcasts: false,
+          can_update_order_status: false,
+          can_mark_orders_paid: false,
+          can_complete_pickup: false,
+          can_cancel_orders: false,
         },
       },
     });

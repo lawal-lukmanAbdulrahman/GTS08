@@ -17,6 +17,10 @@ const GRANTS: Array<{ key: keyof PermissionsView; label: string }> = [
   { key: "can_manage_products", label: "Manage products" },
   { key: "can_handle_tickets", label: "Handle support tickets" },
   { key: "can_manage_broadcasts", label: "Manage broadcasts & popups" },
+  { key: "can_update_order_status", label: "Update order status" },
+  { key: "can_mark_orders_paid", label: "Mark orders as paid" },
+  { key: "can_complete_pickup", label: "Complete order pickup" },
+  { key: "can_cancel_orders", label: "Cancel customer orders" },
 ];
 
 /** What this staff member can and can't do, so a missing button never feels like a bug. */

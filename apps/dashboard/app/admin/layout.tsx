@@ -231,7 +231,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       isAllowed: (admin, perms, role) => admin || !!perms?.can_manage_inventory || role === "inventory_staff",
     },
     {
-      name: "Orders & Shipping",
+      name: "Orders & Fulfilment",
       href: "/admin/orders",
       exact: false,
       icon: (
@@ -240,6 +240,18 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         </svg>
       ),
       isAllowed: (admin, perms) => admin || !!perms?.can_view_all_orders,
+    },
+    {
+      name: "Pickup Stations",
+      href: "/admin/pickup-stations",
+      exact: false,
+      icon: (
+        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+        </svg>
+      ),
+      isAllowed: (admin) => admin,
     },
     {
       name: "Products Catalog",

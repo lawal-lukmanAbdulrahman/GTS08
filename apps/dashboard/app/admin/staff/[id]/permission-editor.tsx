@@ -25,6 +25,10 @@ const GRANTS: Array<{ key: keyof PermissionsView; label: string; hint?: string }
   { key: "can_manage_products", label: "Manage products" },
   { key: "can_handle_tickets", label: "Handle support tickets" },
   { key: "can_manage_broadcasts", label: "Manage broadcasts & popups", hint: "Create, edit, and publish store banners and popup announcements" },
+  { key: "can_update_order_status", label: "Update order status", hint: "Confirm orders, mark ready for pickup, hold, move back" },
+  { key: "can_mark_orders_paid", label: "Mark orders as paid", hint: "Confirm and record customer payment" },
+  { key: "can_complete_pickup", label: "Complete order pickup", hint: "Perform handover and complete pickup at the counter" },
+  { key: "can_cancel_orders", label: "Cancel customer orders", hint: "Cancel uncollected orders with a reason" },
 ];
 
 /** What an admin can change about a staff member: which actions they may take, and whether they can sign in at all. */

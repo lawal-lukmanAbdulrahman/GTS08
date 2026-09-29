@@ -106,9 +106,13 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   // ── orders
   "orders": { GET: "session|optionalStaff" }, // own orders; everyone's with can_view_all_orders
   "orders/[id]": { GET: "permission:can_view_all_orders", PATCH: "permission:can_view_all_orders" },
+  "orders/[id]/complete-pickup": { POST: "permission:can_complete_pickup" },
+  "orders/[id]/pay": { POST: "permission:can_mark_orders_paid" },
   "orders/[id]/status": { PUT: "permission:can_view_all_orders" },
   "orders/customer": { GET: "session" },
   "orders/track": { GET: "public" }, // requires order number AND email
+  "pickup-stations": { GET: "optionalStaff", POST: "admin" },
+  "pickup-stations/[id]": { GET: "public", PATCH: "admin", DELETE: "admin" },
 
   // ── inventory
   "inventory": { GET: "permission:can_manage_inventory" },

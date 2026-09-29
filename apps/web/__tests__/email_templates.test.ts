@@ -122,19 +122,24 @@ describe("orderStatusEmail", () => {
   const base = { store: STORE, name: "Ngozi", orderNumber: "GTS-202609-000200", trackUrl: "https://gts.ng/track" };
   it("tells the customer in plain words what happened, for each step they care about", () => {
     expect(orderStatusEmail({ ...base, status: "confirmed" })!.subject).toMatch(/confirmed/i);
-    expect(orderStatusEmail({ ...base, status: "shipped" })!.subject).toMatch(/on its way/i);
-    expect(orderStatusEmail({ ...base, status: "delivered" })!.subject).toMatch(/delivered/i);
+    expect(orderStatusEmail({ ...base, status: "ready_for_pickup" })!.subject).toMatch(/ready for pickup/i);
+    expect(orderStatusEmail({ ...base, status: "collected" })!.subject).toMatch(/collected/i);
     expect(orderStatusEmail({ ...base, status: "cancelled" })!.subject).toMatch(/cancelled/i);
   });
-  it("says nothing about steps that are internal", () => {
-    expect(orderStatusEmail({ ...base, status: "processing" })).toBeNull();
+  it("says nothing about steps that are internal or unhandled", () => {
+    expect(orderStatusEmail({ ...base, status: "placed" })).toBeNull();
   });
-  it("gives the courier and tracking number when shipped, escaped", () => {
-    const m = orderStatusEmail({ ...base, status: "shipped", carrierName: "GIG", trackingNumber: EVIL, trackingUrl: "https://t.example/1" })!;
-    expect(m.html).toContain("GIG");
-    expect(m.html).toContain('href="https://t.example/1"');
-    expect(m.html).not.toContain("<img src=x");
-    expect(m.text).toContain("GIG");
+  it("gives the pickup location and payment reminder when ready_for_pickup", () => {
+    const m = orderStatusEmail({
+      ...base,
+      status: "ready_for_pickup",
+      storeAddress: "12 Marina, Lagos Island",
+      paid: false,
+      totalKobo: 4500000,
+    })!;
+    expect(m.html).toContain("12 Marina, Lagos Island");
+    expect(m.html).toContain("Payment due at pickup");
+    expect(m.text).toContain("12 Marina, Lagos Island");
   });
   it("says a refund is being handled when a paid order is cancelled", () => {
     expect(orderStatusEmail({ ...base, status: "cancelled", paid: true })!.html).toMatch(/refund/i);

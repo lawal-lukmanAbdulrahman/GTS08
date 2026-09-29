@@ -24,12 +24,26 @@ import CheckoutPage from "../app/(storefront)/checkout/page";
 
 const ITEM = { product: { id: "oxford-shirt", title: "Oxford Shirt", image: "/x.png", priceNum: 15500 }, size: "M", color: "Blue", quantity: 2 };
 
-function fillDetails() {
+async function fillDetails() {
+  await waitFor(() => expect(screen.getByRole("radio", { name: /GTS Wears/i })).toBeInTheDocument());
   fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Ada" } });
   fireEvent.change(screen.getByLabelText(/last name/i), { target: { value: "Obi" } });
   fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "ada@example.com" } });
   fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: "08012345678" } });
 }
+
+const DEFAULT_STATION = {
+  id: "st-1",
+  name: "GTS Wears",
+  address_line1: "12 Allen Avenue, Ikeja",
+  address_line2: null,
+  city: "Ikeja",
+  state: "Lagos",
+  phone: "0814",
+  operating_hours: "Mon - Sat: 9:00 AM - 6:00 PM",
+  is_active: true,
+  is_default: true,
+};
 
 beforeEach(() => {
   replace.mockReset();
@@ -37,9 +51,33 @@ beforeEach(() => {
   cart.hydrated = true;
   cart.clearCart = vi.fn();
   idempotentFetch.mockReset();
+  global.fetch = vi.fn().mockImplementation((url: string) => {
+    if (url.includes("/api/v1/pickup-stations")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, data: [DEFAULT_STATION] }),
+      });
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+  });
 });
 
 describe("checkout", () => {
+  it("disables ordering when no pickup stations are configured", async () => {
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/v1/pickup-stations")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, data: [] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+    render(<CheckoutPage />);
+    expect(await screen.findByText(/No pickup stations available/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /place order/i })).toBeDisabled();
+    expect(screen.getByText(/Orders disabled: Store has no pickup stations configured/i)).toBeInTheDocument();
+  });
   it("offers pay on pickup, with where and how long the items are held", () => {
     render(<CheckoutPage />);
     const pickup = screen.getByRole("radio", { name: /pay on pickup/i });
@@ -55,16 +93,15 @@ describe("checkout", () => {
     expect(screen.getByText(/coming soon/i)).toBeInTheDocument();
   });
 
-  it("asks for contact details only: no delivery address or made-up pickup stations", () => {
-    const { container } = render(<CheckoutPage />);
+  it("asks for contact details only: no delivery address", () => {
+    render(<CheckoutPage />);
     expect(screen.queryByLabelText(/address/i)).not.toBeInTheDocument();
-    expect(container.textContent).not.toMatch(/pickup station|Ilorin|hub/i);
   });
 
   it("places a pay-on-pickup order, empties the cart and shows where, what and by when", async () => {
     idempotentFetch.mockResolvedValue(new Response(JSON.stringify({ success: true, data: { order_number: "GTS-202609-000010", total: 3_100_000, pickup: { deadline: "2026-09-29T14:00:00Z", address: "12 Allen Avenue, Ikeja", store_name: "GTS Wears", hold_hours: 24 } } }), { status: 200 }));
     render(<CheckoutPage />);
-    fillDetails();
+    await fillDetails();
     fireEvent.click(screen.getByRole("button", { name: /place order/i }));
     expect(await screen.findByText("GTS-202609-000010")).toBeInTheDocument();
     const [url, init] = idempotentFetch.mock.calls[0]!;
@@ -85,7 +122,7 @@ describe("checkout", () => {
   it("shows the server's reason when the order can't be placed", async () => {
     idempotentFetch.mockResolvedValue(new Response(JSON.stringify({ error: "One or more items no longer have enough stock." }), { status: 409 }));
     render(<CheckoutPage />);
-    fillDetails();
+    await fillDetails();
     fireEvent.click(screen.getByRole("button", { name: /place order/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/enough stock/);
     expect(cart.clearCart).not.toHaveBeenCalled();

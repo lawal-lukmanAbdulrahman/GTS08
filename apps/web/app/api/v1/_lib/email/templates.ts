@@ -183,24 +183,98 @@ export function posReceiptEmail(o: {
 }
 
 const STATUS_WORDS: Record<string, { subject: (n: string) => string; title: string; line: string }> = {
-  confirmed: { subject: (n) => `Order ${n} is confirmed`, title: "Your order is confirmed", line: "We've confirmed your order and are getting it ready." },
-  shipped: { subject: (n) => `Order ${n} is on its way`, title: "Your order is on its way", line: "Your order has been handed to the courier." },
-  delivered: { subject: (n) => `Order ${n} was delivered`, title: "Your order was delivered", line: "Your order has been delivered. We hope you love it." },
-  cancelled: { subject: (n) => `Order ${n} was cancelled`, title: "Your order was cancelled", line: "Your order has been cancelled." },
+  confirmed: {
+    subject: (n) => `Order ${n} is confirmed`,
+    title: "Your order is confirmed",
+    line: "We've confirmed your order and are preparing it for pickup.",
+  },
+  ready_for_pickup: {
+    subject: (n) => `Order ${n} is ready for pickup`,
+    title: "Your order is ready for pickup",
+    line: "Your order is ready for collection at our store. Please bring your order code.",
+  },
+  collected: {
+    subject: (n) => `Order ${n} has been collected`,
+    title: "Order collected",
+    line: "Your order has been collected. Thank you for shopping with us!",
+  },
+  cancelled: {
+    subject: (n) => `Order ${n} was cancelled`,
+    title: "Your order was cancelled",
+    line: "Your order has been cancelled.",
+  },
+  expired: {
+    subject: (n) => `Order ${n} pickup window expired`,
+    title: "Pickup window expired",
+    line: "The pickup window for your order has expired.",
+  },
+  on_hold: {
+    subject: (n) => `Order ${n} is on hold`,
+    title: "Your order is on hold",
+    line: "Your order has been placed on temporary hold. Our team will contact you shortly.",
+  },
 };
 
-/** A short update for the steps a customer cares about; null for internal steps (e.g. processing). */
-export function orderStatusEmail(o: { store: StoreInfo; name: string; orderNumber: string; status: string; trackUrl: string; carrierName?: string | null; trackingNumber?: string | null; trackingUrl?: string | null; paid?: boolean }): Rendered | null {
+/** A short update for pickup order lifecycle. */
+export function orderStatusEmail(o: {
+  store: StoreInfo;
+  name: string;
+  orderNumber: string;
+  status: string;
+  trackUrl: string;
+  paid?: boolean;
+  totalKobo?: number;
+  reason?: string | null;
+  storeAddress?: string | null;
+}): Rendered | null {
   const words = STATUS_WORDS[o.status];
   if (!words) return null;
-  const courier = o.status === "shipped" && (o.carrierName || o.trackingNumber)
-    ? p(`Courier: <strong>${esc(o.carrierName ?? "")}</strong>${o.trackingNumber ? `<br>Tracking number: <strong>${esc(o.trackingNumber)}</strong>` : ""}`) + (o.trackingUrl ? button(o.trackingUrl, "Track with the courier") : "")
-    : "";
-  const refund = o.status === "cancelled" && o.paid ? p("Since you'd already paid, we'll refund you. It can take a few working days to reach your account.") : "";
+
+  const addressText =
+    o.status === "ready_for_pickup" && o.storeAddress
+      ? p(`Pickup Location: <strong>${esc(o.storeAddress)}</strong>`)
+      : "";
+
+  const paymentNote =
+    o.status === "ready_for_pickup" && !o.paid
+      ? p(
+          `<strong>Payment due at pickup:</strong> ${esc(
+            formatKobo(o.totalKobo ?? 0)
+          )}. You can pay with cash, card, or transfer.`
+        )
+      : "";
+
+  const refund =
+    o.status === "cancelled" && o.paid
+      ? p("Since you'd already paid, we'll process your refund. It can take a few working days to reach your account.")
+      : "";
+
+  const reasonNote = o.reason ? p(`Note: ${esc(o.reason)}`) : "";
+
   return {
     subject: words.subject(o.orderNumber),
-    html: shell(o.store, words.title, p(`Hello ${esc(o.name)}. ${esc(words.line)} Order <strong>${esc(o.orderNumber)}</strong>.`) + courier + refund + button(o.trackUrl, "Track my order")),
-    text: [`Hello ${o.name}. ${words.line} Order ${o.orderNumber}.`, o.status === "shipped" && o.carrierName ? `Courier: ${o.carrierName}${o.trackingNumber ? `, tracking number ${o.trackingNumber}` : ""}` : "", o.trackingUrl && o.status === "shipped" ? `Track: ${o.trackingUrl}` : "", refund ? "Since you'd already paid, we'll refund you." : "", `Track your order: ${o.trackUrl}`].filter(Boolean).join("\n\n"),
+    html: shell(
+      o.store,
+      words.title,
+      p(`Hello ${esc(o.name)}. ${esc(words.line)}`) +
+        p(`Order reference: <strong>${esc(o.orderNumber)}</strong>`) +
+        addressText +
+        paymentNote +
+        reasonNote +
+        refund +
+        button(o.trackUrl, "Track my order")
+    ),
+    text: [
+      `Hello ${o.name}. ${words.line}`,
+      `Order reference: ${o.orderNumber}`,
+      o.status === "ready_for_pickup" && o.storeAddress ? `Pickup Location: ${o.storeAddress}` : "",
+      o.status === "ready_for_pickup" && !o.paid ? `Payment due at pickup: ${formatKobo(o.totalKobo ?? 0)}` : "",
+      o.reason ? `Note: ${o.reason}` : "",
+      refund ? "Since you'd already paid, we'll process your refund." : "",
+      `Track your order: ${o.trackUrl}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
   };
 }
 
