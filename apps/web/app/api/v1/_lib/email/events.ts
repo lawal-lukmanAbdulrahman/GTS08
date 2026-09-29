@@ -1,4 +1,4 @@
-import { formatWAT } from "@gts/utils";
+import { formatWAT, getOrderPickupPin } from "@gts/utils";
 import { sendEmail, type SendResult } from "./send";
 import { pickupOrderEmail, customerWelcomeEmail, passwordResetEmail, accountAccessEmail, ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, type StoreInfo } from "./templates";
 
@@ -168,14 +168,14 @@ export function notifyOrderStatus(client: Client, orderId: string, status: strin
     try {
       const { data } = await client
         .from("orders")
-        .select("order_number, total, payment_status, paid_at, pickup_deadline, customer:customers(email, full_name), pickup_station:pickup_stations(name, address_line1, address_line2, city, state, phone, operating_hours)")
+        .select("id, order_number, total, payment_status, paid_at, tracking_number, pickup_deadline, customer:customers(email, full_name), pickup_station:pickup_stations(name, address_line1, address_line2, city, state, phone, operating_hours)")
         .eq("id", orderId)
         .maybeSingle();
       o = data;
     } catch {
       const { data } = await client
         .from("orders")
-        .select("order_number, total, payment_status, paid_at, pickup_deadline, customer:customers(email, full_name)")
+        .select("id, order_number, total, payment_status, paid_at, tracking_number, pickup_deadline, customer:customers(email, full_name)")
         .eq("id", orderId)
         .maybeSingle();
       o = data;
@@ -193,6 +193,7 @@ export function notifyOrderStatus(client: Client, orderId: string, status: strin
     }
 
     const trackUrl = `${storefrontUrl()}/track?order_number=${encodeURIComponent(o.order_number)}&email=${encodeURIComponent(o.customer.email)}`;
+    const pickupPin = getOrderPickupPin({ id: orderId, order_number: o.order_number, tracking_number: o.tracking_number });
 
     const mail = orderStatusEmail({
       store,
@@ -205,6 +206,7 @@ export function notifyOrderStatus(client: Client, orderId: string, status: strin
       storeAddress,
       operatingHours,
       pickupDeadlineText: o.pickup_deadline ? formatWAT(o.pickup_deadline) : null,
+      pickupPin,
       reason,
     });
     if (mail) await sendEmail({ to: o.customer.email, ...mail, idempotencyKey: `order-status/${orderId}/${status}` });

@@ -123,6 +123,7 @@ export default function PosPage() {
   const [waCart, setWaCart] = useState<CartLine[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [createdOrderNumber, setCreatedOrderNumber] = useState<string | null>(null);
   const [lookupOrderNumber, setLookupOrderNumber] = useState("");
   const [lookupError, setLookupError] = useState<string | null>(null);
@@ -399,6 +400,7 @@ export default function PosPage() {
         items: waCart.map((l) => ({ variant_id: l.variantId, quantity: l.quantity })),
         customer_name: customerName,
         customer_phone: customerPhone,
+        customer_email: customerEmail,
       },
     });
     if (!result.ok) {
@@ -410,7 +412,8 @@ export default function PosPage() {
     setWaCart([]);
     setCustomerName("");
     setCustomerPhone("");
-  }, [waCart, customerName, customerPhone]);
+    setCustomerEmail("");
+  }, [waCart, customerName, customerPhone, customerEmail]);
 
   async function lookupWhatsAppOrder(ref: string = lookupOrderNumber) {
     setLookupError(null);
@@ -615,8 +618,10 @@ export default function PosPage() {
             cartLines={waCart}
             customerName={customerName}
             customerPhone={customerPhone}
+            customerEmail={customerEmail}
             onCustomerNameChange={setCustomerName}
             onCustomerPhoneChange={setCustomerPhone}
+            onCustomerEmailChange={setCustomerEmail}
             onIncrement={incrementLine}
             onDecrement={decrementLine}
             onRemove={removeLine}

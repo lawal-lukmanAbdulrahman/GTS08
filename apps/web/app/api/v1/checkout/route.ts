@@ -247,7 +247,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
 
       pickup = {
         hold_hours: holdHours,
-        deadline,
+        deadline: null,
         store_name: stationName,
         address: stationAddress,
         station_id: selectedStationId,

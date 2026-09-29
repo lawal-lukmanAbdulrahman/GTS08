@@ -36,6 +36,8 @@ export {
   stockEffectOfCancel,
   validateTransition,
   requiresReason,
+  getOrderPickupPin,
+  formatPickupPin,
   FORWARD_NEXT,
   BACKWARD_STEP,
   type OrderStatus,

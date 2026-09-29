@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { formatWAT } from "@gts/utils";
+import { formatWAT, getOrderPickupPin, formatPickupPin } from "@gts/utils";
 import { API_BASE } from "../../lib/api-base";
 import { authFetch } from "../../lib/session";
 import { describeStatus, FORWARD_NEXT, BACKWARD_STEP, requiresReason } from "./order-status-options";
@@ -34,6 +34,8 @@ export interface DetailedOrder {
   hold_reason?: string | null;
   internal_notes?: string | null;
   paid_at?: string | null;
+  tracking_number?: string | null;
+  pickup_pin?: string | null;
   pickup_station?: {
     id?: string;
     name: string;
@@ -90,6 +92,7 @@ export default function OrderInfoDrawer({
   const [actionType, setActionType] = useState<"forward" | "backward" | "hold" | "cancel" | "reopen" | "pay" | "complete_pickup" | null>(null);
   const [actionReason, setActionReason] = useState("");
   const [selectedPayMethod, setSelectedPayMethod] = useState<"cash" | "pos" | "transfer">("cash");
+  const [pickupPinInput, setPickupPinInput] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [drawerNotice, setDrawerNotice] = useState<string | null>(null);
@@ -117,10 +120,12 @@ export default function OrderInfoDrawer({
       fetchOrderDetail(orderId);
       setActionType(initialAction || null);
       setActionReason("");
+      setPickupPinInput("");
       setDrawerNotice(null);
     } else {
       setOrder(null);
       setActionType(null);
+      setPickupPinInput("");
     }
   }, [isOpen, orderId, initialAction]);
 
@@ -270,11 +275,19 @@ export default function OrderInfoDrawer({
           setActionError(json?.error || "Failed to mark order as paid.");
         }
       } else if (actionType === "complete_pickup") {
+        const isWalkIn = order.channel === "pos" || order.channel === "walk_in";
+        const cleanPin = pickupPinInput.trim().replace(/\s+/g, "");
+        if (!isWalkIn && !cleanPin) {
+          setActionError("Customer 6-digit collection PIN is required to complete handover.");
+          setActionLoading(false);
+          return;
+        }
         const isUnpaid = order.payment_status !== "paid";
         const res = await fetch(`${API_BASE}/orders/${order.id}/complete-pickup`, {
           method: "POST",
           headers,
           body: JSON.stringify({
+            pickup_pin: !isWalkIn ? cleanPin : undefined,
             mark_paid: isUnpaid,
             payment_method: isUnpaid ? selectedPayMethod : undefined,
             note: actionReason.trim() || undefined,
@@ -284,6 +297,7 @@ export default function OrderInfoDrawer({
         if (res.ok) {
           setDrawerNotice("Pickup handover completed successfully! Order collected.");
           setActionType(null);
+          setPickupPinInput("");
           await fetchOrderDetail(order.id);
           await onStatusUpdated();
         } else {
@@ -599,6 +613,25 @@ export default function OrderInfoDrawer({
 
                 {/* ── 3. Customer & Pickup Station Information Grid ── */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  {/* Anti-Theft Verification PIN (for Staff Handover Reference) */}
+                  {order.status === "ready_for_pickup" && (
+                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between sm:col-span-2">
+                      <div className="space-y-0.5">
+                        <span className="font-mono text-[10px] font-bold uppercase text-amber-800 dark:text-amber-400 tracking-wider">
+                          Anti-Theft Collection PIN
+                        </span>
+                        <p className="text-xs text-amber-900 dark:text-amber-300">
+                          Customer must provide this 6-digit PIN upon arrival to collect order.
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono text-base font-black tracking-widest text-[#010101] dark:text-white bg-white dark:bg-[#141414] px-3.5 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700/60 shadow-2xs inline-block">
+                          {formatPickupPin(order.tracking_number || getOrderPickupPin(order))}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Customer Card */}
                   <div className="p-4 rounded-2xl bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-[#282828] space-y-1.5 shadow-2xs">
                     <span className="font-mono text-[10px] font-bold uppercase text-gray-400">
@@ -788,6 +821,31 @@ export default function OrderInfoDrawer({
                 </p>
               </div>
             ) : null}
+
+            {actionType === "complete_pickup" && order.channel !== "pos" && order.channel !== "walk_in" && (
+              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold text-amber-900 dark:text-amber-300 font-mono uppercase tracking-wider text-[11px]">
+                    Customer 6-Digit Collection PIN *
+                  </label>
+                  <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold uppercase">
+                    Anti-Theft Check
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300/90 leading-relaxed">
+                  Enter the 6-digit PIN shown on the customer&apos;s tracking pass or order email.
+                </p>
+                <input
+                  type="text"
+                  maxLength={7}
+                  placeholder="e.g. 481 920"
+                  value={pickupPinInput}
+                  onChange={(e) => setPickupPinInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-amber-300 dark:border-amber-500/40 bg-white dark:bg-[#141414] text-base font-mono font-black tracking-widest text-center text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                  autoFocus
+                />
+              </div>
+            )}
 
             <div className="space-y-1 text-xs">
               <label className="block font-bold text-gray-700 dark:text-gray-300">

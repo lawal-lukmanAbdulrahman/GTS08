@@ -311,7 +311,7 @@ describe("pay on pickup", () => {
       },
       error: null,
     };
-    db.results.orders = { data: { id: "order-2", order_number: "GTS-202609-000010", status: "pending_payment", subtotal: 3100000, delivery_fee: 0, discount_amount: 0, total: 3100000 }, error: null };
+    db.results.orders = { data: { id: "order-2", order_number: "GTS-202609-000010", status: "placed", subtotal: 3100000, delivery_fee: 0, discount_amount: 0, total: 3100000 }, error: null };
   });
 
   it("rejects pickup orders with 400 when no active pickup stations are configured", async () => {

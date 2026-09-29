@@ -116,3 +116,45 @@ export function validateTransition(
  */
 export const stockEffectOfCancel = (statusOrPayment: string): "release" | "restock" =>
   statusOrPayment === "unpaid" || statusOrPayment === "pending_payment" ? "release" : "restock";
+
+/**
+ * Computes or retrieves a 6-digit verification PIN for an order.
+ * If pickup_pin or tracking_number is already a valid 6-digit string, it is used.
+ * Otherwise, generates a deterministic 6-digit PIN from the order ID or order number
+ * so that it is guaranteed to be consistent across customer tracking, email, and admin handover.
+ */
+export function getOrderPickupPin(order?: {
+  id?: string | null;
+  order_number?: string | null;
+  pickup_pin?: string | null;
+  tracking_number?: string | null;
+} | null): string {
+  if (!order) return "100000";
+  if (order.pickup_pin && /^\d{6}$/.test(order.pickup_pin.trim())) {
+    return order.pickup_pin.trim();
+  }
+  if (order.tracking_number && /^\d{6}$/.test(order.tracking_number.trim())) {
+    return order.tracking_number.trim();
+  }
+  const seed = (order.id || order.order_number || "GTS-ORDER").toString();
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    const char = seed.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
+  }
+  const absHash = Math.abs(hash);
+  const pinNum = 100000 + (absHash % 900000);
+  return pinNum.toString();
+}
+
+/** Formats a 6-digit PIN with a space in the middle for easier reading (e.g. 481 920) */
+export function formatPickupPin(pin?: string | null): string {
+  if (!pin) return "";
+  const clean = pin.replace(/\D/g, "");
+  if (clean.length === 6) {
+    return `${clean.slice(0, 3)} ${clean.slice(3)}`;
+  }
+  return clean || pin;
+}
+

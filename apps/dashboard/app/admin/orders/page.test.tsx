@@ -123,7 +123,7 @@ describe("Admin Orders Page Revamp", () => {
     expect(screen.getByText("All items handed over & collected")).toBeInTheDocument();
   });
 
-  it("opens the floating action menu with View Details and red Cancel Order on clicking ⋮", async () => {
+  it("opens the floating action menu with Info and red Cancel Order on clicking ⋮", async () => {
     serveOrders([sampleOrder({ id: "ord-1", status: "placed" })]);
     render(<AdminOrdersPage />);
 
@@ -134,8 +134,7 @@ describe("Admin Orders Page Revamp", () => {
     fireEvent.click(actionBtn);
 
     // Dropdown items appear
-    await screen.findByText("View Details");
-    expect(screen.getByText("Confirm Order")).toBeInTheDocument();
+    await screen.findByText("Info");
 
     const cancelItem = screen.getByText("Cancel Order");
     expect(cancelItem).toBeInTheDocument();

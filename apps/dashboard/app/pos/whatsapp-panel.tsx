@@ -35,8 +35,10 @@ interface WhatsAppPanelProps {
   cartLines: CartLine[];
   customerName: string;
   customerPhone: string;
+  customerEmail: string;
   onCustomerNameChange: (value: string) => void;
   onCustomerPhoneChange: (value: string) => void;
+  onCustomerEmailChange: (value: string) => void;
   onIncrement: (variantId: string) => void;
   onDecrement: (variantId: string) => void;
   onRemove: (variantId: string) => void;
@@ -73,8 +75,10 @@ export default function WhatsAppPanel({
   cartLines,
   customerName,
   customerPhone,
+  customerEmail,
   onCustomerNameChange,
   onCustomerPhoneChange,
+  onCustomerEmailChange,
   onIncrement,
   onDecrement,
   onRemove,
@@ -97,7 +101,12 @@ export default function WhatsAppPanel({
 }: WhatsAppPanelProps) {
   const [cancelling, setCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
-  const canCreate = cartLines.length > 0 && customerName.trim() !== "" && customerPhone.trim() !== "";
+  const canCreate =
+    cartLines.length > 0 &&
+    customerName.trim() !== "" &&
+    customerPhone.trim() !== "" &&
+    customerEmail.trim() !== "" &&
+    customerEmail.includes("@");
 
   return (
     <div className="flex flex-col h-full p-6 space-y-4">
@@ -128,15 +137,25 @@ export default function WhatsAppPanel({
             type="text"
             value={customerName}
             onChange={(e) => onCustomerNameChange(e.target.value)}
-            placeholder="Customer name"
+            placeholder="Customer name *"
             className="px-3 py-2 text-base rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
+            required
           />
           <input
             type="tel"
             value={customerPhone}
             onChange={(e) => onCustomerPhoneChange(e.target.value)}
-            placeholder="Customer WhatsApp number"
+            placeholder="Customer WhatsApp phone number *"
             className="px-3 py-2 text-base rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
+            required
+          />
+          <input
+            type="email"
+            value={customerEmail}
+            onChange={(e) => onCustomerEmailChange(e.target.value)}
+            placeholder="Customer email address * (for tracking & PIN)"
+            className="px-3 py-2 text-base rounded-[6px] border border-gray-200 dark:border-[#383838] bg-transparent"
+            required
           />
 
           <div className="flex-1 space-y-2">

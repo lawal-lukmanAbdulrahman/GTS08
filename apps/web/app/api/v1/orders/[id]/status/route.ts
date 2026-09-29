@@ -11,6 +11,7 @@ import {
   stockEffectOfCancel,
   validateTransition,
   requiresReason,
+  getOrderPickupPin,
 } from "../../../_lib/order-machine";
 import { afterResponse } from "../../../_lib/email/after";
 import { notifyOrderStatus } from "../../../_lib/email/events";
@@ -140,6 +141,8 @@ export const PUT = withIdempotency(async function PUT(
       const holdHours =
         settings?.pickup_hold_hours && settings.pickup_hold_hours > 0 ? settings.pickup_hold_hours : 48;
       patch.pickup_deadline = new Date(Date.now() + holdHours * 3_600_000).toISOString();
+      const pickupPin = getOrderPickupPin(order);
+      patch.tracking_number = pickupPin;
     }
     if (to === "collected") {
       patch.delivered_at = now;

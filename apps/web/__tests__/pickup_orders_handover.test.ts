@@ -28,6 +28,7 @@ const ctx = { params: Promise.resolve({ id: ORDER_ID }) };
 const makeOrder = (over: Record<string, unknown> = {}) => ({
   id: ORDER_ID,
   order_number: "GTS-202609-000500",
+  channel: "pos",
   status: "ready_for_pickup",
   payment_status: "unpaid",
   payment_method: null,
@@ -90,6 +91,23 @@ describe("POST /api/v1/orders/[id]/complete-pickup", () => {
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.code).toBe("PAYMENT_METHOD_REQUIRED");
+  });
+
+  it("verifies 6-digit collection PIN for web storefront and whatsapp orders", async () => {
+    db.results.orders = {
+      data: makeOrder({ channel: "web", tracking_number: "654321", payment_status: "paid" }),
+      error: null,
+    };
+
+    // Missing / wrong PIN
+    const failRes = await completePickup(req({ pickup_pin: "000000" }), ctx);
+    expect(failRes.status).toBe(400);
+    const failJson = await failRes.json();
+    expect(failJson.code).toBe("INVALID_PICKUP_PIN");
+
+    // Correct PIN
+    const passRes = await completePickup(req({ pickup_pin: "654321" }), ctx);
+    expect(passRes.status).toBe(200);
   });
 
   it("atomically accepts payment and completes pickup for unpaid order", async () => {

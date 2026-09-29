@@ -16,6 +16,13 @@ export interface CustomerNotification {
   link: string;
   orderNumber?: string;
   orderStatus?: string;
+  pickupPin?: string;
+  pickupStationName?: string;
+  pickupStationAddress?: string;
+  pickupDeadline?: string;
+  pickupHours?: string;
+  totalKobo?: number;
+  paymentStatus?: "unpaid" | "paid";
   productId?: string;
   productSlug?: string;
   productName?: string;
@@ -24,6 +31,8 @@ export interface CustomerNotification {
   replyText?: string;
   createdAt: string;
   isRead?: boolean;
+  isArchived?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface CanvasElement {
@@ -360,6 +369,50 @@ export function addCustomerNotification(
   }
 
   return newNotif;
+}
+
+/**
+ * Save customer notifications array
+ */
+export function saveCustomerNotifications(notifications: CustomerNotification[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CUSTOMER_NOTIFS_KEY, JSON.stringify(notifications.slice(0, 100)));
+    window.dispatchEvent(
+      new CustomEvent("gts_notifications_updated", {
+        detail: { notifications },
+      })
+    );
+  } catch (err) {
+    console.error("Failed to save customer notifications:", err);
+  }
+}
+
+/**
+ * Mark a customer notification as read
+ */
+export function markCustomerNotificationRead(id: string): void {
+  const current = getCustomerNotifications();
+  const updated = current.map((n) => (n.id === id ? { ...n, isRead: true } : n));
+  saveCustomerNotifications(updated);
+}
+
+/**
+ * Archive or unarchive a customer notification
+ */
+export function archiveCustomerNotification(id: string, archived = true): void {
+  const current = getCustomerNotifications();
+  const updated = current.map((n) => (n.id === id ? { ...n, isArchived: archived } : n));
+  saveCustomerNotifications(updated);
+}
+
+/**
+ * Delete a customer notification permanently
+ */
+export function deleteCustomerNotification(id: string): void {
+  const current = getCustomerNotifications();
+  const updated = current.filter((n) => n.id !== id);
+  saveCustomerNotifications(updated);
 }
 
 /**

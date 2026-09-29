@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
-import { isUuid } from "@gts/utils";
+import { isUuid, getOrderPickupPin } from "@gts/utils";
 import { withIdempotency } from "@/lib/idempotency";
 import { requirePermission } from "../../../_lib/staff-access";
 import { clientIp, logActivity } from "../../../_lib/activity";
@@ -14,6 +14,11 @@ const VALID_METHODS = ["cash", "transfer", "pos", "card"];
 /**
  * Handover flow: sets the order to 'paid' and 'collected' in ONE atomic operation.
  * If already paid, it just marks collected.
+ *
+ * Anti-theft rule:
+ * For online storefront and WhatsApp orders, the customer must present their
+ * secret 6-digit collection PIN (or QR code) which staff must verify before completing handover.
+ * Walk-in till sales (channel === 'pos' or 'walk_in') do not require PIN as they are paid and printed at the till.
  *
  * Gated by `can_complete_pickup`.
  * If payment is required (unpaid order), caller also needs `can_mark_orders_paid` (or admin).
@@ -35,7 +40,7 @@ export const POST = withIdempotency(async function POST(
     const client = createServiceClient();
     const { data: order, error: fetchErr } = await client
       .from("orders")
-      .select("id, order_number, status, payment_status, payment_method, total")
+      .select("id, order_number, channel, status, payment_status, payment_method, total, tracking_number")
       .eq("id", id)
       .maybeSingle();
 
@@ -54,6 +59,22 @@ export const POST = withIdempotency(async function POST(
         { error: `Cannot complete pickup for an order that is ${order.status}.`, code: "INVALID_STATUS" },
         { status: 400 }
       );
+    }
+
+    // ── Anti-theft: 6-digit PIN verification for Storefront & WhatsApp orders ──
+    const isWalkIn = order.channel === "pos" || order.channel === "walk_in";
+    if (!isWalkIn) {
+      const enteredPin = typeof body.pickup_pin === "string" ? body.pickup_pin.trim().replace(/\s+/g, "") : "";
+      const expectedPin = getOrderPickupPin(order);
+      if (!enteredPin || enteredPin !== expectedPin) {
+        return NextResponse.json(
+          {
+            error: "Invalid 6-digit collection PIN. Please request the customer's PIN shown on their tracking page or email.",
+            code: "INVALID_PICKUP_PIN",
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const isCurrentlyPaid = order.payment_status === "paid";

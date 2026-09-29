@@ -7,7 +7,7 @@ import { useAuth } from "../_components/auth-context";
 import { Footer } from "../_components/landing/footer";
 import { imageUrl } from "../_lib/catalogue";
 import { useStoreInfo } from "../_lib/store-info";
-import { formatWAT } from "@gts/utils";
+import { formatWAT, getOrderPickupPin, formatPickupPin } from "@gts/utils";
 
 interface TrackedOrder {
   id: string;
@@ -26,6 +26,8 @@ interface TrackedOrder {
   total: number;
   paid_at?: string | null;
   created_at: string;
+  tracking_number?: string | null;
+  pickup_pin?: string | null;
   customer?: {
     full_name?: string;
     email?: string;
@@ -117,6 +119,28 @@ function TrackOrderContent() {
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<TrackedOrder | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedPin, setCopiedPin] = useState(false);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (order && order.status === "ready_for_pickup") {
+      const pin = getOrderPickupPin(order);
+      const payload = `GTS-COLLECT:${order.order_number}:${pin}`;
+      import("qrcode")
+        .then((QRCode) => {
+          QRCode.toDataURL(payload, {
+            width: 256,
+            margin: 1,
+            color: { dark: "#010101", light: "#FFFFFF" },
+          })
+            .then(setQrCodeDataUrl)
+            .catch(() => setQrCodeDataUrl(null));
+        })
+        .catch(() => setQrCodeDataUrl(null));
+    } else {
+      setQrCodeDataUrl(null);
+    }
+  }, [order]);
 
   // The prefilled email address must ALWAYS be the logged-in email address
   useEffect(() => {
@@ -410,23 +434,116 @@ function TrackOrderContent() {
                 </div>
               )}
 
-              {/* Prominent Payment Due Callout when ready for pickup and unpaid */}
-              {order.status === "ready_for_pickup" && order.payment_status !== "paid" && (
-                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
-                  <div className="space-y-1">
-                    <p className="text-xs font-bold text-amber-900 uppercase font-mono tracking-wider">
-                      Payment Due at Pickup: ₦{(order.total / 100).toLocaleString()}
-                    </p>
-                    <p className="text-xs text-amber-800">
-                      Your order is ready. Please bring your order code <span className="font-mono font-bold text-black">{order.order_number}</span> to the pickup counter. You can pay with cash, card, or transfer.
-                    </p>
+              {/* ── Anti-Theft Pickup Collection Pass (When Ready for Pickup) ── */}
+              {order.status === "ready_for_pickup" && (
+                <div className="rounded-2xl border border-[#EDCF5D] bg-[#0A0A0A] text-white p-5 sm:p-7 shadow-xl animate-fade-in relative overflow-hidden">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-white/10">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-[#EDCF5D] text-[#010101] flex items-center justify-center font-bold text-xl shadow-md shrink-0">
+                        🎟️
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs uppercase tracking-widest text-[#EDCF5D] font-black">
+                            Pickup Collection Pass
+                          </span>
+                          <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase">
+                            Ready for Collection
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-300 mt-0.5">
+                          Show this 6-digit PIN or QR code to staff at the counter to verify and collect your package.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-bold font-mono uppercase tracking-wider ${
+                          order.payment_status === "paid" || order.paid_at
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                            : "bg-amber-400/20 text-amber-300 border border-amber-400/40"
+                        }`}
+                      >
+                        {order.payment_status === "paid" || order.paid_at
+                          ? "Paid in Full ✓"
+                          : `Payment Due: ₦${(order.total / 100).toLocaleString()}`}
+                      </span>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleCopy(order.order_number)}
-                    className="px-3.5 py-2 rounded-xl bg-[#010101] text-white hover:bg-black/85 text-xs font-bold font-mono self-start sm:self-auto cursor-pointer shrink-0"
-                  >
-                    {copied ? "Copied!" : "Copy Order Code"}
-                  </button>
+
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-5 items-center">
+                    {/* PIN & Instructions */}
+                    <div className="md:col-span-8 space-y-4">
+                      <div>
+                        <span className="text-[11px] font-mono uppercase text-gray-400 font-bold tracking-wider block mb-1.5">
+                          Unique 6-Digit Collection PIN
+                        </span>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <div className="px-5 py-2.5 rounded-xl bg-white/10 border border-white/20 font-mono font-black text-2xl sm:text-3xl tracking-widest text-white inline-block shadow-inner select-all">
+                            {formatPickupPin(order.tracking_number || getOrderPickupPin(order))}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(order.tracking_number || getOrderPickupPin(order));
+                              setCopiedPin(true);
+                              setTimeout(() => setCopiedPin(false), 2000);
+                            }}
+                            className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-gray-200 text-xs font-bold font-mono transition-colors cursor-pointer flex items-center gap-1.5 border border-white/15"
+                            title="Copy 6-digit PIN"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+                            </svg>
+                            <span>{copiedPin ? "Copied PIN!" : "Copy PIN"}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 text-xs text-gray-300">
+                        <p className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#EDCF5D] shrink-0" />
+                          <span>Anti-theft verification: Only hand this PIN to staff when you are at the pickup station.</span>
+                        </p>
+                        {order.payment_status !== "paid" && !order.paid_at ? (
+                          <p className="flex items-center gap-2 text-amber-300 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                            <span>Amount due: ₦{(order.total / 100).toLocaleString()}. Accepted: Cash, POS Card, or Bank Transfer.</span>
+                          </p>
+                        ) : (
+                          <p className="flex items-center gap-2 text-emerald-300 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                            <span>Paid in full. Immediate handover upon PIN verification.</span>
+                          </p>
+                        )}
+                        {order.pickup_deadline && (
+                          <p className="flex items-center gap-2 text-amber-200/90 font-mono text-[11px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                            <span>Hold deadline: {formatWAT(order.pickup_deadline)}</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* QR Code Container */}
+                    <div className="md:col-span-4 flex flex-col items-center justify-center p-3 rounded-xl bg-white text-[#010101] shadow-lg max-w-[190px] mx-auto md:ml-auto">
+                      {qrCodeDataUrl ? (
+                        <img
+                          src={qrCodeDataUrl}
+                          alt="Pickup Verification QR Code"
+                          className="w-36 h-36 object-contain"
+                        />
+                      ) : (
+                        <div className="w-36 h-36 flex items-center justify-center bg-gray-50 text-gray-400 text-xs">
+                          Generating QR...
+                        </div>
+                      )}
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-gray-600 font-bold mt-1 text-center">
+                        Scan at Counter
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
 

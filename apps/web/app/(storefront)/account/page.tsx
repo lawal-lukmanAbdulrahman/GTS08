@@ -16,7 +16,7 @@ import {
 } from "../_components/auth/passkey-client";
 import { checkPasskeySupport } from "../_components/auth/webauthn-utils";
 import { PinInput } from "../_components/auth/pin-input";
-import { validateSqlSafe, sanitizeSafeText, idempotentFetch } from "@gts/utils";
+import { validateSqlSafe, sanitizeSafeText, idempotentFetch, formatWAT, getOrderPickupPin, formatPickupPin } from "@gts/utils";
 import {
   getStoredCookiePreferences,
   saveCookiePreferences,
@@ -24,6 +24,10 @@ import {
 import {
   getCustomerNotifications,
   markCustomerInboxSeen,
+  markCustomerNotificationRead,
+  archiveCustomerNotification,
+  deleteCustomerNotification,
+  saveCustomerNotifications,
 } from "../../../lib/notifications";
 
 interface OrderItem {
@@ -46,7 +50,8 @@ interface OrderRecord {
   id: string;
   order_number: string;
   channel: string;
-  status: "pending_payment" | "paid" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "completed";
+  status: string;
+  payment_status?: "unpaid" | "paid";
   subtotal: number;
   delivery_fee: number;
   discount_amount: number;
@@ -54,6 +59,8 @@ interface OrderRecord {
   created_at: string;
   carrier_name?: string | null;
   tracking_number?: string | null;
+  pickup_deadline?: string | null;
+  pickup_station?: any;
   items?: OrderItem[];
   address?: any;
 }
@@ -245,6 +252,13 @@ function AccountContent() {
     reference?: string;
     orderNumber?: string;
     orderStatus?: string;
+    pickupPin?: string;
+    pickupStationName?: string;
+    pickupStationAddress?: string;
+    pickupDeadline?: string;
+    pickupHours?: string;
+    totalKobo?: number;
+    paymentStatus?: "unpaid" | "paid";
     productId: string;
     productName: string;
     productSlug: string;
@@ -259,11 +273,38 @@ function AccountContent() {
     messageCount?: number;
     senderName?: string;
     targetTab: "discussion" | "reviews" | "tracking";
+    isRead?: boolean;
+    isArchived?: boolean;
+    isDeleted?: boolean;
   }
 
   const [inboxItems, setInboxItems] = useState<InboxItem[]>([]);
   const [inboxLoading, setInboxLoading] = useState(false);
-  const [inboxFilter, setInboxFilter] = useState<"inquiries" | "orders" | "replies">("inquiries");
+  const [inboxFilter, setInboxFilter] = useState<"all" | "orders" | "inquiries" | "replies" | "archived">("all");
+  const [selectedInboxItem, setSelectedInboxItem] = useState<InboxItem | null>(null);
+  const [activeInboxMenuId, setActiveInboxMenuId] = useState<string | null>(null);
+  const [modalQrCodeUrl, setModalQrCodeUrl] = useState<string | null>(null);
+  const [copiedModalPin, setCopiedModalPin] = useState(false);
+
+  useEffect(() => {
+    if (selectedInboxItem && selectedInboxItem.type === "order_advance" && selectedInboxItem.orderStatus === "ready_for_pickup") {
+      const pin = selectedInboxItem.pickupPin || "100000";
+      const payload = `GTS-COLLECT:${selectedInboxItem.orderNumber || ""}:${pin}`;
+      import("qrcode")
+        .then((QRCode) => {
+          QRCode.toDataURL(payload, {
+            width: 256,
+            margin: 1,
+            color: { dark: "#010101", light: "#FFFFFF" },
+          })
+            .then(setModalQrCodeUrl)
+            .catch(() => setModalQrCodeUrl(null));
+        })
+        .catch(() => setModalQrCodeUrl(null));
+    } else {
+      setModalQrCodeUrl(null);
+    }
+  }, [selectedInboxItem]);
 
   // Automatically clear notification badges when user visits inbox
   useEffect(() => {
@@ -421,24 +462,91 @@ function AccountContent() {
         // Order advancement notifications & extra customer notifications
         const customerNotifs = getCustomerNotifications();
         const orderNotifs: InboxItem[] = customerNotifs
-          .filter((n: any) => n.type === "order_advance")
+          .filter((n: any) => n.type === "order_advance" && !n.isDeleted)
           .map((n: any) => ({
             id: n.id,
             type: "order_advance" as const,
             orderNumber: n.orderNumber,
             orderStatus: n.orderStatus,
+            pickupPin: n.pickupPin,
+            pickupStationName: n.pickupStationName,
+            pickupStationAddress: n.pickupStationAddress,
+            pickupDeadline: n.pickupDeadline,
+            pickupHours: n.pickupHours,
+            totalKobo: n.totalKobo,
+            paymentStatus: n.paymentStatus,
             productId: "",
             productName: `Order #${n.orderNumber || ""}`,
             productSlug: n.orderNumber || "",
-            productImage: null,
+            productImage: n.productImage || null,
             subject: n.title,
             lastMessage: n.message,
             lastMessageAt: n.createdAt,
             lastSenderType: "staff" as const,
             targetTab: "tracking" as const,
+            isRead: !!n.isRead,
+            isArchived: !!n.isArchived,
+            isDeleted: !!n.isDeleted,
           }));
 
-        const combined = [...inquiries, ...reviewNotifs, ...orderNotifs].sort(
+        // Synthesize stored messages from active customer orders
+        const synthesizedOrderNotifs: InboxItem[] = [];
+        if (Array.isArray(orders)) {
+          for (const o of orders) {
+            const hasExisting = orderNotifs.some(
+              (cn) => cn.orderNumber === o.order_number && cn.orderStatus === o.status
+            );
+            if (!hasExisting) {
+              const pin = getOrderPickupPin(o);
+              const isReady = o.status === "ready_for_pickup";
+              const isConfirmed = o.status === "confirmed";
+              const isCollected = o.status === "collected";
+              const title = isReady
+                ? "Your Order is Ready for Pickup! 📦"
+                : isConfirmed
+                ? "Order Confirmed & Packaging Underway 🛍️"
+                : isCollected
+                ? "Order Collected - Thank You! 🎉"
+                : `Order #${o.order_number} Update`;
+              const message = isReady
+                ? `Your order #${o.order_number} has been verified and carefully packaged. It is now waiting for you at the pickup station. Bring your 6-digit collection PIN (${formatPickupPin(pin)}) or QR code to collect.`
+                : isConfirmed
+                ? `Your order #${o.order_number} has been verified by our team. Our staff are now packaging your items.`
+                : isCollected
+                ? `Your package has been successfully collected. Thank you for shopping with GTS!`
+                : `Order #${o.order_number} status is currently ${o.status}.`;
+
+              synthesizedOrderNotifs.push({
+                id: `order-msg-${o.id}-${o.status}`,
+                type: "order_advance" as const,
+                orderNumber: o.order_number,
+                orderStatus: o.status,
+                pickupPin: pin,
+                pickupStationName: o.pickup_station?.name || "Main Store",
+                pickupStationAddress: o.pickup_station
+                  ? [o.pickup_station.address_line1, o.pickup_station.city, o.pickup_station.state].filter(Boolean).join(", ")
+                  : undefined,
+                pickupDeadline: o.pickup_deadline || undefined,
+                pickupHours: o.pickup_station?.operating_hours || undefined,
+                totalKobo: o.total,
+                paymentStatus: o.status === "paid" || o.payment_status === "paid" ? "paid" : "unpaid",
+                productId: "",
+                productName: `Order #${o.order_number}`,
+                productSlug: o.order_number,
+                productImage: o.items?.[0]?.product_snapshot?.image || null,
+                subject: title,
+                lastMessage: message,
+                lastMessageAt: o.created_at || new Date().toISOString(),
+                lastSenderType: "staff" as const,
+                targetTab: "tracking" as const,
+                isRead: false,
+                isArchived: false,
+              });
+            }
+          }
+        }
+
+        const combined = [...inquiries, ...reviewNotifs, ...orderNotifs, ...synthesizedOrderNotifs].sort(
           (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
         );
 
@@ -498,11 +606,51 @@ function AccountContent() {
   }, [customer?.id, user?.id]);
 
   const filteredInboxItems = inboxItems.filter((it) => {
-    if (inboxFilter === "inquiries") return it.type === "inquiry";
+    if (it.isDeleted) return false;
+    if (inboxFilter === "archived") return !!it.isArchived;
+    if (it.isArchived) return false;
     if (inboxFilter === "orders") return it.type === "order_advance";
+    if (inboxFilter === "inquiries") return it.type === "inquiry";
     if (inboxFilter === "replies") return it.type === "review_reply";
-    return true;
+    return true; // "all"
   });
+
+  const handleArchiveItem = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setActiveInboxMenuId(null);
+    setInboxItems((prev) =>
+      prev.map((it) => {
+        if (it.id === id) {
+          const nextArchived = !it.isArchived;
+          archiveCustomerNotification(id, nextArchived);
+          return { ...it, isArchived: nextArchived };
+        }
+        return it;
+      })
+    );
+    if (selectedInboxItem?.id === id) {
+      setSelectedInboxItem((prev) => (prev ? { ...prev, isArchived: !prev.isArchived } : null));
+    }
+  };
+
+  const handleDeleteItem = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setActiveInboxMenuId(null);
+    deleteCustomerNotification(id);
+    setInboxItems((prev) => prev.filter((it) => it.id !== id));
+    if (selectedInboxItem?.id === id) {
+      setSelectedInboxItem(null);
+    }
+  };
+
+  const handleOpenItem = (item: InboxItem) => {
+    setActiveInboxMenuId(null);
+    markCustomerNotificationRead(item.id);
+    setInboxItems((prev) =>
+      prev.map((it) => (it.id === item.id ? { ...it, isRead: true } : it))
+    );
+    setSelectedInboxItem({ ...item, isRead: true });
+  };
 
   // Fetch Customer Orders from API & Subscribe via WebSockets (Realtime)
   useEffect(() => {
@@ -4304,41 +4452,38 @@ function AccountContent() {
                   </div>
                 </div>
 
-                {/* Sub-tabs: Messages | Order Updates | Replies */}
-                <div className="grid grid-cols-3 border-b border-gray-200 bg-white">
-                  <button
-                    type="button"
-                    onClick={() => setInboxFilter("inquiries")}
-                    className={`py-3 text-center text-xs sm:text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer border-b-2 ${
-                      inboxFilter === "inquiries"
-                        ? "text-[#010101] border-[#EDCF5D]"
-                        : "text-gray-400 border-transparent hover:text-gray-700"
-                    }`}
-                  >
-                    Messages ({inboxItems.filter((it) => it.type === "inquiry").length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInboxFilter("orders")}
-                    className={`py-3 text-center text-xs sm:text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer border-b-2 ${
-                      inboxFilter === "orders"
-                        ? "text-[#010101] border-[#EDCF5D]"
-                        : "text-gray-400 border-transparent hover:text-gray-700"
-                    }`}
-                  >
-                    Orders ({inboxItems.filter((it) => it.type === "order_advance").length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInboxFilter("replies")}
-                    className={`py-3 text-center text-xs sm:text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer border-b-2 ${
-                      inboxFilter === "replies"
-                        ? "text-[#010101] border-[#EDCF5D]"
-                        : "text-gray-400 border-transparent hover:text-gray-700"
-                    }`}
-                  >
-                    Replies ({inboxItems.filter((it) => it.type === "review_reply").length})
-                  </button>
+                {/* Sub-tabs: All | Orders | Messages | Replies | Archived */}
+                <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto border-b border-gray-200 bg-white p-3 no-scrollbar">
+                  {[
+                    { id: "all", label: "All", count: inboxItems.filter((it) => !it.isDeleted && !it.isArchived).length },
+                    { id: "orders", label: "Orders", count: inboxItems.filter((it) => !it.isDeleted && !it.isArchived && it.type === "order_advance").length },
+                    { id: "inquiries", label: "Messages", count: inboxItems.filter((it) => !it.isDeleted && !it.isArchived && it.type === "inquiry").length },
+                    { id: "replies", label: "Replies", count: inboxItems.filter((it) => !it.isDeleted && !it.isArchived && it.type === "review_reply").length },
+                    { id: "archived", label: "Archived", count: inboxItems.filter((it) => !it.isDeleted && it.isArchived).length },
+                  ].map((tab) => {
+                    const isActive = inboxFilter === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setInboxFilter(tab.id as any)}
+                        className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold tracking-wide transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                          isActive
+                            ? "bg-[#010101] text-white shadow-xs"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        <span
+                          className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+                            isActive ? "bg-[#EDCF5D] text-[#010101]" : "bg-gray-200 text-gray-700"
+                          }`}
+                        >
+                          {tab.count}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {inboxLoading ? (
@@ -4348,99 +4493,151 @@ function AccountContent() {
                   </div>
                 ) : filteredInboxItems.length === 0 ? (
                   <div className="py-12 px-4 text-center max-w-md mx-auto">
-                    <div className="w-16 h-16 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center mx-auto mb-4">
-                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                      </svg>
+                    <div className="w-16 h-16 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center mx-auto mb-4">
+                      {inboxFilter === "orders" ? (
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                        </svg>
+                      ) : inboxFilter === "archived" ? (
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3.75h3m-3 3h3m-3 3h3m-10.5-9.75h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                        </svg>
+                      )}
                     </div>
                     <h3 className="font-bold text-base text-[#010101] mb-1">
                       {inboxFilter === "inquiries"
                         ? "No Messages Yet"
                         : inboxFilter === "orders"
                         ? "No Order Notifications"
-                        : "No Replies Yet"}
+                        : inboxFilter === "replies"
+                        ? "No Replies Yet"
+                        : inboxFilter === "archived"
+                        ? "No Archived Messages"
+                        : "Your Inbox is Clean"}
                     </h3>
-                    <p className="text-xs sm:text-sm text-gray-500 max-w-sm mx-auto mb-6">
+                    <p className="text-xs sm:text-sm text-gray-500 max-w-sm mx-auto mb-6 leading-relaxed">
                       {inboxFilter === "inquiries"
                         ? "When you ask a question or chat on any product page, customer support messages will show up here."
                         : inboxFilter === "orders"
-                        ? "When your order status advances (confirmed, processing, shipped, delivered), live tracking updates will appear here."
-                        : "When someone or our team replies to your product reviews, notifications will appear here."}
+                        ? "When your order status advances (confirmed, packaged, ready for pickup), collection PINs and live updates appear here."
+                        : inboxFilter === "replies"
+                        ? "When our team or community members reply to your reviews, notifications will appear here."
+                        : inboxFilter === "archived"
+                        ? "Messages you archive will be stored here safely. You can unarchive or view them at any time."
+                        : "You have no active notifications. When updates arrive, they will be delivered directly here."}
                     </p>
                     <Link
                       href="/shop"
-                      className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#010101] text-white font-bold text-xs sm:text-sm hover:bg-[#EDCF5D] hover:text-[#010101] transition-all shadow-md cursor-pointer"
+                      className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#010101] text-white font-bold text-xs sm:text-sm hover:bg-[#EDCF5D] hover:text-[#010101] transition-all shadow-md cursor-pointer"
                     >
                       Browse Products
                     </Link>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 relative">
+                    {/* Backdrop to close active dropdown menu when clicking anywhere */}
+                    {activeInboxMenuId && (
+                      <div
+                        className="fixed inset-0 z-20"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveInboxMenuId(null);
+                        }}
+                      />
+                    )}
+
                     {filteredInboxItems.map((item) => {
                       const isReview = item.type === "review_reply";
                       const isOrder = item.type === "order_advance";
-
-                      const handleItemClick = () => {
-                        if (isOrder) {
-                          if (item.orderNumber) {
-                            router.push(`/track?order_number=${encodeURIComponent(item.orderNumber)}`);
-                          } else {
-                            router.push("/account?tab=orders");
-                          }
-                        } else {
-                          router.push(`/product/${item.productSlug}?tab=${item.targetTab}#${item.targetTab}`);
-                        }
-                      };
+                      const isReadyForPickup = isOrder && item.orderStatus === "ready_for_pickup";
+                      const isMenuOpen = activeInboxMenuId === item.id;
 
                       return (
                         <div
                           key={item.id}
-                          onClick={handleItemClick}
-                          className="group rounded-md border border-gray-200 bg-white p-3.5 sm:p-4 hover:border-gray-300 transition-all flex items-start justify-between gap-3.5 sm:gap-4 cursor-pointer relative"
+                          onClick={() => handleOpenItem(item)}
+                          className={`group rounded-xl border transition-all flex items-start justify-between gap-3 sm:gap-4 p-4 cursor-pointer relative ${
+                            !item.isRead
+                              ? "bg-amber-50/30 border-[#EDCF5D]/70 shadow-xs hover:border-[#EDCF5D]"
+                              : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-xs"
+                          }`}
                         >
                           <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
-                            {/* Left Thumbnail */}
-                            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-sm bg-gray-50 border border-gray-100 relative overflow-hidden shrink-0 flex items-center justify-center">
-                              {isOrder ? (
-                                <div className="w-full h-full bg-[#010101] text-[#EDCF5D] flex items-center justify-center">
-                                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                            {/* Left Thumbnail / Icon */}
+                            <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl relative overflow-hidden shrink-0 flex items-center justify-center border border-gray-200">
+                              {isReadyForPickup ? (
+                                <div className="w-full h-full bg-[#010101] text-[#EDCF5D] flex flex-col items-center justify-center">
+                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                                  </svg>
+                                </div>
+                              ) : isOrder ? (
+                                <div className="w-full h-full bg-[#010101] text-white flex items-center justify-center">
+                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0c-.565.058-.987.538-.987 1.106v.958m12 0A2.25 2.25 0 0116.5 9.75v5.25m-12 0V9.75A2.25 2.25 0 016.75 7.5h7.5" />
                                   </svg>
                                 </div>
                               ) : item.productImage ? (
                                 <Image
                                   src={item.productImage}
-                                  alt={item.productName}
+                                  alt={item.productName || "Product"}
                                   fill
                                   unoptimized
                                   className="object-contain p-1"
                                 />
                               ) : (
-                                <span className="text-xl">🛍️</span>
+                                <div className="w-full h-full bg-gray-100 text-gray-500 flex items-center justify-center">
+                                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                                  </svg>
+                                </div>
                               )}
                             </div>
 
                             {/* Middle Details */}
-                            <div className="min-w-0 flex-1 pr-1">
+                            <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap mb-1">
-                                {isOrder ? (
-                                  <span className="bg-[#010101] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block font-mono">
-                                    {item.orderStatus ? `Order ${item.orderStatus}` : "Order Update"}
+                                {!item.isRead && (
+                                  <span className="w-2 h-2 rounded-full bg-[#EDCF5D] ring-2 ring-[#EDCF5D]/30" title="Unread Message" />
+                                )}
+                                {isReadyForPickup ? (
+                                  <span className="bg-[#EDCF5D] text-[#010101] text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider inline-flex items-center gap-1 shadow-xs">
+                                    <span>Ready for Pickup</span>
+                                    <span>📦</span>
+                                  </span>
+                                ) : isOrder ? (
+                                  <span className="bg-[#010101] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider inline-block">
+                                    {item.orderStatus === "confirmed"
+                                      ? "Order Confirmed"
+                                      : item.orderStatus === "collected"
+                                      ? "Collected"
+                                      : item.orderStatus ? `Order ${item.orderStatus.replace(/_/g, " ")}` : "Order Update"}
                                   </span>
                                 ) : isReview ? (
-                                  <span className="bg-[#010101] text-[#EDCF5D] text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
+                                  <span className="bg-[#010101] text-[#EDCF5D] text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider inline-block">
                                     Review Reply
                                   </span>
                                 ) : item.lastSenderIsStaff ? (
-                                  <span className="bg-emerald-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
+                                  <span className="bg-emerald-700 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider inline-block">
                                     Staff Replied
                                   </span>
                                 ) : (
-                                  <span className="bg-gray-700 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-xs uppercase tracking-wide inline-block">
-                                    Inquiry Sent
+                                  <span className="bg-gray-700 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider inline-block">
+                                    Inquiry
                                   </span>
                                 )}
-                                <span className="text-[11px] text-gray-400 font-normal">
+
+                                {isReadyForPickup && item.pickupPin && (
+                                  <span className="bg-gray-900 text-[#EDCF5D] text-[10px] font-mono font-black px-2 py-0.5 rounded-md border border-[#EDCF5D]/40">
+                                    PIN: {formatPickupPin(item.pickupPin)}
+                                  </span>
+                                )}
+
+                                <span className="text-[11px] text-gray-400 font-medium">
                                   {new Date(item.lastMessageAt).toLocaleDateString("en-NG", {
                                     month: "short",
                                     day: "numeric",
@@ -4450,37 +4647,333 @@ function AccountContent() {
                                 </span>
                               </div>
 
-                              <h4 className="text-xs sm:text-sm font-semibold text-[#010101] leading-snug line-clamp-1">
-                                {item.productName}
+                              <h4 className="text-xs sm:text-sm font-bold text-[#010101] leading-snug line-clamp-1">
+                                {item.subject || item.productName}
                               </h4>
 
                               <p className="text-xs text-gray-600 line-clamp-2 mt-1 leading-relaxed">
-                                {item.lastSenderIsStaff && (
-                                  <strong className="text-[#010101] font-semibold">GTS Staff: </strong>
-                                )}
-                                {isReview && (
-                                  <strong className="text-[#010101] font-semibold">@{item.senderName || "User"}: </strong>
-                                )}
-                                {!item.lastSenderIsStaff && !isReview && !isOrder && (
-                                  <strong className="text-gray-500 font-normal">You: </strong>
-                                )}
-                                <span>{item.lastMessage || "No message content"}</span>
+                                {item.lastMessage || "Click to open details."}
                               </p>
                             </div>
                           </div>
 
-                          {/* Top Right Action */}
-                          <div className="shrink-0 self-start pt-0.5">
-                            <span className="text-[#010101] group-hover:text-[#8D730C] text-xs sm:text-sm font-bold underline decoration-[#EDCF5D] decoration-2 underline-offset-4 flex items-center gap-1 transition-colors">
-                              <span>{isOrder ? "Track Order" : isReview ? "View Reply" : "Open Chat"}</span>
+                          {/* Right Side: Action Menu (3 dots) & Open indicator */}
+                          <div className="shrink-0 flex items-center gap-1 sm:gap-2 self-start pt-1">
+                            <span className="hidden sm:inline-flex text-[#010101] group-hover:text-[#8D730C] text-xs font-bold items-center gap-1 transition-colors">
+                              <span>Read</span>
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                               </svg>
                             </span>
+
+                            {/* 3-dots Dropdown Button */}
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveInboxMenuId(isMenuOpen ? null : item.id);
+                                }}
+                                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 transition-colors cursor-pointer"
+                                aria-label="Message options"
+                              >
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                  <circle cx="12" cy="5" r="2" />
+                                  <circle cx="12" cy="12" r="2" />
+                                  <circle cx="12" cy="19" r="2" />
+                                </svg>
+                              </button>
+
+                              {isMenuOpen && (
+                                <div
+                                  className="absolute right-0 top-9 w-36 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-30 animate-in fade-in zoom-in-95 duration-100"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenItem(item)}
+                                    className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <svg className="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    Open
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleArchiveItem(item.id, e)}
+                                    className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <svg className="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                                    </svg>
+                                    {item.isArchived ? "Unarchive" : "Archive"}
+                                  </button>
+                                  <div className="border-t border-gray-100 my-1" />
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleDeleteItem(item.id, e)}
+                                    className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <svg className="w-3.5 h-3.5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                    </svg>
+                                    Delete
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
                     })}
+                  </div>
+                )}
+
+                {/* ── INBOX MESSAGE READER MODAL ── */}
+                {selectedInboxItem && (
+                  <div
+                    className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+                    onClick={() => setSelectedInboxItem(null)}
+                  >
+                    <div
+                      className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-gray-100 overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* Modal Header */}
+                      <div className="bg-[#010101] text-white p-5 flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-8 h-8 rounded-lg bg-[#EDCF5D] text-[#010101] flex items-center justify-center font-bold text-sm">
+                            {selectedInboxItem.type === "order_advance" ? "📦" : selectedInboxItem.type === "inquiry" ? "💬" : "⭐"}
+                          </span>
+                          <div>
+                            <span className="text-[10px] font-bold tracking-widest uppercase text-[#EDCF5D]">
+                              {selectedInboxItem.type === "order_advance"
+                                ? "Order Notification"
+                                : selectedInboxItem.type === "inquiry"
+                                ? "Support Message"
+                                : "Review Reply"}
+                            </span>
+                            <p className="text-[11px] text-gray-400">
+                              {new Date(selectedInboxItem.lastMessageAt).toLocaleDateString("en-NG", {
+                                weekday: "short",
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedInboxItem(null)}
+                          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+                          aria-label="Close modal"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Modal Body */}
+                      <div className="p-5 sm:p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+                        <h3 className="font-extrabold text-base sm:text-lg text-[#010101] leading-tight">
+                          {selectedInboxItem.subject || selectedInboxItem.productName}
+                        </h3>
+
+                        {/* Order Summary Strip if Order Notification */}
+                        {selectedInboxItem.type === "order_advance" && (
+                          <div className="bg-gray-50 rounded-xl p-3 border border-gray-200 flex items-center justify-between flex-wrap gap-2 text-xs">
+                            <div>
+                              <span className="text-gray-500 font-semibold block text-[10px] uppercase tracking-wider">Order Reference</span>
+                              <span className="font-mono font-bold text-[#010101]">#{selectedInboxItem.orderNumber}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500 font-semibold block text-[10px] uppercase tracking-wider">Status</span>
+                              <span className="font-bold text-[#010101] uppercase">{selectedInboxItem.orderStatus?.replace(/_/g, " ")}</span>
+                            </div>
+                            {selectedInboxItem.paymentStatus && (
+                              <div>
+                                <span className="text-gray-500 font-semibold block text-[10px] uppercase tracking-wider">Payment</span>
+                                <span className={`font-bold px-1.5 py-0.2 rounded-xs text-[10px] uppercase ${
+                                  selectedInboxItem.paymentStatus === "paid" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                                }`}>
+                                  {selectedInboxItem.paymentStatus === "paid" ? "Paid" : "Pay at Pickup"}
+                                </span>
+                              </div>
+                            )}
+                            {selectedInboxItem.totalKobo !== undefined && (
+                              <div>
+                                <span className="text-gray-500 font-semibold block text-[10px] uppercase tracking-wider">Total</span>
+                                <span className="font-bold text-[#010101]">₦{(selectedInboxItem.totalKobo / 100).toLocaleString()}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* ── ANTI-THEFT PICKUP PASS IF READY FOR PICKUP ── */}
+                        {selectedInboxItem.type === "order_advance" && selectedInboxItem.orderStatus === "ready_for_pickup" && (
+                          <div className="bg-linear-to-br from-[#0c0c0c] via-[#1a1a1a] to-[#0c0c0c] text-white p-5 rounded-2xl border border-[#EDCF5D]/40 shadow-xl space-y-4">
+                            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full bg-[#EDCF5D] animate-ping" />
+                                <span className="text-xs font-bold text-[#EDCF5D] uppercase tracking-wider">
+                                  Anti-Theft Collection Pass
+                                </span>
+                              </div>
+                              <span className="text-[10px] bg-white/10 text-gray-300 px-2 py-0.5 rounded-full font-mono">
+                                Order #{selectedInboxItem.orderNumber}
+                              </span>
+                            </div>
+
+                            {/* 6-Digit PIN Display */}
+                            <div className="text-center py-2 bg-black/40 rounded-xl border border-white/5">
+                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">
+                                Your 6-Digit Collection PIN
+                              </span>
+                              <div className="flex items-center justify-center gap-3">
+                                <span className="text-3xl sm:text-4xl font-mono font-black tracking-widest text-[#EDCF5D]">
+                                  {formatPickupPin(selectedInboxItem.pickupPin || "100000")}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (selectedInboxItem.pickupPin) {
+                                      navigator.clipboard.writeText(selectedInboxItem.pickupPin);
+                                      setCopiedModalPin(true);
+                                      setTimeout(() => setCopiedModalPin(false), 2000);
+                                    }
+                                  }}
+                                  className="text-xs bg-white/10 hover:bg-[#EDCF5D] hover:text-[#010101] text-[#EDCF5D] px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer"
+                                  title="Copy PIN"
+                                >
+                                  {copiedModalPin ? "Copied! ✓" : "Copy"}
+                                </button>
+                              </div>
+                              <p className="text-[10px] text-gray-400 mt-1">
+                                Present this PIN to staff to authorize handover.
+                              </p>
+                            </div>
+
+                            {/* Counter-Scannable QR Code */}
+                            {modalQrCodeUrl && (
+                              <div className="text-center space-y-2">
+                                <div className="bg-white p-2.5 rounded-xl w-36 h-36 mx-auto shadow-md flex items-center justify-center">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={modalQrCodeUrl}
+                                    alt="Counter Collection QR Code"
+                                    className="w-full h-full object-contain"
+                                  />
+                                </div>
+                                <p className="text-[11px] text-gray-300">
+                                  Staff counter scanner: scan to verify pickup instantly.
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Pickup Station & Window Details */}
+                            <div className="space-y-1.5 pt-2 border-t border-white/10 text-xs">
+                              {selectedInboxItem.pickupStationName && (
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="text-gray-400">Pickup Station:</span>
+                                  <span className="font-semibold text-white text-right">{selectedInboxItem.pickupStationName}</span>
+                                </div>
+                              )}
+                              {selectedInboxItem.pickupStationAddress && (
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="text-gray-400">Address:</span>
+                                  <span className="font-medium text-gray-300 text-right">{selectedInboxItem.pickupStationAddress}</span>
+                                </div>
+                              )}
+                              {selectedInboxItem.pickupHours && (
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="text-gray-400">Operating Hours:</span>
+                                  <span className="font-medium text-[#EDCF5D] text-right">{selectedInboxItem.pickupHours}</span>
+                                </div>
+                              )}
+                              {selectedInboxItem.pickupDeadline && (
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="text-gray-400">Pickup Deadline:</span>
+                                  <span className="font-semibold text-amber-300 text-right">
+                                    {new Date(selectedInboxItem.pickupDeadline).toLocaleDateString("en-NG", {
+                                      weekday: "short",
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Full Message Body */}
+                        <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 text-xs sm:text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                          {selectedInboxItem.lastMessage}
+                        </div>
+                      </div>
+
+                      {/* Modal Footer Actions */}
+                      <div className="p-4 sm:p-5 bg-gray-50 border-t border-gray-100 flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => handleArchiveItem(selectedInboxItem.id, e)}
+                            className="px-3 py-2 rounded-xl text-xs font-semibold text-gray-700 bg-white border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer"
+                          >
+                            {selectedInboxItem.isArchived ? "Unarchive" : "Archive"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteItem(selectedInboxItem.id, e)}
+                            className="px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 bg-white border border-rose-200 hover:bg-rose-50 transition-colors cursor-pointer"
+                          >
+                            Delete
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {selectedInboxItem.orderNumber && (
+                            <Link
+                              href={`/track?order_number=${encodeURIComponent(selectedInboxItem.orderNumber)}`}
+                              className="px-4 py-2 rounded-xl text-xs font-bold bg-[#EDCF5D] text-[#010101] hover:bg-[#d9bc49] transition-all shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                            >
+                              <span>Track Online</span>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                              </svg>
+                            </Link>
+                          )}
+                          {selectedInboxItem.type === "inquiry" && selectedInboxItem.productSlug && (
+                            <Link
+                              href={`/product/${selectedInboxItem.productSlug}?tab=discussion#discussion`}
+                              className="px-4 py-2 rounded-xl text-xs font-bold bg-[#010101] text-white hover:bg-gray-800 transition-all cursor-pointer"
+                            >
+                              Go to Discussion
+                            </Link>
+                          )}
+                          {selectedInboxItem.type === "review_reply" && selectedInboxItem.productSlug && (
+                            <Link
+                              href={`/product/${selectedInboxItem.productSlug}?tab=reviews#reviews`}
+                              className="px-4 py-2 rounded-xl text-xs font-bold bg-[#010101] text-white hover:bg-gray-800 transition-all cursor-pointer"
+                            >
+                              Go to Review
+                            </Link>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedInboxItem(null)}
+                            className="px-4 py-2 rounded-xl text-xs font-bold bg-gray-200 text-gray-800 hover:bg-gray-300 transition-colors cursor-pointer"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

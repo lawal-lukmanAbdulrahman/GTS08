@@ -228,9 +228,19 @@ export function orderStatusEmail(o: {
   storeAddress?: string | null;
   pickupDeadlineText?: string | null;
   operatingHours?: string | null;
+  pickupPin?: string | null;
 }): Rendered | null {
   const words = STATUS_WORDS[o.status];
   if (!words) return null;
+
+  const pinBlock =
+    o.status === "ready_for_pickup" && o.pickupPin
+      ? `<div style="background:#fef9c3;border:1px solid #fde047;border-radius:12px;padding:16px;text-align:center;margin:18px 0;">
+          <p style="margin:0 0 6px;font-size:12px;font-weight:bold;color:#713f12;text-transform:uppercase;letter-spacing:1px;">Pickup Collection PIN</p>
+          <p style="margin:0;font-size:32px;font-weight:900;color:#000000;letter-spacing:4px;font-family:monospace;">${esc(o.pickupPin.replace(/\D/g, "").replace(/(\d{3})(\d{3})/, "$1 $2"))}</p>
+          <p style="margin:8px 0 0;font-size:12px;color:#854d0e;">Present this unique 6-digit PIN at the counter to verify and collect your order.</p>
+        </div>`
+      : "";
 
   const addressText =
     o.status === "ready_for_pickup" && o.storeAddress
@@ -270,6 +280,7 @@ export function orderStatusEmail(o: {
       words.title,
       p(`Hello ${esc(o.name)}. ${esc(words.line)}`) +
         p(`Order reference: <strong>${esc(o.orderNumber)}</strong>`) +
+        pinBlock +
         addressText +
         hoursText +
         deadlineText +
@@ -281,6 +292,7 @@ export function orderStatusEmail(o: {
     text: [
       `Hello ${o.name}. ${words.line}`,
       `Order reference: ${o.orderNumber}`,
+      o.status === "ready_for_pickup" && o.pickupPin ? `Pickup Collection PIN: ${o.pickupPin}` : "",
       o.status === "ready_for_pickup" && o.storeAddress ? `Pickup Location: ${o.storeAddress}` : "",
       o.status === "ready_for_pickup" && o.operatingHours ? `Collection Hours: ${o.operatingHours}` : "",
       o.status === "ready_for_pickup" && o.pickupDeadlineText ? `Collect by: ${o.pickupDeadlineText}` : "",
