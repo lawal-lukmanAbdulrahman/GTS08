@@ -132,6 +132,14 @@ export const PUT = withIdempotency(async function PUT(
     }
     if (to === "ready_for_pickup") {
       patch.ready_for_pickup_at = now;
+      const { data: settings } = await client
+        .from("settings")
+        .select("pickup_hold_hours")
+        .eq("id", "00000000-0000-0000-0000-000000000001")
+        .maybeSingle();
+      const holdHours =
+        settings?.pickup_hold_hours && settings.pickup_hold_hours > 0 ? settings.pickup_hold_hours : 48;
+      patch.pickup_deadline = new Date(Date.now() + holdHours * 3_600_000).toISOString();
     }
     if (to === "collected") {
       patch.delivered_at = now;

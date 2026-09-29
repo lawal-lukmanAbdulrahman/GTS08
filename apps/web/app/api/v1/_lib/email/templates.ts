@@ -226,6 +226,8 @@ export function orderStatusEmail(o: {
   totalKobo?: number;
   reason?: string | null;
   storeAddress?: string | null;
+  pickupDeadlineText?: string | null;
+  operatingHours?: string | null;
 }): Rendered | null {
   const words = STATUS_WORDS[o.status];
   if (!words) return null;
@@ -233,6 +235,16 @@ export function orderStatusEmail(o: {
   const addressText =
     o.status === "ready_for_pickup" && o.storeAddress
       ? p(`Pickup Location: <strong>${esc(o.storeAddress)}</strong>`)
+      : "";
+
+  const hoursText =
+    o.status === "ready_for_pickup" && o.operatingHours
+      ? p(`Collection Hours: <strong>${esc(o.operatingHours)}</strong>`)
+      : "";
+
+  const deadlineText =
+    o.status === "ready_for_pickup" && o.pickupDeadlineText
+      ? p(`Please collect your order by: <strong>${esc(o.pickupDeadlineText)}</strong>`)
       : "";
 
   const paymentNote =
@@ -259,6 +271,8 @@ export function orderStatusEmail(o: {
       p(`Hello ${esc(o.name)}. ${esc(words.line)}`) +
         p(`Order reference: <strong>${esc(o.orderNumber)}</strong>`) +
         addressText +
+        hoursText +
+        deadlineText +
         paymentNote +
         reasonNote +
         refund +
@@ -268,6 +282,8 @@ export function orderStatusEmail(o: {
       `Hello ${o.name}. ${words.line}`,
       `Order reference: ${o.orderNumber}`,
       o.status === "ready_for_pickup" && o.storeAddress ? `Pickup Location: ${o.storeAddress}` : "",
+      o.status === "ready_for_pickup" && o.operatingHours ? `Collection Hours: ${o.operatingHours}` : "",
+      o.status === "ready_for_pickup" && o.pickupDeadlineText ? `Collect by: ${o.pickupDeadlineText}` : "",
       o.status === "ready_for_pickup" && !o.paid ? `Payment due at pickup: ${formatKobo(o.totalKobo ?? 0)}` : "",
       o.reason ? `Note: ${o.reason}` : "",
       refund ? "Since you'd already paid, we'll process your refund." : "",

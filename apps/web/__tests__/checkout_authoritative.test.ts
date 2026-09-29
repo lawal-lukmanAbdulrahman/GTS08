@@ -323,14 +323,11 @@ describe("pay on pickup", () => {
   });
 
   it("creates a pickup order that holds the items, with no address, delivery fee or online payment", async () => {
-    const before = Date.now();
     const res = await post(PICKUP);
     expect(res.status).toBe(200);
     const order = inserted("orders")[0]!;
-    expect(order).toMatchObject({ channel: "pickup", status: "pending_payment", delivery_fee: 0, total: 3100000, address_id: null });
-    const deadline = Date.parse(order.pickup_deadline);
-    expect(deadline).toBeGreaterThanOrEqual(before + 24 * 3_600_000);
-    expect(deadline).toBeLessThan(before + 24 * 3_600_000 + 60_000);
+    expect(order).toMatchObject({ channel: "pickup", status: "placed", delivery_fee: 0, total: 3100000, address_id: null });
+    expect(order.pickup_deadline).toBeNull();
     expect(mockAdjustAll).toHaveBeenCalledWith(expect.anything(), [{ variantId: V1, deltaReserved: 2, requireAvailable: 2 }]);
     expect(inserted("addresses")).toHaveLength(0);
     expect(inserted("transactions")).toHaveLength(0);
@@ -342,19 +339,17 @@ describe("pay on pickup", () => {
     expect(mockPickupMail).toHaveBeenCalledWith(expect.anything(), "order-2");
   });
 
-  it("tells the customer where to collect and by when", async () => {
+  it("tells the customer where to collect and notes deadline begins upon packaging", async () => {
     const { data } = await (await post(PICKUP)).json();
-    expect(data).toMatchObject({ order_number: "GTS-202609-000010", status: "pending_payment", total: 3100000 });
-    expect(data.pickup).toMatchObject({ hold_hours: 24, store_name: "GTS Wears", address: "12 Allen Avenue, Ikeja" });
-    expect(Date.parse(data.pickup.deadline)).toBeGreaterThan(Date.now());
+    expect(data).toMatchObject({ order_number: "GTS-202609-000010", status: "placed", total: 3100000 });
+    expect(data.pickup).toMatchObject({ hold_hours: 24, store_name: "GTS Wears", address: "12 Allen Avenue, Ikeja", deadline: null });
     expect(data.payment).toMatchObject({ method: "pay_on_pickup", status: "pending" });
   });
 
-  it("holds for 48 hours when the admin hasn't set a time", async () => {
+  it("leaves deadline null at placement so hold window starts once packaged", async () => {
     db.results.settings = { data: null, error: null };
-    const before = Date.now();
     await post(PICKUP);
-    expect(Date.parse(inserted("orders")[0]!.pickup_deadline)).toBeGreaterThanOrEqual(before + 48 * 3_600_000);
+    expect(inserted("orders")[0]!.pickup_deadline).toBeNull();
   });
 
   it("frees the held items if the order can't be saved", async () => {

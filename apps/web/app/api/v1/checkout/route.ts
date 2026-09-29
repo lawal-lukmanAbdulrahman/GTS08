@@ -358,9 +358,9 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     // 5. The order, unpaid. (The database assigns the order number.)
     const orderPayload: Record<string, any> = {
       channel: isPickup ? "pickup" : "online",
-      status: "pending_payment",
+      status: isPickup ? "placed" : "pending_payment",
       payment_status: "unpaid",
-      ...(pickup ? { pickup_deadline: pickup.deadline } : {}),
+      pickup_deadline: null,
       customer_id: customerId,
       address_id: addressId,
       promo_code: appliedCode,

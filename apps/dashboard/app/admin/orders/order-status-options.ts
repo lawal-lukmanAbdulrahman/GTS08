@@ -11,6 +11,7 @@ export { FORWARD_NEXT, BACKWARD_STEP, requiresReason, canTransition };
 export const describeStatus = (s: string) => {
   if (s === "ready_for_pickup") return "Ready for Pickup";
   if (s === "on_hold") return "On Hold";
+  if (s === "placed" || s === "pending_payment" || s === "pending") return "Placed";
   return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ");
 };
 

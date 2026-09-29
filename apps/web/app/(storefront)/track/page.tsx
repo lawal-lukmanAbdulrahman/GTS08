@@ -342,7 +342,9 @@ function TrackOrderContent() {
                         : "bg-amber-100 text-amber-900"
                     }`}
                   >
-                    {order.status.replace(/_/g, " ")}
+                    {order.status === "placed" || order.status === "pending_payment" || order.status === "pending"
+                      ? "Order Placed"
+                      : order.status.replace(/_/g, " ")}
                   </span>
 
                   {/* Separate Payment Status Badge */}
@@ -525,8 +527,8 @@ function TrackOrderContent() {
                     </p>
                   )}
 
-                  {order.pickup_deadline && (
-                    <p className="text-[11px] font-mono text-amber-800 bg-amber-50 p-2 rounded-lg mt-2 font-medium">
+                  {order.pickup_deadline && order.status === "ready_for_pickup" && (
+                    <p className="text-[11px] font-mono text-amber-800 bg-amber-50 p-2 rounded-lg mt-2 font-medium border border-amber-200">
                       Collect by: {formatWAT(order.pickup_deadline)}
                     </p>
                   )}

@@ -27,6 +27,8 @@ export type PaymentStatus = "unpaid" | "paid";
 /** Next forward step in the happy path */
 export const FORWARD_NEXT: Record<string, string | null> = {
   placed: "confirmed",
+  pending: "confirmed",
+  pending_payment: "confirmed",
   confirmed: "ready_for_pickup",
   ready_for_pickup: "collected",
   collected: null,
@@ -53,7 +55,8 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   cancelled: [],
   voided: [],
   // Backwards compatibility with legacy/test orders
-  pending_payment: ["cancelled"],
+  pending: ["confirmed", "placed", "on_hold", "cancelled"],
+  pending_payment: ["confirmed", "placed", "on_hold", "cancelled"],
   paid: ["confirmed", "cancelled"],
   processing: ["shipped", "cancelled"],
   shipped: ["delivered", "cancelled"],

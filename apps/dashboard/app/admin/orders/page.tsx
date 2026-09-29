@@ -5,8 +5,9 @@ import { AdminTopStrip } from "../sidebar-context";
 import { API_BASE } from "../../lib/api-base";
 import { authFetch } from "../../lib/session";
 import { formatWAT } from "@gts/utils";
-import { describeStatus, FORWARD_NEXT, BACKWARD_STEP, requiresReason } from "./order-status-options";
+import { describeStatus } from "./order-status-options";
 import { exportOrdersToExcel } from "./order-excel-service";
+import OrderInfoDrawer from "./order-info-drawer";
 
 export interface OrderItem {
   id: string;
@@ -28,37 +29,6 @@ export interface OrderItem {
     operating_hours?: string | null;
   } | null;
   customer?: { full_name?: string; email?: string; phone?: string } | null;
-}
-
-export interface DetailedOrder extends OrderItem {
-  subtotal: number;
-  delivery_fee: number;
-  discount_amount: number;
-  cancel_reason?: string | null;
-  hold_reason?: string | null;
-  ready_for_pickup_at?: string | null;
-  internal_notes?: string | null;
-  paid_at?: string | null;
-  items?: Array<{
-    id: string;
-    quantity: number;
-    unit_price: number;
-    line_total: number;
-    product_snapshot?: {
-      name?: string;
-      size?: string | null;
-      color?: string | null;
-      sku?: string | null;
-      image?: string | null;
-    } | null;
-  }>;
-  audit_log?: Array<{
-    id: string;
-    action: string;
-    changes?: any;
-    created_at: string;
-    actor?: { full_name?: string; email?: string } | null;
-  }>;
 }
 
 export default function AdminOrdersPage() {
@@ -84,18 +54,9 @@ export default function AdminOrdersPage() {
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
 
-  // Detailed Modal
+  // Order Details Drawer
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
-  const [activeOrder, setActiveOrder] = useState<DetailedOrder | null>(null);
-  const [loadingActive, setLoadingActive] = useState(false);
-
-  // Sub-modal for actions (reasons, handover payment)
-  const [actionType, setActionType] = useState<"forward" | "backward" | "hold" | "cancel" | "reopen" | "pay" | "complete_pickup" | null>(null);
-  const [actionReason, setActionReason] = useState("");
-  const [selectedPayMethod, setSelectedPayMethod] = useState<"cash" | "pos" | "transfer">("cash");
-  const [actionLoading, setActionLoading] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [activeDrawerAction, setActiveDrawerAction] = useState<"forward" | "backward" | "hold" | "cancel" | "reopen" | "pay" | "complete_pickup" | null>(null);
 
   // Scroll listener for sticky header
   useEffect(() => {
@@ -153,23 +114,6 @@ export default function AdminOrdersPage() {
     fetchOrders();
   }, [fetchOrders]);
 
-  const loadOrderDetail = async (id: string) => {
-    setActiveOrderId(id);
-    setLoadingActive(true);
-    setActionError(null);
-    try {
-      const res = await authFetch(`${API_BASE}/orders/${id}`);
-      if (res.ok) {
-        const json = await res.json();
-        setActiveOrder(json.data);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoadingActive(false);
-    }
-  };
-
   const handleToggleMenu = (e: React.MouseEvent<HTMLButtonElement>, orderId: string) => {
     e.stopPropagation();
     if (openActionMenuId === orderId) {
@@ -185,157 +129,6 @@ export default function AdminOrdersPage() {
         left: Math.max(10, rect.right - 176),
       });
       setOpenActionMenuId(orderId);
-    }
-  };
-
-  const handleExecuteAction = async () => {
-    if (!activeOrder || !actionType) return;
-    setActionLoading(true);
-    setActionError(null);
-
-    const token = localStorage.getItem("gts_token");
-    const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
-
-    try {
-      if (actionType === "forward") {
-        const next = FORWARD_NEXT[activeOrder.status];
-        if (!next) return;
-        const res = await fetch(`${API_BASE}/orders/${activeOrder.id}/status`, {
-          method: "PUT",
-          headers,
-          body: JSON.stringify({ status: next, reason: actionReason.trim() || undefined }),
-        });
-        const json = await res.json().catch(() => null);
-        if (res.ok) {
-          setNotice(`Order advanced to ${describeStatus(next)}.`);
-          setActionType(null);
-          await loadOrderDetail(activeOrder.id);
-          await fetchOrders();
-        } else {
-          setActionError(json?.error || "Failed to update order status.");
-        }
-      } else if (actionType === "backward") {
-        const prev = BACKWARD_STEP[activeOrder.status];
-        if (!prev) return;
-        if (!actionReason.trim()) {
-          setActionError("A reason is required to move an order backward.");
-          setActionLoading(false);
-          return;
-        }
-        const res = await fetch(`${API_BASE}/orders/${activeOrder.id}/status`, {
-          method: "PUT",
-          headers,
-          body: JSON.stringify({ status: prev, reason: actionReason.trim() }),
-        });
-        const json = await res.json().catch(() => null);
-        if (res.ok) {
-          setNotice(`Order moved back to ${describeStatus(prev)}.`);
-          setActionType(null);
-          await loadOrderDetail(activeOrder.id);
-          await fetchOrders();
-        } else {
-          setActionError(json?.error || "Failed to move order backward.");
-        }
-      } else if (actionType === "hold") {
-        if (!actionReason.trim()) {
-          setActionError("A reason is required to place an order on hold.");
-          setActionLoading(false);
-          return;
-        }
-        const res = await fetch(`${API_BASE}/orders/${activeOrder.id}/status`, {
-          method: "PUT",
-          headers,
-          body: JSON.stringify({ status: "on_hold", reason: actionReason.trim() }),
-        });
-        const json = await res.json().catch(() => null);
-        if (res.ok) {
-          setNotice("Order placed on hold.");
-          setActionType(null);
-          await loadOrderDetail(activeOrder.id);
-          await fetchOrders();
-        } else {
-          setActionError(json?.error || "Failed to put order on hold.");
-        }
-      } else if (actionType === "cancel") {
-        if (!actionReason.trim()) {
-          setActionError("A cancellation reason is required.");
-          setActionLoading(false);
-          return;
-        }
-        const res = await fetch(`${API_BASE}/orders/${activeOrder.id}/status`, {
-          method: "PUT",
-          headers,
-          body: JSON.stringify({ status: "cancelled", reason: actionReason.trim() }),
-        });
-        const json = await res.json().catch(() => null);
-        if (res.ok) {
-          setNotice("Order cancelled and inventory holds released.");
-          setActionType(null);
-          await loadOrderDetail(activeOrder.id);
-          await fetchOrders();
-        } else {
-          setActionError(json?.error || "Failed to cancel order.");
-        }
-      } else if (actionType === "reopen") {
-        if (!actionReason.trim()) {
-          setActionError("A reason is required to reopen an expired order.");
-          setActionLoading(false);
-          return;
-        }
-        const res = await fetch(`${API_BASE}/orders/${activeOrder.id}/status`, {
-          method: "PUT",
-          headers,
-          body: JSON.stringify({ status: "ready_for_pickup", reason: actionReason.trim() }),
-        });
-        const json = await res.json().catch(() => null);
-        if (res.ok) {
-          setNotice("Order reopened to ready for pickup.");
-          setActionType(null);
-          await loadOrderDetail(activeOrder.id);
-          await fetchOrders();
-        } else {
-          setActionError(json?.error || "Failed to reopen order.");
-        }
-      } else if (actionType === "pay") {
-        const res = await fetch(`${API_BASE}/orders/${activeOrder.id}/pay`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ payment_method: selectedPayMethod, note: actionReason.trim() || undefined }),
-        });
-        const json = await res.json().catch(() => null);
-        if (res.ok) {
-          setNotice(`Payment marked as paid (${selectedPayMethod.toUpperCase()}).`);
-          setActionType(null);
-          await loadOrderDetail(activeOrder.id);
-          await fetchOrders();
-        } else {
-          setActionError(json?.error || "Failed to mark order as paid.");
-        }
-      } else if (actionType === "complete_pickup") {
-        const isUnpaid = activeOrder.payment_status !== "paid";
-        const res = await fetch(`${API_BASE}/orders/${activeOrder.id}/complete-pickup`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            mark_paid: isUnpaid,
-            payment_method: isUnpaid ? selectedPayMethod : undefined,
-            note: actionReason.trim() || undefined,
-          }),
-        });
-        const json = await res.json().catch(() => null);
-        if (res.ok) {
-          setNotice("Pickup handover completed successfully! Order collected.");
-          setActionType(null);
-          await loadOrderDetail(activeOrder.id);
-          await fetchOrders();
-        } else {
-          setActionError(json?.error || "Failed to complete pickup handover.");
-        }
-      }
-    } catch {
-      setActionError("Network error while updating order.");
-    } finally {
-      setActionLoading(false);
     }
   };
 
@@ -370,7 +163,7 @@ export default function AdminOrdersPage() {
     [orders]
   );
   const pendingCount = useMemo(
-    () => orders.filter((o) => ["placed", "confirmed", "on_hold"].includes(o.status)).length,
+    () => orders.filter((o) => ["placed", "pending", "pending_payment", "confirmed", "on_hold"].includes(o.status)).length,
     [orders]
   );
 
@@ -391,7 +184,9 @@ export default function AdminOrdersPage() {
         if (statusFilter === "ALL") {
           matchesStatus = true;
         } else if (statusFilter === "pending") {
-          matchesStatus = ["placed", "confirmed", "on_hold"].includes(o.status);
+          matchesStatus = ["placed", "pending", "pending_payment", "confirmed", "on_hold"].includes(o.status);
+        } else if (statusFilter === "placed") {
+          matchesStatus = ["placed", "pending", "pending_payment"].includes(o.status);
         } else {
           matchesStatus = o.status === statusFilter;
         }
@@ -506,15 +301,6 @@ export default function AdminOrdersPage() {
           </div>
         </div>
       </div>
-
-      {notice && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-medium flex items-center justify-between animate-fade-in shadow-2xs">
-          <span>{notice}</span>
-          <button type="button" onClick={() => setNotice(null)} className="text-emerald-600 dark:text-emerald-400 font-bold ml-2 cursor-pointer">
-            ✕
-          </button>
-        </div>
-      )}
 
       {/* ────── KPI CARDS (MATCHING PRODUCT CATALOG STYLE) ────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1023,7 +809,8 @@ export default function AdminOrdersPage() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              loadOrderDetail(o.id);
+                              setActiveOrderId(o.id);
+                              setActiveDrawerAction(null);
                             }}
                             className="font-mono font-bold text-gray-900 dark:text-white text-xs tracking-tight hover:underline cursor-pointer text-left block"
                           >
@@ -1064,7 +851,7 @@ export default function AdminOrdersPage() {
                                 ? "bg-[#EDCF5D]/25 text-[#9E7B00] dark:text-[#EDCF5D] font-bold"
                                 : o.status === "confirmed"
                                 ? "bg-sky-500/15 text-sky-600 dark:text-sky-400"
-                                : o.status === "placed"
+                                : o.status === "placed" || o.status === "pending" || o.status === "pending_payment"
                                 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
                                 : o.status === "on_hold"
                                 ? "bg-purple-500/15 text-purple-600 dark:text-purple-400"
@@ -1204,115 +991,41 @@ export default function AdminOrdersPage() {
               <div
                 key={o.id}
                 style={{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }}
-                className="fixed w-44 rounded-xl bg-white dark:bg-[#222222] border border-gray-200 dark:border-[#333333] shadow-2xl z-50 py-1 font-sans text-xs animate-fadeIn overflow-hidden pointer-events-auto"
+                className="fixed w-36 rounded-xl bg-white dark:bg-[#222222] border border-gray-200 dark:border-[#333333] shadow-2xl z-50 py-1 font-sans text-xs animate-fadeIn overflow-hidden pointer-events-auto"
               >
-                {/* 1. View Details (Info) */}
+                {/* 1. Info Option */}
                 <button
                   onClick={() => {
                     setOpenActionMenuId(null);
-                    loadOrderDetail(o.id);
+                    setActiveOrderId(o.id);
+                    setActiveDrawerAction(null);
                   }}
                   className="w-full px-3 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#2A2A2A] flex items-center gap-2 font-medium cursor-pointer transition-colors"
                 >
                   <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
                   </svg>
-                  <span>View Details</span>
+                  <span>Info</span>
                 </button>
 
-                {/* 2. Contextual Next Step */}
-                {o.status === "placed" && (
-                  <button
-                    onClick={() => {
-                      setOpenActionMenuId(null);
-                      loadOrderDetail(o.id).then(() => {
-                        setActionType("forward");
-                        setActionReason("");
-                      });
-                    }}
-                    className="w-full px-3 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#2A2A2A] flex items-center gap-2 font-medium cursor-pointer transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Confirm Order</span>
-                  </button>
-                )}
-
-                {o.status === "confirmed" && (
-                  <button
-                    onClick={() => {
-                      setOpenActionMenuId(null);
-                      loadOrderDetail(o.id).then(() => {
-                        setActionType("forward");
-                        setActionReason("");
-                      });
-                    }}
-                    className="w-full px-3 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#2A2A2A] flex items-center gap-2 font-medium cursor-pointer transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.25A2.25 2.25 0 010 18.75V10.5m18 10.5h3.75A2.25 2.25 0 0024 18.75V10.5M9.75 21V9.75" />
-                    </svg>
-                    <span>Ready for Pickup</span>
-                  </button>
-                )}
-
-                {o.status === "ready_for_pickup" && (
-                  <button
-                    onClick={() => {
-                      setOpenActionMenuId(null);
-                      loadOrderDetail(o.id).then(() => {
-                        setActionType("complete_pickup");
-                        setActionReason("");
-                      });
-                    }}
-                    className="w-full px-3 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2 font-semibold cursor-pointer transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
-                    <span>Complete Handover</span>
-                  </button>
-                )}
-
-                {o.status === "expired" && (
-                  <button
-                    onClick={() => {
-                      setOpenActionMenuId(null);
-                      loadOrderDetail(o.id).then(() => {
-                        setActionType("reopen");
-                        setActionReason("");
-                      });
-                    }}
-                    className="w-full px-3 py-2 text-left text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-2 font-medium cursor-pointer transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                    </svg>
-                    <span>Reopen Order</span>
-                  </button>
-                )}
-
-                {/* 3. Divider Line */}
-                {canCancel && <div className="my-1 border-t border-gray-100 dark:border-[#2A2A2A]" />}
-
-                {/* 4. Cancel Order (in RED) */}
+                {/* 2. Cancel Order Option (in red) */}
                 {canCancel && (
-                  <button
-                    onClick={() => {
-                      setOpenActionMenuId(null);
-                      loadOrderDetail(o.id).then(() => {
-                        setActionType("cancel");
-                        setActionReason("");
-                      });
-                    }}
-                    className="w-full px-3 py-2 text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2 font-medium cursor-pointer transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                    </svg>
-                    <span>Cancel Order</span>
-                  </button>
+                  <>
+                    <div className="my-1 border-t border-gray-100 dark:border-[#333333]" />
+                    <button
+                      onClick={() => {
+                        setOpenActionMenuId(null);
+                        setActiveOrderId(o.id);
+                        setActiveDrawerAction("cancel");
+                      }}
+                      className="w-full px-3 py-2 text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2 font-medium cursor-pointer transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      </svg>
+                      <span>Cancel Order</span>
+                    </button>
+                  </>
                 )}
               </div>
             );
@@ -1320,399 +1033,17 @@ export default function AdminOrdersPage() {
         </div>
       )}
 
-      {/* ────── ORDER DETAIL & MANAGEMENT MODAL ────── */}
-      {activeOrderId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in font-sans">
-          <div className="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-gray-200 dark:border-[#262626] shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto p-6 space-y-5">
-            {loadingActive || !activeOrder ? (
-              <div className="py-20 flex flex-col items-center justify-center gap-3 text-gray-400 font-mono text-xs">
-                <div className="w-5 h-5 border-2 border-black dark:border-white border-t-transparent rounded-full animate-spin" />
-                <span>Loading order details...</span>
-              </div>
-            ) : (
-              <>
-                {/* Header */}
-                <div className="flex items-start justify-between border-b border-gray-100 dark:border-[#262626] pb-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-lg font-black text-gray-900 dark:text-white">
-                        {activeOrder.order_number}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400 font-mono">
-                      Placed on {new Date(activeOrder.created_at).toLocaleString("en-NG")}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveOrderId(null);
-                      setActiveOrder(null);
-                    }}
-                    className="p-1 text-gray-400 hover:text-black dark:hover:text-white text-base cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* Status Badges Row */}
-                <div className="flex items-center gap-3 p-3.5 rounded-xl bg-gray-50 dark:bg-[#141414] border border-gray-100 dark:border-[#262626] flex-wrap justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono font-bold text-gray-500">Status:</span>
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-xs font-mono font-extrabold uppercase ${
-                        activeOrder.status === "collected"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : activeOrder.status === "ready_for_pickup"
-                          ? "bg-[#EDCF5D] text-black"
-                          : activeOrder.status === "confirmed"
-                          ? "bg-sky-100 text-sky-800"
-                          : activeOrder.status === "cancelled" || activeOrder.status === "expired"
-                          ? "bg-rose-100 text-rose-800"
-                          : activeOrder.status === "on_hold"
-                          ? "bg-purple-100 text-purple-800"
-                          : "bg-amber-100 text-amber-900"
-                      }`}
-                    >
-                      {describeStatus(activeOrder.status)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono font-bold text-gray-500">Payment:</span>
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-xs font-mono font-bold uppercase ${
-                        activeOrder.payment_status === "paid"
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-300"
-                          : "bg-amber-50 text-amber-800 border border-amber-300"
-                      }`}
-                    >
-                      {activeOrder.payment_status === "paid" ? "Paid" : "Payment Due at Pickup"}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Pickup Location & Customer Info */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  <div className="p-3.5 rounded-xl border border-gray-200 dark:border-[#262626] space-y-1">
-                    <span className="font-mono text-[10px] font-bold uppercase text-gray-400">
-                      Pickup Station
-                    </span>
-                    <p className="font-bold text-gray-900 dark:text-white">
-                      {activeOrder.pickup_station?.name || "Main Store"}
-                    </p>
-                    <p className="text-gray-600 dark:text-gray-300">
-                      {activeOrder.pickup_station?.address_line1 || "12 Allen Avenue"}
-                    </p>
-                    <p className="text-gray-500">
-                      {activeOrder.pickup_station?.city || "Ikeja"}{activeOrder.pickup_station?.state ? `, ${activeOrder.pickup_station.state}` : ""}
-                    </p>
-                    {activeOrder.pickup_station?.phone && (
-                      <p className="text-gray-400 font-mono pt-1">Tel: {activeOrder.pickup_station.phone}</p>
-                    )}
-                  </div>
-
-                  <div className="p-3.5 rounded-xl border border-gray-200 dark:border-[#262626] space-y-1">
-                    <span className="font-mono text-[10px] font-bold uppercase text-gray-400">
-                      Customer Details
-                    </span>
-                    <p className="font-bold text-gray-900 dark:text-white">
-                      {activeOrder.customer?.full_name || "Guest Customer"}
-                    </p>
-                    <p className="text-gray-600 dark:text-gray-300">
-                      {activeOrder.customer?.email || "No email"}
-                    </p>
-                    <p className="font-mono text-gray-500">
-                      {activeOrder.customer?.phone || "No phone"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Items in Order */}
-                <div className="space-y-2">
-                  <h4 className="font-mono font-bold text-xs uppercase text-gray-500">
-                    Items ({activeOrder.items?.length || 0})
-                  </h4>
-                  <div className="divide-y divide-gray-100 dark:divide-[#262626] border border-gray-200 dark:border-[#262626] rounded-xl p-3 max-h-48 overflow-y-auto">
-                    {(activeOrder.items || []).map((it) => (
-                      <div key={it.id} className="py-2 flex items-center justify-between text-xs">
-                        <div>
-                          <p className="font-bold text-gray-900 dark:text-white">
-                            {it.product_snapshot?.name || "Garment"}
-                          </p>
-                          <p className="text-[11px] text-gray-400 font-mono">
-                            Qty: {it.quantity} {it.product_snapshot?.size ? `· ${it.product_snapshot.size}` : ""} {it.product_snapshot?.color ? `· ${it.product_snapshot.color}` : ""}
-                          </p>
-                        </div>
-                        <span className="font-mono font-bold text-gray-900 dark:text-white">
-                          {formatNaira(it.line_total)}
-                        </span>
-                      </div>
-                    ))}
-                    <div className="pt-2 flex justify-between font-bold text-xs">
-                      <span>Total Amount:</span>
-                      <span className="font-mono text-sm">{formatNaira(activeOrder.total)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Primary Action Buttons */}
-                <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-[#262626]">
-                  <span className="block font-mono text-[10px] font-bold uppercase text-gray-400">
-                    Fulfillment Handover & Actions
-                  </span>
-
-                  {activeOrder.status === "placed" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActionType("forward");
-                        setActionReason("");
-                      }}
-                      className="w-full py-2.5 px-4 rounded-xl bg-[#010101] text-white hover:bg-black/85 font-bold text-xs transition-all cursor-pointer shadow-sm flex items-center justify-center gap-2"
-                    >
-                      <span>Mark as Confirmed →</span>
-                    </button>
-                  )}
-
-                  {activeOrder.status === "confirmed" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActionType("forward");
-                        setActionReason("");
-                      }}
-                      className="w-full py-2.5 px-4 rounded-xl bg-[#EDCF5D] text-black hover:bg-amber-400 font-bold text-xs transition-all cursor-pointer shadow-sm flex items-center justify-center gap-2"
-                    >
-                      <span>Mark Ready for Pickup (Notify Customer) →</span>
-                    </button>
-                  )}
-
-                  {activeOrder.status === "ready_for_pickup" && (
-                    <div className="space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActionType("complete_pickup");
-                          setActionReason("");
-                        }}
-                        className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs transition-all cursor-pointer shadow-sm flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                        </svg>
-                        <span>
-                          {activeOrder.payment_status === "paid"
-                            ? "Complete Pickup (Hand over items)"
-                            : "Atomic Pay & Complete Pickup Handover"}
-                        </span>
-                      </button>
-
-                      {activeOrder.payment_status !== "paid" && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActionType("pay");
-                            setActionReason("");
-                          }}
-                          className="w-full py-2 px-3 rounded-xl border border-gray-300 dark:border-[#2C2C2C] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#242424] font-bold text-xs cursor-pointer"
-                        >
-                          Mark Paid Separately (Cash / POS / Transfer)
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Secondary Actions (Move back, On Hold, Cancel, Reopen) */}
-                  <div className="flex items-center gap-2 pt-2 flex-wrap">
-                    {BACKWARD_STEP[activeOrder.status] && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActionType("backward");
-                          setActionReason("");
-                        }}
-                        className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-[#2C2C2C] text-gray-600 dark:text-gray-400 hover:bg-gray-100 text-xs font-semibold cursor-pointer"
-                      >
-                        ← Move back a step
-                      </button>
-                    )}
-
-                    {["placed", "confirmed", "ready_for_pickup"].includes(activeOrder.status) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActionType("hold");
-                          setActionReason("");
-                        }}
-                        className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-[#2C2C2C] text-purple-700 dark:text-purple-400 hover:bg-purple-50 text-xs font-semibold cursor-pointer"
-                      >
-                        Put on hold
-                      </button>
-                    )}
-
-                    {activeOrder.status !== "collected" && activeOrder.status !== "cancelled" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActionType("cancel");
-                          setActionReason("");
-                        }}
-                        className="px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-400 hover:bg-rose-50 text-xs font-semibold cursor-pointer"
-                      >
-                        Cancel order
-                      </button>
-                    )}
-
-                    {activeOrder.status === "expired" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActionType("reopen");
-                          setActionReason("");
-                        }}
-                        className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-50 text-xs font-bold cursor-pointer"
-                      >
-                        Reopen order
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Audit Trail Section */}
-                <div className="space-y-2 pt-4 border-t border-gray-100 dark:border-[#262626]">
-                  <h4 className="font-mono font-bold text-xs uppercase text-gray-500">
-                    Audit Trail & History
-                  </h4>
-                  {(!activeOrder.audit_log || activeOrder.audit_log.length === 0) ? (
-                    <p className="text-xs text-gray-400 italic">No activity logged yet.</p>
-                  ) : (
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {activeOrder.audit_log.map((log) => (
-                        <div
-                          key={log.id}
-                          className="p-2.5 rounded-lg bg-gray-50 dark:bg-[#141414] border border-gray-100 dark:border-[#242424] text-xs space-y-0.5"
-                        >
-                          <div className="flex items-center justify-between text-[11px] text-gray-400 font-mono">
-                            <span>{log.actor?.full_name || log.actor?.email || "System"}</span>
-                            <span>{new Date(log.created_at).toLocaleString("en-NG")}</span>
-                          </div>
-                          <p className="font-semibold text-gray-800 dark:text-gray-200">
-                            {log.action.replace(/_/g, " ")}
-                          </p>
-                          {log.changes?.reason && (
-                            <p className="text-gray-500 italic">Reason: {log.changes.reason}</p>
-                          )}
-                          {log.changes?.payment_method && (
-                            <p className="text-gray-500">Method: {log.changes.payment_method}</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ────── ACTION PROMPT / REASON SUB-MODAL ────── */}
-      {actionType && activeOrder && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-fade-in font-sans">
-          <div className="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-gray-200 dark:border-[#262626] p-6 max-w-md w-full space-y-4 shadow-2xl">
-            <h3 className="font-bold text-sm text-gray-900 dark:text-white capitalize">
-              {actionType === "complete_pickup"
-                ? "Complete Order Pickup"
-                : actionType === "pay"
-                ? "Mark Order as Paid"
-                : actionType === "cancel"
-                ? "Cancel Order"
-                : actionType === "hold"
-                ? "Place Order on Hold"
-                : actionType === "backward"
-                ? "Move Order Backward"
-                : actionType === "reopen"
-                ? "Reopen Expired Order"
-                : "Advance Order"}
-            </h3>
-
-            {actionError && (
-              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
-                {actionError}
-              </div>
-            )}
-
-            {(actionType === "complete_pickup" && activeOrder.payment_status !== "paid") || actionType === "pay" ? (
-              <div className="space-y-2 text-xs">
-                <label className="block font-bold text-gray-700 dark:text-gray-300">
-                  Select Payment Method:
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["cash", "pos", "transfer"] as const).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setSelectedPayMethod(m)}
-                      className={`p-2 rounded-xl border text-center font-bold font-mono uppercase cursor-pointer ${
-                        selectedPayMethod === m
-                          ? "border-black dark:border-white bg-[#010101] text-white dark:bg-white dark:text-black"
-                          : "border-gray-200 dark:border-[#2C2C2C] text-gray-600 hover:border-gray-400"
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[11px] text-gray-500 pt-1 font-mono">
-                  Amount: {formatNaira(activeOrder.total)}
-                </p>
-              </div>
-            ) : null}
-
-            <div className="space-y-1 text-xs">
-              <label className="block font-bold text-gray-700 dark:text-gray-300">
-                {requiresReason(activeOrder.status, actionType === "forward" ? FORWARD_NEXT[activeOrder.status] || "" : actionType)
-                  ? "Reason (Required) *"
-                  : "Internal Note / Reason (Optional)"}
-              </label>
-              <textarea
-                rows={3}
-                placeholder="Enter details for the audit log..."
-                value={actionReason}
-                onChange={(e) => setActionReason(e.target.value)}
-                className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-[#2C2C2C] bg-white dark:bg-[#141414] text-xs text-gray-900 dark:text-white focus:outline-none focus:border-black"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setActionType(null)}
-                className="px-3.5 py-2 rounded-xl border border-gray-300 dark:border-[#2C2C2C] text-xs font-semibold text-gray-700 dark:text-gray-300 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleExecuteAction}
-                disabled={actionLoading}
-                className={`px-4 py-2 rounded-xl font-bold text-xs cursor-pointer disabled:opacity-50 flex items-center gap-2 ${
-                  actionType === "cancel"
-                    ? "bg-red-600 hover:bg-red-700 text-white"
-                    : "bg-[#010101] dark:bg-[#EDCF5D] text-white dark:text-black hover:opacity-90"
-                }`}
-              >
-                {actionLoading && (
-                  <div className="w-3.5 h-3.5 border-2 border-white dark:border-black border-t-transparent rounded-full animate-spin" />
-                )}
-                <span>{actionType === "cancel" ? "Confirm Cancellation" : "Confirm"}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ────── ORDER DETAIL & MANAGEMENT SIDE PANEL DRAWER ────── */}
+      <OrderInfoDrawer
+        isOpen={Boolean(activeOrderId)}
+        orderId={activeOrderId}
+        initialAction={activeDrawerAction}
+        onClose={() => {
+          setActiveOrderId(null);
+          setActiveDrawerAction(null);
+        }}
+        onStatusUpdated={fetchOrders}
+      />
     </div>
   );
 }

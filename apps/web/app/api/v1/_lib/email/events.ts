@@ -141,8 +141,10 @@ export function notifyPickupOrder(client: Client, orderId: string): Promise<void
         items: (order.items ?? []).map((i: any) => ({ name: i.product_snapshot?.name || "Item", size: i.product_snapshot?.size ?? null, color: i.product_snapshot?.color ?? null, quantity: i.quantity, lineTotal: i.line_total })),
         total: order.total,
         address: pickupAddress,
-        deadlineText: order.pickup_deadline ? formatWAT(order.pickup_deadline) : "the deadline shown at checkout",
-        trackUrl: `${storefrontUrl()}/track`,
+        deadlineText: order.pickup_deadline
+          ? formatWAT(order.pickup_deadline)
+          : "Collection window will activate as soon as your order is packaged and marked ready for pickup.",
+        trackUrl: `${storefrontUrl()}/track?order_number=${encodeURIComponent(order.order_number)}&email=${encodeURIComponent(order.customer.email)}`,
       }),
       idempotencyKey: `pickup-order/${orderId}`,
     });
@@ -166,14 +168,14 @@ export function notifyOrderStatus(client: Client, orderId: string, status: strin
     try {
       const { data } = await client
         .from("orders")
-        .select("order_number, total, payment_status, paid_at, customer:customers(email, full_name), pickup_station:pickup_stations(name, address_line1, address_line2, city, state, phone)")
+        .select("order_number, total, payment_status, paid_at, pickup_deadline, customer:customers(email, full_name), pickup_station:pickup_stations(name, address_line1, address_line2, city, state, phone, operating_hours)")
         .eq("id", orderId)
         .maybeSingle();
       o = data;
     } catch {
       const { data } = await client
         .from("orders")
-        .select("order_number, total, payment_status, paid_at, customer:customers(email, full_name)")
+        .select("order_number, total, payment_status, paid_at, pickup_deadline, customer:customers(email, full_name)")
         .eq("id", orderId)
         .maybeSingle();
       o = data;
@@ -183,20 +185,26 @@ export function notifyOrderStatus(client: Client, orderId: string, status: strin
     const isPaid = o.payment_status === "paid" || !!o.paid_at;
 
     let storeAddress = store.address;
+    let operatingHours: string | null = null;
     const station = Array.isArray(o.pickup_station) ? o.pickup_station[0] : o.pickup_station;
     if (station?.address_line1) {
       storeAddress = [station.name, station.address_line1, station.address_line2, station.city, station.state].filter(Boolean).join(", ");
+      operatingHours = station.operating_hours || null;
     }
+
+    const trackUrl = `${storefrontUrl()}/track?order_number=${encodeURIComponent(o.order_number)}&email=${encodeURIComponent(o.customer.email)}`;
 
     const mail = orderStatusEmail({
       store,
       name: o.customer.full_name || "there",
       orderNumber: o.order_number,
       status,
-      trackUrl: `${storefrontUrl()}/track`,
+      trackUrl,
       paid: isPaid,
       totalKobo: o.total,
       storeAddress,
+      operatingHours,
+      pickupDeadlineText: o.pickup_deadline ? formatWAT(o.pickup_deadline) : null,
       reason,
     });
     if (mail) await sendEmail({ to: o.customer.email, ...mail, idempotencyKey: `order-status/${orderId}/${status}` });
