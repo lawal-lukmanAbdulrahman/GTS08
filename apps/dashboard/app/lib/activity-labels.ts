@@ -75,6 +75,8 @@ export function describeActivity(entry: ActivityLike): { title: string; detail?:
       return withDetail(c.to === "test" ? "Switched the shop to test data" : "Switched the shop to live data", str(c.from) ? `Was showing ${c.from} data` : undefined);
     case "profile.change_password":
       return { title: "Changed their password" };
+    case "profile.change_email":
+      return withDetail("Changed their email address", str(c.new_email) ? `New email: ${str(c.new_email)}` : undefined);
     case "profile.update": {
       const words: Record<string, string> = { full_name: "Name", avatar_cloudinary_id: "photo", phone: "phone" };
       const fields = Array.isArray(c.fields) ? (c.fields as string[]).map((f) => words[f] ?? f) : [];

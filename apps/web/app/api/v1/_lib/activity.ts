@@ -15,6 +15,7 @@ export type ActivityAction =
   | "profile.update_phone"
   | "profile.update"
   | "profile.change_password"
+  | "profile.change_email"
   | "staff.create"
   | "staff.permissions_update"
   | "staff.block"

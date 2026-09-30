@@ -9,11 +9,12 @@ export type PhoneSaveResult =
 
 interface Props {
   initialPhone: string | null;
+  isAdmin?: boolean;
   onSave: (phone: string) => Promise<PhoneSaveResult>;
 }
 
 /** A staff member edits their own phone number (the only contact detail they may change). */
-export default function PhoneForm({ initialPhone, onSave }: Props) {
+export default function PhoneForm({ initialPhone, isAdmin, onSave }: Props) {
   const [saved, setSaved] = useState(initialPhone ?? "");
   const [value, setValue] = useState(initialPhone ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -67,9 +68,9 @@ export default function PhoneForm({ initialPhone, onSave }: Props) {
         />
         {error ? (
           <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
-        ) : (
+        ) : !isAdmin ? (
           <p className="text-[11px] text-gray-500 dark:text-gray-400">Your email and role are managed by an admin.</p>
-        )}
+        ) : null}
       </div>
       {status === "saved" && (
         <p role="status" className="text-xs text-emerald-600 dark:text-emerald-400">

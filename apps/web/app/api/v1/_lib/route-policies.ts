@@ -146,6 +146,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "flags/[id]": { PATCH: "admin" },
   "staff/me": { GET: "staff", PATCH: "staff" },
   "staff/me/activity": { GET: "staff" },
+  "staff/me/email": { POST: "staff" },
   "staff/me/password": { POST: "staff" },
   "staff/me/sales": { GET: "staff" },
   "upload": { POST: "permission:can_manage_products" },
