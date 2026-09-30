@@ -17,6 +17,7 @@ import ProfileSidebar, { PROFILE_SECTIONS, type ProfileSection } from "./profile
 import PasswordForm, { type PasswordChangeInput, type PasswordChangeOutcome } from "./password-form";
 import PermissionList from "./permission-list";
 import PhoneForm, { type PhoneSaveResult } from "./phone-form";
+import EmailForm, { type EmailChangeInput, type EmailChangeOutcome } from "./email-form";
 import AdminDetailsForm, { type AdminDetails, type DetailsSaveResult, type UploadResult } from "./admin-details-form";
 import { uploadToCloudinary } from "../admin/products/cloudinary-upload";
 
@@ -149,6 +150,20 @@ export default function ProfilePage() {
     return r.ok ? { ok: true } : { ok: false, message: r.message, fieldErrors: r.details };
   }
 
+  async function changeEmail(input: EmailChangeInput): Promise<EmailChangeOutcome> {
+    const r = await apiCall<{ email: string }>("/staff/me/email", { method: "POST", json: input });
+    if (!r.ok) return { ok: false, message: r.message, fieldErrors: r.details };
+    try {
+      const stored = JSON.parse(localStorage.getItem("gts_user") || "{}");
+      localStorage.setItem("gts_user", JSON.stringify({ ...stored, email: r.data.email }));
+      window.dispatchEvent(new Event("gts_profile_updated"));
+    } catch {
+      // storage blocked
+    }
+    session.reload();
+    return { ok: true, email: r.data.email };
+  }
+
   if (session.loading) {
     return <p className="p-8 text-sm text-gray-500">Loading your profile...</p>;
   }
@@ -193,8 +208,19 @@ export default function ProfilePage() {
                 <dt className="text-gray-500">Role</dt>
                 <dd className="font-semibold text-gray-900 dark:text-white capitalize">{profile!.role.replace("_", " ")}</dd>
               </dl>
-              <PhoneForm initialPhone={profile!.phone} onSave={savePhone} />
+              <PhoneForm initialPhone={profile!.phone} isAdmin={profile!.is_admin} onSave={savePhone} />
             </Section>
+
+            {profile!.is_admin && (
+              <Section title="Change email address" hint="Update your account login and administrative contact email. Requires your current password for security.">
+                <EmailForm currentEmail={profile!.email} onSave={changeEmail} />
+              </Section>
+            )}
+
+            <Section title="Change password" hint="Choose a strong password only you know. You'll stay signed in on this device.">
+              <PasswordForm onSubmit={changePassword} />
+            </Section>
+
             <Section title="What you can do" hint="Set by an admin. If something's missing, ask them.">
               <PermissionList permissions={profile!.permissions} isAdmin={profile!.is_admin} />
             </Section>
