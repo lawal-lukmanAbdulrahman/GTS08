@@ -14,6 +14,7 @@ import { useAuth } from "../auth-context";
 import {
   getCustomerInboxSeenAt,
   getCustomerNotifications,
+  getCustomerDeletedNotifIds,
 } from "../../../../lib/notifications";
 import { ShopAllLink } from "../shop-all-link";
 import { iconFor, useStoreCategories } from "../../_lib/categories";
@@ -42,44 +43,68 @@ export function Header() {
       Boolean((user as any)?.is_demo));
 
   useEffect(() => {
-    if (!user) {
+    const activeKey = user?.id || customer?.id;
+    if (!activeKey) {
       setInboxBadge(0);
       return;
     }
     const checkInbox = async () => {
       try {
         const seenAt = getCustomerInboxSeenAt();
+        const deletedIds = getCustomerDeletedNotifIds(activeKey);
         let unreadCount = 0;
 
-        // 1. Inquiries from API (staff replies)
-        const res = await fetch("/api/v1/inquiries");
-        if (res.ok) {
-          const json = await res.json();
-          if (Array.isArray(json.data)) {
-            const unreadInquiries = json.data.filter((item: any) => {
-              if (item.lastSenderType !== "staff") return false;
-              if (!seenAt) return true;
-              return new Date(item.lastMessageAt).getTime() > new Date(seenAt).getTime();
-            });
-            unreadCount += unreadInquiries.length;
+        // 1. Database customer notifications (account notices, disabled, reinstated, enabled, etc.)
+        try {
+          const res = await fetch("/api/v1/notifications/customer");
+          if (res.ok) {
+            const json = await res.json();
+            if (Array.isArray(json.data)) {
+              const unreadDbNotifs = json.data.filter(
+                (n: any) => !n.is_read && !deletedIds.includes(n.id)
+              );
+              unreadCount += unreadDbNotifs.length;
+            }
           }
-        }
+        } catch {}
 
-        // 2. Saved customer notifications (review replies, order phase updates)
-        const notifs = getCustomerNotifications();
-        const unreadNotifs = notifs.filter((n) => {
-          if (!seenAt) return true;
-          return new Date(n.createdAt).getTime() > new Date(seenAt).getTime();
-        });
-        unreadCount += unreadNotifs.length;
+        // 2. Inquiries from API (staff replies)
+        try {
+          const res = await fetch("/api/v1/inquiries");
+          if (res.ok) {
+            const json = await res.json();
+            if (Array.isArray(json.data)) {
+              const unreadInquiries = json.data.filter((item: any) => {
+                if (item.lastSenderType !== "staff") return false;
+                if (!seenAt) return true;
+                return new Date(item.lastMessageAt).getTime() > new Date(seenAt).getTime();
+              });
+              unreadCount += unreadInquiries.length;
+            }
+          }
+        } catch {}
 
-        // 3. Fallback check for gts_inbox_notifications
+        // 3. Saved customer notifications (review replies, order phase updates)
+        try {
+          const notifs = getCustomerNotifications(activeKey);
+          const unreadNotifs = notifs.filter((n) => {
+            if (deletedIds.includes(n.id)) return false;
+            if (n.isRead) return false;
+            if (!seenAt) return true;
+            return new Date(n.createdAt).getTime() > new Date(seenAt).getTime();
+          });
+          unreadCount += unreadNotifs.length;
+        } catch {}
+
+        // 4. Fallback check for gts_inbox_notifications
         try {
           const rawReviewNotifs = JSON.parse(localStorage.getItem("gts_inbox_notifications") || "[]");
           if (Array.isArray(rawReviewNotifs)) {
+            const notifs = getCustomerNotifications(activeKey);
             const existingIds = new Set(notifs.map((n) => n.id));
             const unreadReviews = rawReviewNotifs.filter((n: any) => {
               if (existingIds.has(n.id)) return false;
+              if (deletedIds.includes(n.id)) return false;
               if (!seenAt) return true;
               return new Date(n.createdAt || n.date).getTime() > new Date(seenAt).getTime();
             });
@@ -97,14 +122,25 @@ export function Header() {
       setInboxBadge(0);
     };
 
+    const handleUnreadCount = (e: Event) => {
+      const customEvent = e as CustomEvent<{ count: number }>;
+      if (typeof customEvent.detail?.count === "number") {
+        setInboxBadge(customEvent.detail.count);
+      }
+    };
+
     window.addEventListener("gts_inbox_read", handleInboxRead);
+    window.addEventListener("gts_unread_count_changed", handleUnreadCount);
     window.addEventListener("gts_notification_received", checkInbox);
+    window.addEventListener("gts_notifications_updated", checkInbox);
 
     return () => {
       window.removeEventListener("gts_inbox_read", handleInboxRead);
+      window.removeEventListener("gts_unread_count_changed", handleUnreadCount);
       window.removeEventListener("gts_notification_received", checkInbox);
+      window.removeEventListener("gts_notifications_updated", checkInbox);
     };
-  }, [user]);
+  }, [user?.id, customer?.id]);
 
   const _displayName =
     customer?.full_name?.trim() ||
@@ -252,8 +288,8 @@ export function Header() {
               />
             </svg>
             {inboxBadge > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-[#010101] text-white text-[9px] font-extrabold flex items-center justify-center border-2 border-white shadow-2xs font-sans animate-fade-in">
-                {inboxBadge}
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center border-2 border-white shadow-2xs font-sans animate-fade-in">
+                {inboxBadge > 9 ? "9+" : inboxBadge}
               </span>
             )}
           </button>
@@ -541,7 +577,7 @@ export function Header() {
                     <span>Inbox</span>
                   </div>
                   {inboxBadge > 0 && (
-                    <span className="bg-[#010101] text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full font-sans">
+                    <span className="bg-rose-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full font-sans shadow-2xs min-w-[20px] text-center">
                       {inboxBadge}
                     </span>
                   )}

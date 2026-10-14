@@ -5,6 +5,7 @@ import { createClient } from "@gts/database/client";
 import type { User } from "@supabase/supabase-js";
 import { CATALOGUE_CACHE_KEY } from "./catalogue-context";
 import { clearCustomerNotifications } from "../../../lib/notifications";
+import { DeletedAccountDialog } from "./deleted-account-dialog";
 
 export interface CustomerAddress {
   id: string;
@@ -27,6 +28,11 @@ export interface CustomerProfile {
   phone?: string | null;
   avatar_url?: string | null;
   created_at?: string;
+  is_disabled?: boolean;
+  disabled_reason?: string | null;
+  disabled_at?: string | null;
+  deleted_at?: string | null;
+  deletion_reason?: string | null;
 }
 
 interface AuthContextType {
@@ -51,6 +57,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [customer, setCustomer] = useState<CustomerProfile | null>(null);
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletedAccountModal, setDeletedAccountModal] = useState<{
+    userId: string;
+    email: string;
+    deletionReason: string;
+    supportPhone: string;
+  } | null>(null);
 
   // Stable singleton client instance across renders. Constructed only in the browser:
   // during a server snapshot (static prerender) createBrowserClient throws when the
@@ -65,6 +77,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const metadataName = userMetadata?.full_name || userMetadata?.name || null;
         const metadataPhone = userMetadata?.phone || null;
+        const cleanEmail = email.trim().toLowerCase();
+
+        // 0. Query users table for deletion and disabling
+        const { data: userData } = await supabase
+          .from("users")
+          .select("id, email, full_name, phone, role, is_disabled, disabled_reason, disabled_at, deleted_at, deletion_reason, deletion_notified, is_demo")
+          .eq("id", userId)
+          .maybeSingle();
+
+        const wasNotified =
+          userData?.deletion_notified ||
+          (typeof window !== "undefined" && localStorage.getItem(`gts_deleted_notified_${cleanEmail}`) === "true");
+
+        if (userData?.deleted_at) {
+          // Force sign out immediately: NEVER keep an active session for a deleted account
+          await supabase.auth.signOut().catch(() => undefined);
+          setUser(null);
+          setCustomer(null);
+          localStorage.removeItem("gts_customer_user");
+          localStorage.removeItem("gts_customer_token");
+          if (typeof document !== "undefined") {
+            document.cookie = "gts_customer_token=; path=/; max-age=0";
+            document.cookie = "gts_access_token=; path=/; max-age=0";
+          }
+
+          if (wasNotified) {
+            return;
+          }
+
+          // First login after deletion: show unremovable dialog!
+          const { data: storeSettings } = await supabase
+            .from("settings")
+            .select("support_phone")
+            .eq("id", "00000000-0000-0000-0000-000000000001")
+            .maybeSingle();
+
+          setDeletedAccountModal({
+            userId,
+            email: cleanEmail,
+            deletionReason: userData.deletion_reason || "Administrative decision",
+            supportPhone: storeSettings?.support_phone || "+234 800 000 0000",
+          });
+          return;
+        }
 
         // 1. Fetch from customers table
         const { data: custData } = await supabase
@@ -74,11 +130,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .limit(1)
           .maybeSingle();
 
+        const isDisabled = userData?.is_disabled === true || custData?.is_disabled === true;
+        const disabledReason = userData?.disabled_reason || custData?.disabled_reason || null;
+        const disabledAt = userData?.disabled_at || custData?.disabled_at || null;
+
         if (custData) {
           setCustomer({
             ...custData,
             full_name: custData.full_name || metadataName || email.split("@")[0] || "Customer",
             phone: custData.phone || metadataPhone || null,
+            is_disabled: isDisabled,
+            disabled_reason: disabledReason,
+            disabled_at: disabledAt,
+            deleted_at: userData?.deleted_at || null,
+            deletion_reason: userData?.deletion_reason || null,
           });
 
           // Fetch saved addresses
@@ -92,13 +157,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setSavedAddresses(addrData);
           }
         } else {
-          // Fallback to users table
-          const { data: userData } = await supabase
-            .from("users")
-            .select("*")
-            .eq("id", userId)
-            .maybeSingle();
-
           // If this user is a staff account (admin, cashier, inventory_staff),
           // DO NOT treat them as a storefront customer, unless they are the demo account.
           if (userData && userData.role && userData.role !== "customer") {
@@ -131,6 +189,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             full_name: userData?.full_name || metadataName || email.split("@")[0] || "Customer",
             email: userData?.email || email,
             phone: userData?.phone || metadataPhone || null,
+            is_disabled: isDisabled,
+            disabled_reason: disabledReason,
+            disabled_at: disabledAt,
+            deleted_at: userData?.deleted_at || null,
+            deletion_reason: userData?.deletion_reason || null,
           });
         }
       } catch (e) {
@@ -327,9 +390,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [supabase, fetchCustomerData]);
 
+  const handleAcknowledgeDeletion = async () => {
+    if (!deletedAccountModal) return;
+    const { userId, email } = deletedAccountModal;
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`gts_deleted_notified_${email}`, "true");
+      }
+      await supabase.from("users").update({ deletion_notified: true }).eq("id", userId);
+    } catch {}
+
+    setDeletedAccountModal(null);
+    await signOut();
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    }
+  };
+
   const signInWithPassword = async (email: string, password: string) => {
     try {
       const cleanEmail = email.trim().toLowerCase();
+      const wasNotifiedLocally = typeof window !== "undefined" && localStorage.getItem(`gts_deleted_notified_${cleanEmail}`) === "true";
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
@@ -340,6 +422,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data.user) {
+        // Query users table for deletion status
+        const { data: uRow } = await supabase
+          .from("users")
+          .select("is_disabled, disabled_reason, deleted_at, deletion_reason, deletion_notified")
+          .eq("id", data.user.id)
+          .maybeSingle();
+
+        if (uRow?.deleted_at) {
+          // Immediately revoke and purge session
+          await supabase.auth.signOut().catch(() => undefined);
+          localStorage.removeItem("gts_customer_user");
+          localStorage.removeItem("gts_customer_token");
+          if (typeof document !== "undefined") {
+            document.cookie = "gts_customer_token=; path=/; max-age=0";
+            document.cookie = "gts_access_token=; path=/; max-age=0";
+          }
+
+          if (uRow.deletion_notified || wasNotifiedLocally) {
+            return { error: "Account does not exist." };
+          }
+
+          // First login after deletion: show unremovable dialog
+          const { data: settings } = await supabase
+            .from("settings")
+            .select("support_phone")
+            .eq("id", "00000000-0000-0000-0000-000000000001")
+            .maybeSingle();
+
+          setDeletedAccountModal({
+            userId: data.user.id,
+            email: cleanEmail,
+            deletionReason: uRow.deletion_reason || "Account closed by administrator.",
+            supportPhone: settings?.support_phone || "+234 800 000 0000",
+          });
+
+          return { error: null };
+        }
+
         setUser(data.user);
         if (data.session) {
           localStorage.setItem("gts_customer_user", JSON.stringify(data.user));
@@ -499,6 +619,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+      <DeletedAccountDialog
+        isOpen={!!deletedAccountModal}
+        deletionReason={deletedAccountModal?.deletionReason}
+        supportPhone={deletedAccountModal?.supportPhone}
+        onAcknowledge={handleAcknowledgeDeletion}
+        onTamper={() => {
+          void signOut();
+          if (typeof window !== "undefined") {
+            window.location.reload();
+          }
+        }}
+      />
     </AuthContext.Provider>
   );
 }

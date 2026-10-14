@@ -172,9 +172,15 @@ export interface Database {
           material: string | null
           category_id: string | null
           base_price: number
+          price_retailer: number | null
+          price_wholesaler: number | null
+          price_distributor: number | null
+          wholesale_min_qty: number
+          distributor_min_qty: number
           compare_at_price: number | null
           cost_price: number | null
           status: 'active' | 'draft' | 'archived'
+          channel: 'pos' | 'web'
           is_featured: boolean
           tags: string[] | null
           total_sold: number
@@ -199,9 +205,15 @@ export interface Database {
           material?: string | null
           category_id?: string | null
           base_price: number
+          price_retailer?: number | null
+          price_wholesaler?: number | null
+          price_distributor?: number | null
+          wholesale_min_qty?: number
+          distributor_min_qty?: number
           compare_at_price?: number | null
           cost_price?: number | null
           status?: 'active' | 'draft' | 'archived'
+          channel?: 'pos' | 'web'
           is_featured?: boolean
           tags?: string[] | null
           total_sold?: number
@@ -226,9 +238,15 @@ export interface Database {
           material?: string | null
           category_id?: string | null
           base_price?: number
+          price_retailer?: number | null
+          price_wholesaler?: number | null
+          price_distributor?: number | null
+          wholesale_min_qty?: number
+          distributor_min_qty?: number
           compare_at_price?: number | null
           cost_price?: number | null
           status?: 'active' | 'draft' | 'archived'
+          channel?: 'pos' | 'web'
           is_featured?: boolean
           tags?: string[] | null
           total_sold?: number

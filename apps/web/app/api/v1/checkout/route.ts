@@ -10,7 +10,8 @@ import { DELIVERY_FEE_KOBO, resolveCartLines } from "../_lib/checkout-cart";
 import { initializePayment } from "../_lib/paystack";
 import { afterResponse } from "../_lib/email/after";
 import { notifyPickupOrder } from "../_lib/email/events";
-import { computePromoDiscount, normalizePromoCode, type PromoRow, getOrderPickupPin } from "@gts/utils";
+import { PROMO_COLUMNS } from "../_lib/promo-db";
+import { computePromoDiscountWithScope, normalizePromoCode, type PromoRow, getOrderPickupPin, resolveTierPrice } from "@gts/utils";
 
 /** Every one of these is paid through Paystack, whose webhook is the only thing that marks an order paid. */
 const PREPAID_METHODS = ["paystack", "card-transfer", "palmpay", "opay"];
@@ -34,7 +35,13 @@ interface VariantRow {
     id: string;
     name: string;
     base_price: number;
+    price_retailer?: number | null;
+    price_wholesaler?: number | null;
+    price_distributor?: number | null;
+    wholesale_min_qty?: number;
+    distributor_min_qty?: number;
     status: string;
+    channel?: string;
     product_images?: Array<{ cloudinary_public_id: string; is_primary?: boolean; sort_order?: number; variant_id?: string | null }>;
   } | null;
 }
@@ -110,6 +117,36 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     const state = isPickup ? "" : sanitizeSqlInput(addressInput.state);
 
     const authUser = await getAuthenticatedUser(request);
+
+    // Check if account is disabled or deleted
+    if (authUser?.id) {
+      const { data: userCheck } = await serviceClient
+        .from("users")
+        .select("is_disabled, disabled_reason, deleted_at")
+        .eq("id", authUser.id)
+        .maybeSingle();
+
+      if (userCheck?.deleted_at) {
+        return NextResponse.json({ error: "Account does not exist.", code: "ACCOUNT_NOT_FOUND" }, { status: 403 });
+      }
+
+      if (userCheck?.is_disabled) {
+        const { data: settings } = await serviceClient
+          .from("settings")
+          .select("support_phone")
+          .eq("id", "00000000-0000-0000-0000-000000000001")
+          .maybeSingle();
+        const phone = settings?.support_phone || "customer support";
+        return NextResponse.json(
+          {
+            error: `Your account is disabled (${userCheck.disabled_reason || "Administrative hold"}). Ordering is disabled. Please contact customer support at ${phone}.`,
+            code: "ACCOUNT_DISABLED",
+            supportPhone: phone,
+          },
+          { status: 403 }
+        );
+      }
+    }
 
     // 1. Find or create the customer record. Who an order belongs to is never decided by what was typed into the form:
     //    a signed-in person is matched by their account (and their own verified email), and a record that belongs to
@@ -263,7 +300,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
         id, size, color, sku, price_modifier, is_active,
         inventory(quantity, reserved_quantity),
         product:products(
-          id, name, base_price, status,
+          id, name, base_price, price_retailer, price_wholesaler, price_distributor, wholesale_min_qty, distributor_min_qty, status, channel,
           product_images(cloudinary_public_id, is_primary, sort_order, variant_id)
         )
         `
@@ -274,7 +311,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     const variantById = new Map(((variantRows || []) as unknown as VariantRow[]).map((v) => [v.id, v]));
     const unavailable = items.filter((i) => {
       const v = variantById.get(i.variant_id);
-      return !v || !v.is_active || !v.product || v.product.status !== "active";
+      return !v || !v.is_active || !v.product || v.product.status !== "active" || (v.product.channel && v.product.channel !== "web");
     });
     if (unavailable.length > 0) {
       return NextResponse.json(
@@ -290,7 +327,8 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     let subtotalKobo = 0;
     const orderItemsPayload = items.map((i) => {
       const v = variantById.get(i.variant_id)!;
-      const unitPrice = v.product!.base_price + v.price_modifier;
+      const tiered = resolveTierPrice(v.product!, i.quantity);
+      const unitPrice = tiered.unitPrice + v.price_modifier;
       const lineTotal = unitPrice * i.quantity;
       subtotalKobo += lineTotal;
 
@@ -323,10 +361,64 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     if (body.promoCode !== undefined && body.promoCode !== null && body.promoCode !== "") {
       const code = normalizePromoCode(body.promoCode);
       const { data: promo, error: promoError } = code
-        ? await serviceClient.from("promos").select("code, discount_type, discount_value, min_order_amount, max_uses, used_count, starts_at, expires_at, is_active").eq("code", code).maybeSingle()
+        ? await serviceClient.from("promos").select(PROMO_COLUMNS).eq("code", code).maybeSingle()
         : { data: null, error: null };
       if (promoError) return serverError(new Error(promoError.message));
-      const result = promo ? computePromoDiscount(promo as unknown as PromoRow, subtotalKobo) : ({ ok: false, reason: "INVALID_PROMO" } as const);
+      if (!promo) {
+        return NextResponse.json({ error: "That promo code isn't valid.", code: "INVALID_PROMO" }, { status: 400 });
+      }
+
+      // Check customer targeting
+      if (promo.target_type === "specific_customers") {
+        const eligibleCustomerIds = new Set<string>();
+        if (customerId) eligibleCustomerIds.add(customerId.toLowerCase());
+        if (authUser?.id) eligibleCustomerIds.add(authUser.id.toLowerCase());
+
+        const candidateIds = Array.from(eligibleCustomerIds).filter((id) => /^[0-9a-fA-F-]{36}$/.test(id));
+        if (candidateIds.length > 0) {
+          const orFilter = candidateIds.map((id) => `id.eq.${id},user_id.eq.${id}`).join(",");
+          const { data: linkedCusts } = await serviceClient.from("customers").select("id, user_id").or(orFilter);
+          if (linkedCusts) {
+            for (const c of linkedCusts) {
+              if (c.id) eligibleCustomerIds.add(String(c.id).toLowerCase());
+              if (c.user_id) eligibleCustomerIds.add(String(c.user_id).toLowerCase());
+            }
+          }
+        }
+
+        const isTargeted =
+          Array.isArray(promo.customer_ids) &&
+          promo.customer_ids.some((id: string) => eligibleCustomerIds.has(String(id).toLowerCase()));
+
+        if (!isTargeted) {
+          return NextResponse.json({ error: "This promo code is not eligible for your account.", code: "CUSTOMER_NOT_ELIGIBLE" }, { status: 400 });
+        }
+      }
+
+      // Check max uses per customer
+      if (promo.max_uses_per_customer && promo.id) {
+        const eligibleCustomerIds = new Set<string>();
+        if (customerId) eligibleCustomerIds.add(customerId.toLowerCase());
+        if (authUser?.id) eligibleCustomerIds.add(authUser.id.toLowerCase());
+
+        const { count } = await serviceClient
+          .from("promo_code_uses")
+          .select("id", { count: "exact", head: true })
+          .eq("promo_id", promo.id)
+          .in("customer_id", Array.from(eligibleCustomerIds));
+
+        if (typeof count === "number" && count >= promo.max_uses_per_customer) {
+          return NextResponse.json({ error: "You have reached the maximum uses for this promo code.", code: "MAX_USES_REACHED" }, { status: 400 });
+        }
+      }
+
+      const cartItemsForPromo = items.map((it: any) => ({
+        product_id: it.product_snapshot?.id,
+        price: it.unit_price,
+        quantity: it.quantity,
+      }));
+
+      const result = computePromoDiscountWithScope(promo as unknown as PromoRow, subtotalKobo, cartItemsForPromo);
       if (!result.ok) {
         return result.reason === "MIN_ORDER"
           ? NextResponse.json({ error: "Your order is a little under the minimum for this code.", code: "MIN_ORDER", details: { short_by: result.shortBy } }, { status: 400 })

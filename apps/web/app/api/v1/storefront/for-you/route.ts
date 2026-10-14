@@ -167,6 +167,7 @@ export async function GET(request: NextRequest) {
               variants:product_variants(id, size, color, color_hex, is_active)
             `)
             .eq("status", "active")
+            .eq("channel", "web")
             .eq("is_test", isTest)
             .limit(80);
 
@@ -188,6 +189,7 @@ export async function GET(request: NextRequest) {
                 variants:product_variants(id, size, color, color_hex, is_active)
               `)
               .eq("status", "active")
+              .eq("channel", "web")
               .eq("is_test", isTest)
               .order("average_rating", { ascending: false })
               .limit(50);
@@ -245,6 +247,7 @@ export async function GET(request: NextRequest) {
             variants:product_variants(id, size, color, color_hex, is_active)
           `)
           .eq("status", "active")
+          .eq("channel", "web")
           .eq("is_test", isTest)
           .order("average_rating", { ascending: false })
           .limit(80);

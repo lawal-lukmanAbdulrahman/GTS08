@@ -98,6 +98,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "promos": { GET: "admin", POST: "admin" },
   "promos/[id]": { GET: "admin", PATCH: "admin", DELETE: "admin" },
   "promos/[id]/activate": { PUT: "admin" },
+  "promos/available": { GET: "public" }, // customer eligible promos; filtered by account if signed in
   "promos/validate": { POST: "public" }, // advice only; unknown and unusable codes look identical; checkout re-prices on the server
   "wishlist": { GET: "session", POST: "session" },
   "wishlist/[productId]": { DELETE: "session" },
@@ -133,6 +134,7 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "email-campaigns/[id]": { GET: "admin", PATCH: "admin", DELETE: "admin" },
   "email-campaigns/[id]/send": { POST: "admin" },
   "notifications": { GET: "admin" },
+  "notifications/customer": { GET: "session", PATCH: "session" },
   "notifications/unread-count": { GET: "admin" },
   "notifications/[id]/read": { PUT: "admin" },
   "notifications/read-all": { PUT: "admin" },
@@ -141,6 +143,13 @@ export const ROUTE_POLICIES: Record<string, Partial<Record<Method, string>>> = {
   "cron/expire-orders": { GET: "cron", POST: "cron" },
 
   // ── staff and admin
+  "admin/customers": { GET: "staff" },
+  "admin/customers/deleted": { GET: "staff" },
+  "admin/customers/[id]": { GET: "staff" },
+  "admin/customers/[id]/disable": { POST: "staff" },
+  "admin/customers/[id]/enable": { POST: "staff" },
+  "admin/customers/[id]/delete": { POST: "staff" },
+  "admin/customers/[id]/reinstate": { POST: "staff" },
   "flags": { GET: "admin" },
   "live/summary": { GET: "admin" },
   "flags/[id]": { PATCH: "admin" },

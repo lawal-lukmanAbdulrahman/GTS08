@@ -1,12 +1,15 @@
 "use client";
 
 import { API_BASE } from "../../../lib/api-base";
+import { authFetch } from "../../../lib/session";
+import { createCategory } from "../../../lib/categories-api";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SidebarToggle } from "../../sidebar-context";
 import { VariantRow } from "../product-form-modal";
-import { uploadToCloudinary, uploadBrandLogo } from "../cloudinary-upload";
+import { uploadToCloudinary, uploadBrandLogo, optimizeAndInspectImage } from "../cloudinary-upload";
 import { MarkdownDescriptionEditor } from "../markdown-description-editor";
+import CostPriceRequiredModal from "../cost-price-required-modal";
 
 const STANDARD_SIZE_CATEGORIES = [
   {
@@ -63,6 +66,12 @@ export default function CreateProductPage() {
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [showExitDraftModal, setShowExitDraftModal] = useState(false);
 
+  // Product Destination Modal State ('pos' vs 'web')
+  const [showDestinationModal, setShowDestinationModal] = useState(false);
+  const [destinationChannel, setDestinationChannel] = useState<"pos" | "web">("pos");
+  const [isPublishingPending, setIsPublishingPending] = useState(false);
+  const [showCostPriceModal, setShowCostPriceModal] = useState(false);
+
   // Form State
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -71,6 +80,11 @@ export default function CreateProductPage() {
   const [categoryName, setCategoryName] = useState("Fashion");
   const [subCategory, setSubCategory] = useState("");
   const [basePriceNaira, setBasePriceNaira] = useState("");
+  const [retailerPriceNaira, setRetailerPriceNaira] = useState("");
+  const [wholesalerPriceNaira, setWholesalerPriceNaira] = useState("");
+  const [distributorPriceNaira, setDistributorPriceNaira] = useState("");
+  const [wholesaleMinQty, _setWholesaleMinQty] = useState("5");
+  const [distributorMinQty, _setDistributorMinQty] = useState("20");
   const [compareAtNaira, setCompareAtNaira] = useState("");
   const [costPriceNaira, setCostPriceNaira] = useState("");
   const [status, setStatus] = useState<"active" | "draft" | "archived">("active");
@@ -163,6 +177,7 @@ export default function CreateProductPage() {
   const [showAddColorModal, setShowAddColorModal] = useState(false);
   const [newColorName, setNewColorName] = useState("");
   const [newColorImage, setNewColorImage] = useState("");
+  const [pendingColorFile, setPendingColorFile] = useState<File | Blob | null>(null);
   const [newColorQuantity, setNewColorQuantity] = useState(10);
   const [newColorSize, setNewColorSize] = useState("Standard");
   const [isCustomSize, setIsCustomSize] = useState(false);
@@ -174,6 +189,9 @@ export default function CreateProductPage() {
     height?: number;
     hasTransparentBg?: boolean;
     sizeKb?: number;
+    dominantColor?: string;
+    originalSize?: number;
+    optimizedSize?: number;
   } | null>(null);
   const colorFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -294,6 +312,11 @@ export default function CreateProductPage() {
             category_name: categoryName || "General",
             sub_category: subCategory.trim(),
             base_price: baseKobo,
+            price_retailer: retailerPriceNaira ? Math.round(parseFloat(retailerPriceNaira) * 100) : null,
+            price_wholesaler: wholesalerPriceNaira ? Math.round(parseFloat(wholesalerPriceNaira) * 100) : null,
+            price_distributor: distributorPriceNaira ? Math.round(parseFloat(distributorPriceNaira) * 100) : null,
+            wholesale_min_qty: parseInt(wholesaleMinQty, 10) || 5,
+            distributor_min_qty: parseInt(distributorMinQty, 10) || 20,
             compare_at_price: compareKobo,
             cost_price: costKobo,
             status: "draft",
@@ -343,6 +366,11 @@ export default function CreateProductPage() {
     categoryName,
     subCategory,
     basePriceNaira,
+    retailerPriceNaira,
+    wholesalerPriceNaira,
+    distributorPriceNaira,
+    wholesaleMinQty,
+    distributorMinQty,
     compareAtNaira,
     costPriceNaira,
     imageUrl,
@@ -453,36 +481,37 @@ export default function CreateProductPage() {
       return;
     }
     setSavingNewCategory(true);
+    setErrorMsg("");
     try {
       const parsedSubs = newCategorySubCategories
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
 
-      const token = localStorage.getItem("gts_token");
-      const res = await fetch(`${API_BASE}/categories`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          name: newCategoryName.trim(),
-          sub_categories: parsedSubs,
-        }),
+      const result = await createCategory({
+        name: newCategoryName.trim(),
+        sub_categories: parsedSubs,
       });
 
-      const json = await res.json().catch(() => ({}));
-      // A duplicate (409) just means it already exists, so it is selected below; any other failure is shown.
-      if (!res.ok && res.status !== 409) {
-        setErrorMsg(json.error || "Couldn't save the category. Please try again.");
-        return;
+      if (!result.ok) {
+        // A duplicate category (contains exists) just selects it below; any other failure is shown.
+        if (!result.message.toLowerCase().includes("already exists")) {
+          setErrorMsg(result.message);
+          return;
+        }
       }
-      const createdCategory: CategoryOption = json.data || {
-        name: newCategoryName.trim(),
-        slug: newCategoryName.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-        sub_categories: parsedSubs,
-      };
+
+      const createdCategory: CategoryOption = result.ok
+        ? {
+            name: result.data.name,
+            slug: result.data.slug,
+            sub_categories: result.data.sub_categories || parsedSubs,
+          }
+        : {
+            name: newCategoryName.trim(),
+            slug: newCategoryName.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+            sub_categories: parsedSubs,
+          };
 
       setCategoriesList((prev) => {
         const exists = prev.some((c) => c.name.toLowerCase() === createdCategory.name.toLowerCase());
@@ -526,13 +555,12 @@ export default function CreateProductPage() {
       return;
     }
     setSavingNewBrand(true);
+    setErrorMsg("");
     try {
-      const token = localStorage.getItem("gts_token");
-      const res = await fetch(`${API_BASE}/brands`, {
+      const res = await authFetch(`${API_BASE}/brands`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           name: newBrandName.trim(),
@@ -540,7 +568,20 @@ export default function CreateProductPage() {
         }),
       });
 
+      if (res.status === 401) {
+        setErrorMsg("Your login session has expired. Please sign in again.");
+        return;
+      }
+      if (res.status === 403) {
+        setErrorMsg("You don't have permission to add brands. Staff members need 'Manage products' permission.");
+        return;
+      }
+
       const json = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 409) {
+        setErrorMsg(json.error || "Couldn't save brand. Please try again.");
+        return;
+      }
       const createdBrand: BrandOption = json.data || {
         name: newBrandName.trim(),
         slug: newBrandName.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
@@ -642,70 +683,67 @@ export default function CreateProductPage() {
   const profitMarginNaira = baseNum > 0 && costNum > 0 ? baseNum - costNum : 0;
   const profitMarginPct = baseNum > 0 && costNum > 0 ? ((profitMarginNaira / baseNum) * 100).toFixed(1) : "0";
 
-  // Upload hero image and automatically bring up the Color Dialog so user can configure color, size & stock
+  // Prepare color image from dropped or selected file and bring up the Color Dialog
+  // NOTE: Does NOT upload to Cloudinary immediately to avoid wasting storage if canceled.
   const handleUploadHeroOrColor = async (file: File) => {
     if (!file) return;
     setIsUploadingHero(true);
     setErrorMsg("");
     try {
-      const res = await uploadToCloudinary(file, "gts/products/colors");
-      if (!imageUrl) {
-        setImageUrl(res.url);
-        setHasTransparentBg(Boolean(res.hasTransparentBg));
-        if (res.dominantColor) {
-          setDominantColor(res.dominantColor);
-        }
-        setHeroImageStats({
-          originalSize: res.originalSize,
-          optimizedSize: res.optimizedSize,
-          width: res.width,
-          height: res.height,
-          hasTransparentBg: res.hasTransparentBg,
-          dominantColor: res.dominantColor,
-        });
+      const opt = await optimizeAndInspectImage(file, 1200);
+      const previewUrl = URL.createObjectURL(opt.file);
+
+      if (newColorImage && newColorImage.startsWith("blob:")) {
+        try { URL.revokeObjectURL(newColorImage); } catch {}
       }
 
-      // Pre-fill Color Dialog with the uploaded image
-      setNewColorImage(res.url);
+      setPendingColorFile(opt.file);
+      setNewColorImage(previewUrl);
       setColorImageStats({
-        width: res.width,
-        height: res.height,
-        hasTransparentBg: res.hasTransparentBg,
-        sizeKb: Math.round((res.optimizedSize || 0) / 1024),
+        width: opt.width,
+        height: opt.height,
+        hasTransparentBg: opt.hasTransparentBg,
+        sizeKb: Math.round(opt.optimizedSize / 1024),
+        dominantColor: opt.dominantColor,
+        originalSize: opt.originalSize,
+        optimizedSize: opt.optimizedSize,
       });
 
-      // Open the Color Dialog for the user to specify color name, size, and inventory
       setShowAddColorModal(true);
     } catch (err: any) {
-      setErrorMsg("Image upload failed: " + (err.message || "Please check your network connection."));
+      setErrorMsg("Failed to process image: " + (err.message || "Please try again."));
     } finally {
       setIsUploadingHero(false);
     }
   };
 
-  // Upload color variant image inside the Add Color Dialog
+  // Select or replace color variant image inside the Add Color Dialog
+  // NOTE: Does NOT upload to Cloudinary yet! Previews locally until confirmed.
   const handleUploadColorImage = async (file: File) => {
     if (!file) return;
     setIsUploadingColorImage(true);
     setErrorMsg("");
     try {
-      const res = await uploadToCloudinary(file, "gts/products/colors");
-      setNewColorImage(res.url);
-      setColorImageStats({
-        width: res.width,
-        height: res.height,
-        hasTransparentBg: res.hasTransparentBg,
-        sizeKb: Math.round((res.optimizedSize || 0) / 1024),
-      });
-      if (!imageUrl) {
-        setImageUrl(res.url);
-        setHasTransparentBg(Boolean(res.hasTransparentBg));
-        if (res.dominantColor) {
-          setDominantColor(res.dominantColor);
-        }
+      const opt = await optimizeAndInspectImage(file, 1200);
+      const previewUrl = URL.createObjectURL(opt.file);
+
+      if (newColorImage && newColorImage.startsWith("blob:")) {
+        try { URL.revokeObjectURL(newColorImage); } catch {}
       }
+
+      setPendingColorFile(opt.file);
+      setNewColorImage(previewUrl);
+      setColorImageStats({
+        width: opt.width,
+        height: opt.height,
+        hasTransparentBg: opt.hasTransparentBg,
+        sizeKb: Math.round(opt.optimizedSize / 1024),
+        dominantColor: opt.dominantColor,
+        originalSize: opt.originalSize,
+        optimizedSize: opt.optimizedSize,
+      });
     } catch (err: any) {
-      setErrorMsg("Color image upload failed: " + (err.message || "Please try again."));
+      setErrorMsg("Failed to inspect color image: " + (err.message || "Please try again."));
     } finally {
       setIsUploadingColorImage(false);
     }
@@ -800,16 +838,82 @@ export default function CreateProductPage() {
     ]);
   };
 
-  const handleConfirmAddColor = () => {
+  const handleCancelAddColor = () => {
+    if (newColorImage && newColorImage.startsWith("blob:")) {
+      try { URL.revokeObjectURL(newColorImage); } catch {}
+    }
+    setPendingColorFile(null);
+    setNewColorName("");
+    setNewColorImage("");
+    setNewColorQuantity(10);
+    setNewColorSize("Standard");
+    setIsCustomSize(false);
+    setCustomSizeText("");
+    setColorImageStats(null);
+    setShowAddColorModal(false);
+
+    // If canceled without adding a variant, revert hero image to existing variants or empty dropzone
+    if (variants.length === 0) {
+      setImageUrl("");
+      setHeroImageStats(null);
+      setHasTransparentBg(false);
+      setDominantColor("");
+    } else {
+      setImageUrl(variants[0]?.variant_image_url || "");
+    }
+  };
+
+  const handleConfirmAddColor = async () => {
     if (!newColorName.trim()) {
       setErrorMsg("Please enter a color name.");
       return;
     }
 
-    const assignedImg = newColorImage || imageUrl || undefined;
-    if (!imageUrl && newColorImage) {
-      setImageUrl(newColorImage);
-      setHasTransparentBg(colorImageStats?.hasTransparentBg ?? false);
+    let finalImageUrl = newColorImage;
+    let finalHasTransparentBg = colorImageStats?.hasTransparentBg ?? false;
+    let finalDominantColor = colorImageStats?.dominantColor;
+
+    // Upload to Cloudinary now that user actually confirmed adding the color variant
+    if (pendingColorFile) {
+      setIsUploadingColorImage(true);
+      setErrorMsg("");
+      try {
+        const res = await uploadToCloudinary(pendingColorFile, "gts/products/colors");
+        finalImageUrl = res.url;
+        finalHasTransparentBg = res.hasTransparentBg;
+        finalDominantColor = res.dominantColor;
+
+        if (newColorImage && newColorImage.startsWith("blob:")) {
+          try { URL.revokeObjectURL(newColorImage); } catch {}
+        }
+      } catch (err: any) {
+        setErrorMsg("Image upload failed: " + (err.message || "Please check network connection."));
+        setIsUploadingColorImage(false);
+        return;
+      } finally {
+        setIsUploadingColorImage(false);
+      }
+    }
+
+    const assignedImg = finalImageUrl || imageUrl || undefined;
+    if (!imageUrl || variants.length === 0) {
+      if (assignedImg) {
+        setImageUrl(assignedImg);
+        setHasTransparentBg(Boolean(finalHasTransparentBg));
+        if (finalDominantColor) {
+          setDominantColor(finalDominantColor);
+        }
+        if (colorImageStats) {
+          setHeroImageStats({
+            width: colorImageStats.width,
+            height: colorImageStats.height,
+            hasTransparentBg: finalHasTransparentBg,
+            dominantColor: finalDominantColor,
+            originalSize: colorImageStats.originalSize,
+            optimizedSize: colorImageStats.optimizedSize,
+          });
+        }
+      }
     }
 
     setVariants((prev) => [
@@ -821,11 +925,12 @@ export default function CreateProductPage() {
         sku: "",
         quantity: Number(newColorQuantity) || 10,
         variant_image_url: assignedImg,
-        has_transparent_bg: colorImageStats?.hasTransparentBg ?? (assignedImg?.endsWith(".png")),
+        has_transparent_bg: finalHasTransparentBg ?? (assignedImg?.endsWith(".png")),
       },
     ]);
 
     // Reset dialog
+    setPendingColorFile(null);
     setNewColorName("");
     setNewColorImage("");
     setNewColorQuantity(10);
@@ -922,16 +1027,30 @@ export default function CreateProductPage() {
     ).values()
   );
 
-  const executeSaveProduct = async (targetStatus: "active" | "draft") => {
+  const executeSaveProduct = async (
+    targetStatus: "active" | "draft",
+    channelDestination?: "pos" | "web",
+    overrideCost?: string
+  ) => {
+    const effectiveCost = overrideCost !== undefined ? overrideCost : costPriceNaira;
+    const costNum = parseFloat(effectiveCost) || 0;
+    if (targetStatus === "active" && (!effectiveCost || isNaN(costNum) || costNum <= 0)) {
+      setShowCostPriceModal(true);
+      return;
+    }
+
     setSaving(true);
     setErrorMsg("");
     setSuccessMsg("");
     setShowIncompleteDraftModal(false);
+    setShowDestinationModal(false);
+    setIsPublishingPending(false);
 
+    const targetChannel = channelDestination || destinationChannel || "pos";
     const baseNumVal = parseFloat(basePriceNaira) || 0;
     const baseKobo = Math.round(baseNumVal * 100);
     const compareKobo = compareAtNaira ? Math.round(parseFloat(compareAtNaira) * 100) : null;
-    const costKobo = costPriceNaira ? Math.round(parseFloat(costPriceNaira) * 100) : null;
+    const costKobo = effectiveCost ? Math.round(parseFloat(effectiveCost) * 100) : null;
 
     const parsedTags = tags.split(",").map((t) => t.trim()).filter(Boolean);
     if (brand && !parsedTags.includes(brand)) {
@@ -962,9 +1081,15 @@ export default function CreateProductPage() {
       category_name: categoryName || "General",
       sub_category: subCategory.trim(),
       base_price: baseKobo,
+      price_retailer: retailerPriceNaira ? Math.round(parseFloat(retailerPriceNaira) * 100) : baseKobo,
+      price_wholesaler: wholesalerPriceNaira ? Math.round(parseFloat(wholesalerPriceNaira) * 100) : baseKobo,
+      price_distributor: distributorPriceNaira ? Math.round(parseFloat(distributorPriceNaira) * 100) : baseKobo,
+      wholesale_min_qty: parseInt(wholesaleMinQty, 10) || 5,
+      distributor_min_qty: parseInt(distributorMinQty, 10) || 20,
       compare_at_price: compareKobo,
       cost_price: costKobo,
       status: targetStatus,
+      channel: targetChannel,
       is_featured: isFeatured,
       has_transparent_bg: hasTransparentBg,
       dominant_color: dominantColor || undefined,
@@ -1043,11 +1168,19 @@ export default function CreateProductPage() {
       setErrorMsg(err.message || "Failed to save product.");
     } finally {
       setSaving(false);
+      setIsPublishingPending(false);
     }
   };
 
   const hasImagesOrVariants = variants.length > 0 || descriptionImages.length > 0 || Boolean(imageUrl.trim());
-  const isEligibleToPublish = Boolean(name.trim()) && Boolean(categoryName.trim()) && (parseFloat(basePriceNaira) || 0) > 0 && hasImagesOrVariants;
+  const isEligibleToPublish =
+    Boolean(name.trim()) &&
+    Boolean(categoryName.trim()) &&
+    (parseFloat(basePriceNaira) || 0) > 0 &&
+    (parseFloat(retailerPriceNaira) || 0) > 0 &&
+    (parseFloat(wholesalerPriceNaira) || 0) > 0 &&
+    (parseFloat(distributorPriceNaira) || 0) > 0 &&
+    hasImagesOrVariants;
 
   const handleValidateAndPublish = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1067,8 +1200,23 @@ export default function CreateProductPage() {
       invalid.push("category");
     }
     if (!basePriceNaira || isNaN(baseNum) || baseNum <= 0) {
-      missing.push("Selling Price (Base Price)");
+      missing.push("Customer Price (Base Price)");
       invalid.push("basePrice");
+    }
+    const retailerNum = parseFloat(retailerPriceNaira) || 0;
+    if (!retailerPriceNaira || isNaN(retailerNum) || retailerNum <= 0) {
+      missing.push("Retailer Price (1 - 4 pcs)");
+      invalid.push("retailerPrice");
+    }
+    const wholesalerNum = parseFloat(wholesalerPriceNaira) || 0;
+    if (!wholesalerPriceNaira || isNaN(wholesalerNum) || wholesalerNum <= 0) {
+      missing.push("Wholesaler Price (5+ pcs)");
+      invalid.push("wholesalerPrice");
+    }
+    const distributorNum = parseFloat(distributorPriceNaira) || 0;
+    if (!distributorPriceNaira || isNaN(distributorNum) || distributorNum <= 0) {
+      missing.push("Distributor Price (20+ pcs)");
+      invalid.push("distributorPrice");
     }
     if (!hasImagesOrVariants) {
       missing.push("Product Images / Media (Please add at least one color variant image or product description image)");
@@ -1088,7 +1236,14 @@ export default function CreateProductPage() {
       return;
     }
 
-    executeSaveProduct("active");
+    const costNum = parseFloat(costPriceNaira) || 0;
+    if (!costPriceNaira || isNaN(costNum) || costNum <= 0) {
+      setShowCostPriceModal(true);
+      return;
+    }
+
+    setIsPublishingPending(true);
+    setShowDestinationModal(true);
   };
 
   const handleAttemptBack = () => {
@@ -1170,7 +1325,7 @@ export default function CreateProductPage() {
             <button
               type="button"
               onClick={handleValidateAndPublish}
-              disabled={!isEligibleToPublish || saving}
+              disabled={!isEligibleToPublish || saving || isPublishingPending}
               title={
                 !isEligibleToPublish
                   ? "To publish, provide product name, category, price, and at least one color or description image"
@@ -1182,13 +1337,13 @@ export default function CreateProductPage() {
                   : "bg-[#EDCF5D] hover:bg-[#e2c34d] text-black cursor-pointer"
               }`}
             >
-              {saving ? (
+              {saving || isPublishingPending ? (
                 <>
                   <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  <span>Saving...</span>
+                  <span>Publishing...</span>
                 </>
               ) : (
                 <span>Publish Product</span>
@@ -1573,19 +1728,29 @@ export default function CreateProductPage() {
             {/* Card 2: Pricing & Profit Engine */}
             <div className="bg-white dark:bg-[#181818] border border-gray-200 dark:border-[#262626] rounded-2xl p-6 shadow-2xs space-y-5">
               <div className="flex items-center justify-between border-b border-gray-100 dark:border-[#262626] pb-3">
-                <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider text-[11px]">
-                  Pricing & Profit Engine
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider text-[11px]">
+                    Pricing & Tier Engine
+                  </h2>
+                  <span className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold px-2 py-0.5 rounded-full border border-amber-500/20">
+                    4 Prices Required
+                  </span>
+                </div>
                 <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
                   Gross Margin: {profitMarginPct}% (₦{profitMarginNaira.toLocaleString()})
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* 4 Demanded Tier Prices */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Customer Price */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                    Selling Price (₦) <span className="text-red-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                      Customer Price (₦) <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-gray-400 font-mono">1 pc</span>
+                  </div>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-mono text-xs">₦</span>
                     <input
@@ -1598,7 +1763,7 @@ export default function CreateProductPage() {
                           setInvalidFields((prev) => prev.filter((f) => f !== "basePrice"));
                         }
                       }}
-                      placeholder="120000"
+                      placeholder="5000"
                       className={`w-full pl-7 pr-3 py-2 rounded-[6px] bg-gray-50 dark:bg-[#202020] border text-xs font-bold text-gray-900 dark:text-white focus:outline-none transition-all ${
                         invalidFields.includes("basePrice") && isShaking
                           ? "shake-violent border-red-500 ring-2 ring-red-500/50 bg-red-500/5"
@@ -1609,11 +1774,117 @@ export default function CreateProductPage() {
                       required
                     />
                   </div>
+                  <p className="text-[10px] text-gray-400 mt-1">Single-item retail price</p>
                 </div>
 
+                {/* 2. Retailer Price */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                      Retailer Price (₦) <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-gray-400 font-mono">1 – 4 pcs</span>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-mono text-xs">₦</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={retailerPriceNaira}
+                      onChange={(e) => {
+                        setRetailerPriceNaira(e.target.value);
+                        if (invalidFields.includes("retailerPrice")) {
+                          setInvalidFields((prev) => prev.filter((f) => f !== "retailerPrice"));
+                        }
+                      }}
+                      placeholder="5000"
+                      className={`w-full pl-7 pr-3 py-2 rounded-[6px] bg-gray-50 dark:bg-[#202020] border text-xs font-bold text-gray-900 dark:text-white focus:outline-none transition-all ${
+                        invalidFields.includes("retailerPrice") && isShaking
+                          ? "shake-violent border-red-500 ring-2 ring-red-500/50 bg-red-500/5"
+                          : invalidFields.includes("retailerPrice")
+                          ? "border-red-500"
+                          : "border-gray-200 dark:border-[#303030] focus:border-[#EDCF5D]"
+                      }`}
+                      required
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">Small bulk / Retailer</p>
+                </div>
+
+                {/* 3. Wholesaler Price */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                      Wholesaler Price (₦) <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-amber-500 font-mono font-bold">5+ pcs</span>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-mono text-xs">₦</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={wholesalerPriceNaira}
+                      onChange={(e) => {
+                        setWholesalerPriceNaira(e.target.value);
+                        if (invalidFields.includes("wholesalerPrice")) {
+                          setInvalidFields((prev) => prev.filter((f) => f !== "wholesalerPrice"));
+                        }
+                      }}
+                      placeholder="4700"
+                      className={`w-full pl-7 pr-3 py-2 rounded-[6px] bg-gray-50 dark:bg-[#202020] border text-xs font-bold text-gray-900 dark:text-white focus:outline-none transition-all ${
+                        invalidFields.includes("wholesalerPrice") && isShaking
+                          ? "shake-violent border-red-500 ring-2 ring-red-500/50 bg-red-500/5"
+                          : invalidFields.includes("wholesalerPrice")
+                          ? "border-red-500"
+                          : "border-gray-200 dark:border-[#303030] focus:border-[#EDCF5D]"
+                      }`}
+                      required
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">Medium bulk (5+ pcs)</p>
+                </div>
+
+                {/* 4. Distributor Price */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                      Distributor Price (₦) <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-emerald-500 font-mono font-bold">20+ pcs</span>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-mono text-xs">₦</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={distributorPriceNaira}
+                      onChange={(e) => {
+                        setDistributorPriceNaira(e.target.value);
+                        if (invalidFields.includes("distributorPrice")) {
+                          setInvalidFields((prev) => prev.filter((f) => f !== "distributorPrice"));
+                        }
+                      }}
+                      placeholder="4000"
+                      className={`w-full pl-7 pr-3 py-2 rounded-[6px] bg-gray-50 dark:bg-[#202020] border text-xs font-bold text-gray-900 dark:text-white focus:outline-none transition-all ${
+                        invalidFields.includes("distributorPrice") && isShaking
+                          ? "shake-violent border-red-500 ring-2 ring-red-500/50 bg-red-500/5"
+                          : invalidFields.includes("distributorPrice")
+                          ? "border-red-500"
+                          : "border-gray-200 dark:border-[#303030] focus:border-[#EDCF5D]"
+                      }`}
+                      required
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">Large bulk (20+ pcs)</p>
+                </div>
+              </div>
+
+              {/* Compare-At and Cost Price Secondary Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-gray-100 dark:border-[#222222]">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                    Compare-At Price (₦)
+                    Compare-At Price (₦) <span className="text-[10px] text-gray-400 font-normal">(Optional strike-through)</span>
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-mono text-xs">₦</span>
@@ -1622,7 +1893,7 @@ export default function CreateProductPage() {
                       step="0.01"
                       value={compareAtNaira}
                       onChange={(e) => setCompareAtNaira(e.target.value)}
-                      placeholder="150000"
+                      placeholder="6000"
                       className="w-full pl-7 pr-3 py-2 rounded-[6px] bg-gray-50 dark:bg-[#202020] border border-gray-200 dark:border-[#303030] text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:border-[#EDCF5D]"
                     />
                   </div>
@@ -1630,7 +1901,7 @@ export default function CreateProductPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                    Cost Price / Unit (₦)
+                    Cost Price / Unit (₦) <span className="text-[10px] text-gray-400 font-normal">(Admin profit tracking)</span>
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-mono text-xs">₦</span>
@@ -1639,7 +1910,7 @@ export default function CreateProductPage() {
                       step="0.01"
                       value={costPriceNaira}
                       onChange={(e) => setCostPriceNaira(e.target.value)}
-                      placeholder="95000"
+                      placeholder="3500"
                       className="w-full pl-7 pr-3 py-2 rounded-[6px] bg-gray-50 dark:bg-[#202020] border border-gray-200 dark:border-[#303030] text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:border-[#EDCF5D]"
                     />
                   </div>
@@ -2393,8 +2664,8 @@ export default function CreateProductPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowAddColorModal(false)}
-                className="w-7 h-7 rounded-full bg-gray-100 dark:bg-[#262626] hover:bg-gray-200 dark:hover:bg-[#333333] text-gray-500 dark:text-gray-300 flex items-center justify-center transition-colors text-xs font-bold"
+                onClick={handleCancelAddColor}
+                className="w-7 h-7 rounded-full bg-gray-100 dark:bg-[#262626] hover:bg-gray-200 dark:hover:bg-[#333333] text-gray-500 dark:text-gray-300 flex items-center justify-center transition-colors text-xs font-bold cursor-pointer"
               >
                 ✕
               </button>
@@ -2463,6 +2734,10 @@ export default function CreateProductPage() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (newColorImage && newColorImage.startsWith("blob:")) {
+                            try { URL.revokeObjectURL(newColorImage); } catch {}
+                          }
+                          setPendingColorFile(null);
                           setNewColorImage("");
                           setColorImageStats(null);
                         }}
@@ -2587,8 +2862,9 @@ export default function CreateProductPage() {
             <div className="flex items-center justify-end gap-2.5 p-4 border-t border-gray-100 dark:border-[#262626] bg-gray-50/50 dark:bg-[#141414]/50">
               <button
                 type="button"
-                onClick={() => setShowAddColorModal(false)}
-                className="px-4 py-2 rounded-[6px] bg-gray-100 dark:bg-[#262626] hover:bg-gray-200 dark:hover:bg-[#303030] text-xs font-semibold text-gray-700 dark:text-gray-300 transition-colors"
+                onClick={handleCancelAddColor}
+                disabled={isUploadingColorImage}
+                className="px-4 py-2 rounded-[6px] bg-gray-100 dark:bg-[#262626] hover:bg-gray-200 dark:hover:bg-[#303030] text-xs font-semibold text-gray-700 dark:text-gray-300 transition-colors cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -2598,7 +2874,17 @@ export default function CreateProductPage() {
                 disabled={!newColorName.trim() || isUploadingColorImage}
                 className="px-4 py-2 rounded-[6px] bg-[#EDCF5D] hover:bg-[#e2c34d] text-black text-xs font-bold transition-all shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
               >
-                <span>Add Color Variant</span>
+                {isUploadingColorImage ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 animate-spin text-black" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>Adding Variant...</span>
+                  </>
+                ) : (
+                  <span>Add Color Variant</span>
+                )}
               </button>
             </div>
 
@@ -3001,6 +3287,123 @@ export default function CreateProductPage() {
         </div>
       )}
 
+      {/* ────── PRODUCT DESTINATION SELECTION MODAL ────── */}
+      {showDestinationModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-[#1C1C1C] border border-gray-200 dark:border-[#2C2C2C] rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3 border-b border-gray-100 dark:border-[#2C2C2C] pb-3">
+              <div className="w-10 h-10 rounded-xl bg-[#EDCF5D]/20 text-[#EDCF5D] flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-gray-900 dark:text-[#EDCF5D]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.25a.75.75 0 01-.75-.75V3.75a.75.75 0 01.75-.75h16.5a.75.75 0 01.75.75v16.5a.75.75 0 01-.75.75H13.5z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+                  Where will this product go?
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Choose where this product will be sold. POS and Website have separate inventory.
+                </p>
+              </div>
+            </div>
+
+            {/* Radio Options */}
+            <div className="space-y-3 pt-1">
+              <label
+                onClick={() => setDestinationChannel("pos")}
+                className={`flex items-start gap-3.5 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  destinationChannel === "pos"
+                    ? "border-[#EDCF5D] bg-[#EDCF5D]/10 dark:bg-[#EDCF5D]/5 text-gray-900 dark:text-white ring-1 ring-[#EDCF5D]"
+                    : "border-gray-200 dark:border-[#2D2D2D] hover:border-gray-300 dark:hover:border-[#3D3D3D] text-gray-700 dark:text-gray-300 bg-white dark:bg-[#1E1E1E]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="product-channel"
+                  value="pos"
+                  checked={destinationChannel === "pos"}
+                  onChange={() => setDestinationChannel("pos")}
+                  className="mt-1 w-4 h-4 text-[#EDCF5D] accent-[#EDCF5D] focus:ring-[#EDCF5D] cursor-pointer"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-gray-900 dark:text-white">Point of Sale (POS)</span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                      Walk-in Store
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                    For walk-in customers. Sold only at the till, barcode scanner, and POS inventory.
+                  </p>
+                </div>
+              </label>
+
+              <label
+                onClick={() => setDestinationChannel("web")}
+                className={`flex items-start gap-3.5 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  destinationChannel === "web"
+                    ? "border-[#EDCF5D] bg-[#EDCF5D]/10 dark:bg-[#EDCF5D]/5 text-gray-900 dark:text-white ring-1 ring-[#EDCF5D]"
+                    : "border-gray-200 dark:border-[#2D2D2D] hover:border-gray-300 dark:hover:border-[#3D3D3D] text-gray-700 dark:text-gray-300 bg-white dark:bg-[#1E1E1E]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="product-channel"
+                  value="web"
+                  checked={destinationChannel === "web"}
+                  onChange={() => setDestinationChannel("web")}
+                  className="mt-1 w-4 h-4 text-[#EDCF5D] accent-[#EDCF5D] focus:ring-[#EDCF5D] cursor-pointer"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-gray-900 dark:text-white">Website</span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      Online Store
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                    For online shoppers. Sold only on the website storefront and web inventory.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100 dark:border-[#2C2C2C]">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDestinationModal(false);
+                  setIsPublishingPending(false);
+                }}
+                disabled={saving}
+                className="px-3.5 py-1.5 rounded-[6px] border border-gray-200 dark:border-[#333333] text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#242424] cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => executeSaveProduct("active", destinationChannel)}
+                disabled={saving}
+                className="px-4 py-1.5 rounded-[6px] bg-[#EDCF5D] hover:bg-[#e2c34d] text-black text-xs font-bold shadow-sm disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                {saving ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>Publishing...</span>
+                  </>
+                ) : (
+                  <span>Confirm & Publish</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ────── INCOMPLETE PRODUCT ALERT MODAL (SAVE AS DRAFT) ────── */}
       {showIncompleteDraftModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -3132,6 +3535,16 @@ export default function CreateProductPage() {
         }
       `}</style>
 
+      <CostPriceRequiredModal
+        isOpen={showCostPriceModal}
+        initialValue={costPriceNaira}
+        onClose={() => setShowCostPriceModal(false)}
+        onApplyCostPrice={(val) => {
+          setCostPriceNaira(val);
+          setIsPublishingPending(true);
+          setShowDestinationModal(true);
+        }}
+      />
     </div>
   );
 }

@@ -14,6 +14,11 @@ export interface PosProduct {
   name: string;
   slug: string;
   base_price: number;
+  price_retailer?: number | null;
+  price_wholesaler?: number | null;
+  price_distributor?: number | null;
+  wholesale_min_qty?: number | null;
+  distributor_min_qty?: number | null;
   category: { id: string; name: string; slug: string } | null;
   primary_image: { cloudinary_id: string; alt: string } | null;
   stock_status: "in_stock" | "low_stock" | "out_of_stock";
@@ -27,7 +32,14 @@ export interface CartLine {
   productName: string;
   size: string | null;
   color: string | null;
-  unitPrice: number; // kobo, base_price + price_modifier
+  unitPrice: number; // kobo, resolved dynamically based on quantity
+  basePrice?: number; // kobo, single-item base price + modifier
+  priceRetailer?: number | null;
+  priceWholesaler?: number | null;
+  priceDistributor?: number | null;
+  wholesaleMinQty?: number | null;
+  distributorMinQty?: number | null;
+  tierName?: string;
   quantity: number;
   available: number; // stock ceiling for the quantity stepper
   imageUrl?: string | null;

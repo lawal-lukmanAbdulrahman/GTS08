@@ -17,6 +17,68 @@ interface TicketMessage {
   senderId?: string | null;
   body: string;
   sentAt: string;
+  status?: "pending" | "sent";
+}
+
+function deduplicateMessages(list: TicketMessage[]): TicketMessage[] {
+  const seen = new Set<string>();
+  const result: TicketMessage[] = [];
+  for (const m of list) {
+    if (!seen.has(m.id)) {
+      seen.add(m.id);
+      result.push(m);
+    }
+  }
+  return result;
+}
+
+function reconcileMessages(
+  prevList: TicketMessage[],
+  incoming: TicketMessage
+): TicketMessage[] {
+  // 1. If exact ID is already in the list, update it in place (e.g. updating status)
+  const exactIndex = prevList.findIndex((m) => m.id === incoming.id);
+  if (exactIndex !== -1) {
+    const updated = [...prevList];
+    const isTemp = incoming.id.startsWith("temp-") || incoming.id.startsWith("optimistic-");
+    updated[exactIndex] = {
+      ...updated[exactIndex],
+      ...incoming,
+      status: isTemp ? (incoming.status || "pending") : "sent",
+    };
+    return deduplicateMessages(updated);
+  }
+
+  // 2. If incoming is confirmed from server, reconcile with any pending optimistic message matching sender and body
+  const isIncomingConfirmed = !incoming.id.startsWith("temp-") && !incoming.id.startsWith("optimistic-");
+  if (isIncomingConfirmed) {
+    const pendingIndex = prevList.findIndex(
+      (m) =>
+        (m.id.startsWith("temp-") || m.id.startsWith("optimistic-") || m.status === "pending") &&
+        m.senderType === incoming.senderType &&
+        m.body.trim() === incoming.body.trim()
+    );
+
+    if (pendingIndex !== -1) {
+      // Replace optimistic message in place so the bubble does not duplicate
+      // and the checkmark seamlessly changes from single tick to double blue tick
+      const updated = [...prevList];
+      updated[pendingIndex] = {
+        ...incoming,
+        status: "sent",
+      };
+      return deduplicateMessages(updated);
+    }
+  }
+
+  // 3. Otherwise, append the new message
+  return deduplicateMessages([
+    ...prevList,
+    {
+      ...incoming,
+      status: isIncomingConfirmed ? "sent" : (incoming.status || "pending"),
+    },
+  ]);
 }
 
 interface TicketDetail {
@@ -95,7 +157,10 @@ export default function AdminQuestionDetailPage() {
           const json = await res.json();
           const tData: TicketDetail = json.data;
           if (isMounted) {
-            setTicket(tData);
+            setTicket({
+              ...tData,
+              messages: (tData.messages || []).map((m) => ({ ...m, status: "sent" as const })),
+            });
             setStatus(tData.status);
             fetchProductData(tData.productId, tData.subject);
             const lastMsg = tData.messages?.[tData.messages.length - 1];
@@ -121,12 +186,19 @@ export default function AdminQuestionDetailPage() {
     const handleIncomingMessage = (msg: any) => {
       if (!msg || !msg.id) return;
       markAdminInquiryViewed(ticketId, msg.sentAt || msg.sent_at || new Date().toISOString());
+      const normalizedMsg: TicketMessage = {
+        id: msg.id,
+        senderType: msg.senderType || msg.sender_type,
+        senderId: msg.senderId || msg.sender_id,
+        body: msg.body,
+        sentAt: msg.sentAt || msg.sent_at || new Date().toISOString(),
+        status: msg.status || (msg.id.startsWith("temp-") || msg.id.startsWith("optimistic-") ? "pending" : "sent"),
+      };
       setTicket((prev) => {
         if (!prev) return prev;
-        if (prev.messages.some((m) => m.id === msg.id)) return prev;
         return {
           ...prev,
-          messages: [...prev.messages, msg],
+          messages: reconcileMessages(prev.messages, normalizedMsg),
         };
       });
     };
@@ -181,8 +253,9 @@ export default function AdminQuestionDetailPage() {
       }
     });
 
-    // Silent background sync fallback (no loading spinner, no flicker)
+    // Fast background sync fallback (no loading spinner, no flicker)
     const syncInterval = setInterval(async () => {
+      if (document.hidden) return; // Save bandwidth when tab is backgrounded
       try {
         const res = await authFetch(`/api/v1/inquiries/${ticketId}/messages`);
         if (res.ok) {
@@ -190,8 +263,43 @@ export default function AdminQuestionDetailPage() {
           if (json.data?.messages) {
             setTicket((prev) => {
               if (!prev) return json.data;
-              if (prev.messages.length !== json.data.messages.length) {
-                return { ...prev, messages: json.data.messages };
+              const serverMsgs: TicketMessage[] = (json.data.messages || []).map((m: any) => ({
+                id: m.id,
+                senderType: m.senderType || m.sender_type,
+                senderId: m.senderId || m.sender_id,
+                body: m.body,
+                sentAt: m.sentAt || m.sent_at,
+                status: "sent" as const,
+              }));
+              const serverIds = new Set(serverMsgs.map((m) => m.id));
+              
+              // Recent server bodies map to identify optimistic messages already saved on server
+              const recentServerBodies = new Set(
+                serverMsgs
+                  .filter((m) => Date.now() - new Date(m.sentAt).getTime() < 60000)
+                  .map((m) => `${m.senderType}:${m.body.trim()}`)
+              );
+
+              // Retain pending optimistic messages until server returns them
+              const pendingOptimistic = prev.messages.filter((m) => {
+                const isTemp = m.id.startsWith("temp-") || m.id.startsWith("optimistic-") || m.status === "pending";
+                if (!isTemp) return false;
+                if (serverIds.has(m.id)) return false;
+                if (recentServerBodies.has(`${m.senderType}:${m.body.trim()}`)) return false;
+                return true;
+              });
+
+              const merged = deduplicateMessages([...serverMsgs, ...pendingOptimistic]);
+              const hasChanged =
+                merged.length !== prev.messages.length ||
+                merged.some((m, idx) => prev.messages[idx]?.id !== m.id || prev.messages[idx]?.status !== m.status);
+
+              if (hasChanged) {
+                return {
+                  ...prev,
+                  ...json.data,
+                  messages: merged,
+                };
               }
               return prev;
             });
@@ -200,7 +308,7 @@ export default function AdminQuestionDetailPage() {
       } catch {
         // silent
       }
-    }, 6000);
+    }, 2000);
 
     return () => {
       isMounted = false;
@@ -372,49 +480,115 @@ export default function AdminQuestionDetailPage() {
     }
   };
 
-  // Send staff reply
+  // Send staff reply with instant optimistic UI & immediate WebSocket broadcast
   const handleSendReply = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!replyText.trim() || isSending) return;
+    const textToSend = replyText.trim();
+    if (!textToSend || isSending) return;
 
+    // 1. Instantly create and render optimistic message (0ms latency)
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const optimisticMsg: TicketMessage = {
+      id: tempId,
+      senderType: "staff",
+      body: textToSend,
+      sentAt: new Date().toISOString(),
+      status: "pending",
+    };
+
+    setTicket((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        status: "in_progress",
+        messages: reconcileMessages(prev.messages, optimisticMsg),
+      };
+    });
+    setStatus("in_progress");
+    setReplyText("");
     setIsSending(true);
+
+    // 2. Immediately broadcast over Realtime WebSocket to connected customer (< 50ms)
+    try {
+      realtimeChannelRef.current?.send({
+        type: "broadcast",
+        event: "new_message",
+        payload: optimisticMsg,
+      });
+    } catch {}
+
+    // 3. Immediately broadcast to admin inquiries channel to update badge/list
+    try {
+      const supabase = createClient() as any;
+      const adminChannel = supabase.channel("admin_inquiries");
+      adminChannel.send({
+        type: "broadcast",
+        event: "new_inquiry_message",
+        payload: {
+          ticketId,
+          message: optimisticMsg,
+        },
+      });
+    } catch {}
+
+    // 4. Background persistence to database & server synchronization
     try {
       const res = await idempotentFetch(`/api/v1/inquiries/${ticketId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader() },
         body: JSON.stringify({
-          message: replyText.trim(),
+          message: textToSend,
           senderType: "staff",
         }),
       });
 
       if (res.ok) {
         const json = await res.json();
-        const newMsg: TicketMessage = json.data;
+        const serverMsg: TicketMessage = {
+          ...json.data,
+          status: "sent",
+        };
 
+        // Reconcile optimistic message with persistent server message
         setTicket((prev) => {
           if (!prev) return null;
-          if (prev.messages.some((m) => m.id === newMsg.id)) return prev;
           return {
             ...prev,
             status: "in_progress",
-            messages: [...prev.messages, newMsg],
+            messages: reconcileMessages(prev.messages, serverMsg),
           };
         });
-        setStatus("in_progress");
-        setReplyText("");
 
-        // Broadcast immediately over Realtime WebSocket
+        // Broadcast reconciled message to ensure customer has permanent ID
         try {
           realtimeChannelRef.current?.send({
             type: "broadcast",
             event: "new_message",
-            payload: newMsg,
+            payload: serverMsg,
           });
         } catch {}
+      } else {
+        // If server failed, revert optimistic message and restore text
+        console.error("Server failed to save message");
+        setTicket((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            messages: prev.messages.filter((m) => m.id !== tempId),
+          };
+        });
+        setReplyText(textToSend);
       }
     } catch (err) {
-      console.error("Failed to send message:", err);
+      console.error("Failed to send reply:", err);
+      setTicket((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          messages: prev.messages.filter((m) => m.id !== tempId),
+        };
+      });
+      setReplyText(textToSend);
     } finally {
       setIsSending(false);
     }
@@ -704,9 +878,6 @@ export default function AdminQuestionDetailPage() {
                   ({ticket.customerEmail})
                 </span>
               </div>
-              <p className="text-xs text-gray-500 dark:text-[#8E8E8E] font-mono mt-0.5 truncate max-w-xl">
-                {ticket.subject}
-              </p>
             </div>
           </div>
 
@@ -766,6 +937,28 @@ export default function AdminQuestionDetailPage() {
                     >
                       {msg.body}
                     </div>
+
+                    {/* WhatsApp-style Delivery Status Checkmarks Underneath Message */}
+                    {isStaff && (
+                      <div className="flex items-center justify-end gap-1 mt-0.5 px-1">
+                        {msg.status === "pending" || msg.id.startsWith("temp-") || msg.id.startsWith("optimistic-") ? (
+                          // Single checkmark (Sent from device, syncing with server)
+                          <span className="inline-flex items-center text-gray-400 dark:text-gray-500" title="Sending...">
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 18 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M3.5 6.5L7 10L14.5 1.5" />
+                            </svg>
+                          </span>
+                        ) : (
+                          // Double checkmark (Delivered / Confirmed by server)
+                          <span className="inline-flex items-center text-[#53bdeb]" title="Delivered">
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 18 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M1 6.5L4.5 10L12 1.5" />
+                              <path d="M6 6.5L9.5 10L17 1.5" />
+                            </svg>
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -796,22 +989,28 @@ export default function AdminQuestionDetailPage() {
                 </button>
               )}
 
-              {/* Multiline textarea up to 4 lines with Enter inserting newline (not sending) */}
+              {/* Multiline textarea: Enter to send immediately, Shift+Enter for newline */}
               <textarea
                 ref={textareaRef}
                 value={replyText}
                 rows={Math.min(4, Math.max(1, replyText.split("\n").length))}
                 onChange={(e) => setReplyText(e.target.value)}
-                placeholder={`Reply to ${ticket.customerName}...`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendReply();
+                  }
+                }}
+                placeholder={`Reply to ${ticket.customerName}... (Enter to send, Shift+Enter for new line)`}
                 className="flex-1 bg-transparent text-xs sm:text-sm text-[#010101] dark:text-white placeholder:text-gray-500 focus:outline-none font-sans resize-none leading-relaxed py-1.5 max-h-28 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:rgba(156,163,175,0.4)_transparent]"
               />
 
               {/* Black circular send button with white airplane icon */}
               <button
                 type="submit"
-                disabled={isSending || !replyText.trim()}
+                disabled={!replyText.trim()}
                 className="w-10 h-10 rounded-full bg-[#010101] hover:bg-black text-white flex items-center justify-center transition-all disabled:opacity-35 disabled:pointer-events-none cursor-pointer shrink-0 shadow-sm active:scale-95"
-                title="Send Answer"
+                title="Send Answer (Enter)"
               >
                 {isSending ? (
                   <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />

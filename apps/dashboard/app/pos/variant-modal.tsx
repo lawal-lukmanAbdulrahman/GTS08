@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { formatKobo } from "@gts/utils";
+import { formatKobo, resolveTierPrice } from "@gts/utils";
 import type { PosProduct } from "./pos-types";
 
 interface VariantModalProps {
@@ -56,7 +56,12 @@ export default function VariantModal({
     return product.variants.find((v) => v.size === selectedSize) ?? null;
   }, [product.variants, selectedSize, selectedColor, colorsForSize.length]);
 
-  const displayPrice = product.base_price + (selectedVariant?.price_modifier ?? 0);
+  const resolvedTier = useMemo(() => {
+    return resolveTierPrice(product, quantity);
+  }, [product, quantity]);
+
+  const effectiveUnitPrice = resolvedTier.unitPrice + (selectedVariant?.price_modifier ?? 0);
+  const regularUnitPrice = product.base_price + (selectedVariant?.price_modifier ?? 0);
 
   function isSizeOutOfStock(size: string): boolean {
     return product.variants.filter((v) => v.size === size).every((v) => v.available <= 0);
@@ -73,7 +78,21 @@ export default function VariantModal({
       <div className="w-full max-w-sm rounded-[12px] bg-white dark:bg-[#1C1C1C] p-5 space-y-4">
         <div>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">{product.name}</h2>
-          <p className="text-base text-gray-500 dark:text-gray-400">{formatKobo(displayPrice)}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-base font-bold text-gray-900 dark:text-white">
+              {formatKobo(effectiveUnitPrice)}
+            </span>
+            {resolvedTier.savingsPerUnit > 0 && (
+              <>
+                <span className="text-xs text-gray-400 line-through">
+                  {formatKobo(regularUnitPrice)}
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                  {resolvedTier.tierLabel} Tier
+                </span>
+              </>
+            )}
+          </div>
         </div>
 
         <div>
@@ -161,9 +180,9 @@ export default function VariantModal({
             type="button"
             disabled={!selectedVariant}
             onClick={() => selectedVariant && onAddToCart(product, selectedVariant.id, quantity)}
-            className="w-full py-2.5 rounded-[8px] bg-[#EDCF5D] text-[#010101] font-bold text-base disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full py-2.5 rounded-[8px] bg-[#EDCF5D] text-[#010101] font-bold text-base disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
-            Add to Cart — {formatKobo(displayPrice * quantity)}
+            Add to Cart — {formatKobo(effectiveUnitPrice * quantity)}
           </button>
           <button
             type="button"

@@ -102,13 +102,19 @@ export default function AdminQuestionsPage() {
         }
 
         const existing = prev[index]!;
+        const msgTime = new Date(msg.sentAt || msg.sent_at || Date.now()).getTime();
+        const existingTime = new Date(existing.lastMessageAt).getTime();
+        const isSameRecentMsg =
+          existing.lastMessage === msg.body &&
+          Math.abs(msgTime - existingTime) < 30000;
+
         const updatedItem: InquiryThread = {
           ...existing,
           lastMessage: msg.body || existing.lastMessage,
           lastMessageAt: msg.sentAt || msg.sent_at || new Date().toISOString(),
           lastSenderType: msg.senderType || msg.sender_type || existing.lastSenderType,
           updatedAt: msg.sentAt || msg.sent_at || new Date().toISOString(),
-          messageCount: (existing.messageCount || 0) + 1,
+          messageCount: isSameRecentMsg ? existing.messageCount : (existing.messageCount || 0) + 1,
           status:
             msg.senderType === "customer" || msg.sender_type === "customer"
               ? existing.status === "closed"

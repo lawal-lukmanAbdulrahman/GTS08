@@ -442,3 +442,22 @@ export function accountAccessEmail(o: { store: StoreInfo; name: string; blocked:
     text: `Hello ${o.name}, your ${o.store.name} staff access has been restored.${o.signInUrl ? ` Sign in: ${o.signInUrl}` : ""}`,
   };
 }
+
+export function customerReinstatedEmail(o: { store: StoreInfo; name: string; reason?: string; signInUrl?: string }): Rendered {
+  const reasonText = o.reason ? `Reason: ${o.reason}` : "";
+  const help = o.store.phone ? `If you need any assistance, our customer support team is available at ${o.store.phone}.` : "";
+  return {
+    subject: `Your ${o.store.name} account has been reinstated — Welcome Back!`,
+    html: shell(
+      o.store,
+      "Account Access Restored",
+      p(`Dear ${esc(o.name)},`) +
+        p(`We are delighted to inform you that your <strong>${esc(o.store.name)}</strong> account has been officially reinstated and your access is fully active.`) +
+        (o.reason ? `<div style="margin:16px 0;padding:12px 16px;border-left:4px solid #EDCF5D;background:#FAFAF7;border-radius:6px;"><p style="margin:0 0 4px;font-size:11px;font-weight:bold;color:#713f12;text-transform:uppercase;letter-spacing:1px;">Administrative Note</p><p style="margin:0;font-size:14px;color:#1a1a1a;">${esc(o.reason)}</p></div>` : "") +
+        p("You can now sign in, browse our full product catalog, place orders, and contact customer support without restriction.") +
+        (help ? p(esc(help)) : "") +
+        (o.signInUrl ? button(o.signInUrl, "Sign In to Your Account") : button("https://gts.ng", "Visit GTS Store"))
+    ),
+    text: `Hello ${o.name},\n\nYour ${o.store.name} account has been successfully reinstated.\n\n${reasonText ? `${reasonText}\n\n` : ""}You can now sign in, place orders, make inquiries, and shop as usual.\n\n${help}\n\n${o.signInUrl ? `Sign in: ${o.signInUrl}` : ""}`,
+  };
+}

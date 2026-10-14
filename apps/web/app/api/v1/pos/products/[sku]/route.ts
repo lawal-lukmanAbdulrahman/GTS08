@@ -26,7 +26,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ sku
       `
       id, size, color, color_hex, sku, price_modifier,
       inventory(quantity, reserved_quantity, low_stock_threshold),
-      product:products(id, name, slug, base_price)
+      product:products(id, name, slug, base_price, price_retailer, price_wholesaler, price_distributor, wholesale_min_qty, distributor_min_qty, channel)
       `
     )
     .eq("sku", sku)
@@ -51,8 +51,26 @@ export async function GET(request: NextRequest, context: { params: Promise<{ sku
     sku: string | null;
     price_modifier: number;
     inventory: InventoryRow | null;
-    product: { id: string; name: string; slug: string; base_price: number };
+    product: {
+      id: string;
+      name: string;
+      slug: string;
+      base_price: number;
+      price_retailer?: number | null;
+      price_wholesaler?: number | null;
+      price_distributor?: number | null;
+      wholesale_min_qty?: number;
+      distributor_min_qty?: number;
+      channel?: string;
+    };
   };
+
+  if (row.product?.channel && row.product.channel !== "pos") {
+    return NextResponse.json(
+      { error: `No product found for SKU: ${sku}`, code: "SKU_NOT_FOUND" },
+      { status: 404 }
+    );
+  }
 
   return NextResponse.json({
     data: {

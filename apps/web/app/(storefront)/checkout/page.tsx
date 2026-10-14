@@ -141,7 +141,8 @@ export default function CheckoutPage() {
 
   const detailsReady = firstName.trim().length > 0 && lastName.trim().length > 0 && EMAIL.test(email.trim()) && phone.replace(/\D/g, "").length >= 7;
   const stationReady = !stationsLoading && stations.length > 0 && !!selectedStationId;
-  const canPlaceOrder = cartItems.length > 0 && !quoteLoading && quote?.all_available !== false && detailsReady && stationReady && !isSubmitting;
+  const isCustomerDisabled = !!customer?.is_disabled;
+  const canPlaceOrder = cartItems.length > 0 && !quoteLoading && quote?.all_available !== false && detailsReady && stationReady && !isSubmitting && !isCustomerDisabled;
 
   const placeOrder = async () => {
     if (!canPlaceOrder) return;
@@ -274,6 +275,24 @@ export default function CheckoutPage() {
           <span>›</span>
           <span className="text-[#010101]">Checkout</span>
         </nav>
+
+        {isCustomerDisabled && (
+          <div role="alert" className="mb-6 rounded-2xl border border-red-300 bg-red-50 p-4 sm:p-5 text-red-900 shadow-xs flex items-start gap-3">
+            <svg className="w-5 h-5 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+            <div>
+              <h3 className="font-bold text-sm">Account Disabled - Ordering Unavailable</h3>
+              <p className="text-xs text-red-700 mt-1 leading-relaxed">
+                Your account has been disabled{customer?.disabled_reason ? `: "${customer.disabled_reason}"` : ""}.
+                To re-enable your account, please contact customer support
+                {store?.support_phone ? (
+                  <> at <a href={`tel:${store.support_phone}`} className="font-bold underline">{store.support_phone}</a></>
+                ) : "."}
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           <div className="lg:col-span-7 xl:col-span-8 space-y-8">
@@ -477,6 +496,11 @@ export default function CheckoutPage() {
                 </p>
               )}
               {stations.length > 0 && !detailsReady && <p className="text-[11px] text-gray-500 text-center mt-2">Fill in your details to place the order.</p>}
+              {isCustomerDisabled && (
+                <p className="text-[11px] text-red-600 font-semibold text-center mt-2">
+                  Orders disabled: Your account has been disabled by admin.
+                </p>
+              )}
 
               <p className="text-[11px] text-gray-400 text-center mt-4 leading-relaxed">
                 By placing your order you accept the{" "}

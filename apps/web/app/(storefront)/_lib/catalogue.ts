@@ -12,6 +12,11 @@ export interface ApiProduct {
   short_description: string | null;
   description: string | null;
   base_price: number;
+  price_retailer?: number | null;
+  price_wholesaler?: number | null;
+  price_distributor?: number | null;
+  wholesale_min_qty?: number | null;
+  distributor_min_qty?: number | null;
   compare_at_price: number | null;
   average_rating: number | null;
   review_count: number | null;
@@ -138,6 +143,11 @@ export function dbProductToItem(p: ApiProduct): ProductItem {
     createdAt: p.created_at ?? "",
     rawCompareAtPrice: p.compare_at_price,
     rawBasePrice: p.base_price,
+    priceRetailer: p.price_retailer ?? p.base_price,
+    priceWholesaler: p.price_wholesaler ?? p.base_price,
+    priceDistributor: p.price_distributor ?? p.base_price,
+    wholesaleMinQty: p.wholesale_min_qty ?? 5,
+    distributorMinQty: p.distributor_min_qty ?? 20,
     discountPercent: p.compare_at_price && p.compare_at_price > p.base_price ? Math.round(((p.compare_at_price - p.base_price) / p.compare_at_price) * 100) : 0,
     variants: mappedVariants,
     availableStock: totalAvailable,

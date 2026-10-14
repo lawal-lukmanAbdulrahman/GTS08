@@ -20,7 +20,7 @@
     "@gts/utils": "workspace:*",
     "framer-motion": "^12.43.0",
     "jspdf": "^4.2.1",
-    "next": "^15.5.25",
+    "next": "^15.5.28",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"

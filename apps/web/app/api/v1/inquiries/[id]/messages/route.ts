@@ -180,28 +180,31 @@ export const POST = withIdempotency(async function POST(
       };
 
       const channel = serviceClient.channel(`inquiry_${ticketId}`);
-      channel.subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          channel.send({
-            type: "broadcast",
-            event: "new_message",
-            payload: msgPayload,
-          });
-        }
-      });
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          try { serviceClient.removeChannel(channel); } catch {}
+          resolve();
+        }, 500);
 
-      const adminChannel = serviceClient.channel("admin_inquiries");
-      adminChannel.subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          adminChannel.send({
-            type: "broadcast",
-            event: "new_inquiry_message",
-            payload: {
-              ticketId,
-              message: msgPayload,
-            },
-          });
-        }
+        channel.subscribe((status: string) => {
+          if (status === "SUBSCRIBED") {
+            channel
+              .send({
+                type: "broadcast",
+                event: "new_message",
+                payload: msgPayload,
+              })
+              .finally(() => {
+                clearTimeout(timer);
+                try { serviceClient.removeChannel(channel); } catch {}
+                resolve();
+              });
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            clearTimeout(timer);
+            try { serviceClient.removeChannel(channel); } catch {}
+            resolve();
+          }
+        });
       });
     } catch (realtimeErr) {
       console.warn("Failed to broadcast message to realtime channel:", realtimeErr);

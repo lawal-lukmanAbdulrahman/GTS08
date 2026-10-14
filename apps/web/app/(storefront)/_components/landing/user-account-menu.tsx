@@ -7,6 +7,13 @@ import { useAuthModal } from "../auth-modal-context";
 import { useAuth } from "../auth-context";
 import { useCart } from "../cart-context";
 import { useWishlist } from "../wishlist-context";
+import { createClient } from "@gts/database/client";
+import {
+  getCustomerInboxSeenAt,
+  getCustomerNotifications,
+  getCustomerDeletedNotifIds,
+} from "../../../../lib/notifications";
+import CustomerPromosModal, { type CustomerPromoItem } from "./customer-promos-modal";
 
 export function UserAccountMenu() {
   const router = useRouter();
@@ -16,6 +23,9 @@ export function UserAccountMenu() {
   const { totalItemCount } = useCart();
   const { wishlistCount } = useWishlist();
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const [customerPromos, setCustomerPromos] = useState<CustomerPromoItem[]>([]);
+  const [showPromosModal, setShowPromosModal] = useState(false);
 
   const toggleMenu = () => {
     setIsOpen((prev) => !prev);
@@ -39,26 +49,181 @@ export function UserAccountMenu() {
     };
   }, []);
 
-  const [inboxCount, setInboxCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
 
+  // Fetch available promo codes for badge and modal
   useEffect(() => {
-    if (!user) {
-      setInboxCount(0);
+    const custId = customer?.id || "";
+    const userId = user?.id || "";
+    const query = new URLSearchParams();
+    if (custId) query.set("customerId", custId);
+    if (userId) query.set("userId", userId);
+    const custQuery = query.toString() ? `?${query.toString()}` : "";
+    const token = typeof window !== "undefined" ? localStorage.getItem("gts_customer_token") : null;
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    fetch(`/api/v1/promos/available${custQuery}`, { headers, credentials: "include" })
+      .then((res) => res.json())
+      .then((json) => {
+        if (Array.isArray(json.data)) {
+          setCustomerPromos(json.data);
+        }
+      })
+      .catch(() => {});
+  }, [customer?.id, user?.id]);
+
+  // ── Realtime Unread Notification Watcher via WebSockets & Local Cache ──
+  useEffect(() => {
+    const userId = user?.id;
+    const customerId = customer?.id;
+    const activeKey = userId || customerId;
+
+    if (!activeKey) {
+      setUnreadCount(0);
       return;
     }
-    const checkInbox = async () => {
+
+    let isMounted = true;
+
+    const checkUnread = async () => {
       try {
-        const res = await fetch("/api/v1/inquiries");
-        if (res.ok) {
-          const json = await res.json();
-          if (Array.isArray(json.data)) {
-            setInboxCount(json.data.length);
+        const seenAt = getCustomerInboxSeenAt();
+        const deletedIds = getCustomerDeletedNotifIds(activeKey);
+        let count = 0;
+
+        // 1. Database customer notifications (account notices, disabled, reinstated, enabled, etc.)
+        try {
+          const res = await fetch("/api/v1/notifications/customer");
+          if (res.ok) {
+            const json = await res.json();
+            if (Array.isArray(json.data)) {
+              const unreadDbNotifs = json.data.filter(
+                (n: any) => !n.is_read && !deletedIds.includes(n.id)
+              );
+              count += unreadDbNotifs.length;
+            }
+          }
+        } catch {}
+
+        // 2. Inquiries from API (tickets replied by staff)
+        try {
+          const res = await fetch("/api/v1/inquiries");
+          if (res.ok) {
+            const json = await res.json();
+            if (Array.isArray(json.data)) {
+              const unreadInquiries = json.data.filter((item: any) => {
+                if (item.lastSenderType !== "staff") return false;
+                if (!seenAt) return true;
+                return new Date(item.lastMessageAt).getTime() > new Date(seenAt).getTime();
+              });
+              count += unreadInquiries.length;
+            }
+          }
+        } catch {}
+
+        // 3. Saved customer notifications (order phase updates, etc.)
+        try {
+          const notifs = getCustomerNotifications(activeKey);
+          const unreadLocal = notifs.filter((n) => {
+            if (deletedIds.includes(n.id)) return false;
+            if (n.isRead) return false;
+            if (!seenAt) return true;
+            return new Date(n.createdAt).getTime() > new Date(seenAt).getTime();
+          });
+          count += unreadLocal.length;
+        } catch {}
+
+        if (isMounted) {
+          setUnreadCount(count);
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("gts_unread_count_changed", { detail: { count } })
+            );
           }
         }
-      } catch {}
+      } catch (err) {
+        console.error("Failed to check unread notifications:", err);
+      }
     };
-    checkInbox();
-  }, [user]);
+
+    checkUnread();
+
+    // ── Supabase Realtime WebSocket Watcher ──
+    const supabase = createClient() as any;
+    const channelName = `user_nav_notifs_${activeKey}`;
+    const channel = supabase.channel(channelName, {
+      config: { broadcast: { ack: false } },
+    });
+
+    channel
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "customer_notifications",
+        },
+        () => {
+          checkUnread();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "ticket_messages",
+        },
+        () => {
+          checkUnread();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "support_tickets",
+        },
+        () => {
+          checkUnread();
+        }
+      )
+      .on("broadcast", { event: "new_message" }, () => {
+        checkUnread();
+      })
+      .on("broadcast", { event: "new_inquiry_message" }, () => {
+        checkUnread();
+      })
+      .on("broadcast", { event: "order_status_updated" }, () => {
+        checkUnread();
+      })
+      .on("broadcast", { event: "account_status_changed" }, () => {
+        checkUnread();
+      })
+      .subscribe();
+
+    const handleLocalUpdate = () => {
+      checkUnread();
+    };
+
+    window.addEventListener("gts_notifications_updated", handleLocalUpdate);
+    window.addEventListener("gts_notification_received", handleLocalUpdate);
+    window.addEventListener("gts_inbox_read", handleLocalUpdate);
+    window.addEventListener("gts_inquiry_read", handleLocalUpdate);
+
+    return () => {
+      isMounted = false;
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+      window.removeEventListener("gts_notifications_updated", handleLocalUpdate);
+      window.removeEventListener("gts_notification_received", handleLocalUpdate);
+      window.removeEventListener("gts_inbox_read", handleLocalUpdate);
+      window.removeEventListener("gts_inquiry_read", handleLocalUpdate);
+    };
+  }, [user?.id, customer?.id]);
 
   const isDemo =
     typeof window !== "undefined" &&
@@ -87,8 +252,18 @@ export function UserAccountMenu() {
       <button
         onClick={toggleMenu}
         aria-expanded={isOpen}
-        className="hidden sm:flex items-center gap-2 pl-1.5 pr-3 sm:pr-3.5 h-9 sm:h-[38px] rounded-full bg-transparent hover:bg-[#F2F0EA] transition-colors cursor-pointer group text-[#010101] select-none shrink-0"
+        className="hidden sm:flex items-center gap-2 pl-1.5 pr-3 sm:pr-3.5 h-9 sm:h-[38px] rounded-full bg-transparent hover:bg-[#F2F0EA] transition-colors cursor-pointer group text-[#010101] select-none shrink-0 relative"
       >
+        {/* Unread Notifications Badge on Pill (Top-Left) */}
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -left-1 z-20 flex items-center justify-center pointer-events-none">
+            <span className="animate-ping absolute inline-flex h-3.5 w-3.5 rounded-full bg-rose-400 opacity-60" />
+            <span className="relative flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-rose-600 text-white text-[9.5px] font-black border-2 border-white shadow-xs">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          </span>
+        )}
+
         {/* Circle with User Icon anchored to left */}
         <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#F2F0EA] group-hover:bg-[#EDCF5D] flex items-center justify-center text-[#010101] shrink-0 shadow-2xs transition-colors">
           <svg
@@ -191,9 +366,9 @@ export function UserAccountMenu() {
                   </svg>
                   <span>Inbox</span>
                 </div>
-                {inboxCount > 0 && (
-                  <span className="bg-[#010101] text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full font-sans">
-                    {inboxCount}
+                {unreadCount > 0 && (
+                  <span className="bg-rose-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full font-sans shadow-2xs min-w-[20px] text-center">
+                    {unreadCount}
                   </span>
                 )}
               </button>
@@ -242,7 +417,28 @@ export function UserAccountMenu() {
                 )}
               </button>
 
-
+              {/* My Promo Codes */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  router.push("/account?tab=promos");
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold text-gray-700 hover:bg-[#F2F0EA] hover:text-[#010101] transition-colors cursor-pointer text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <svg className="w-4 h-4 shrink-0 text-[#010101]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
+                  </svg>
+                  <span>My Promo Codes</span>
+                </div>
+                {customerPromos.length > 0 && (
+                  <span className="bg-[#010101] text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full font-sans">
+                    {customerPromos.length}
+                  </span>
+                )}
+              </button>
             </div>
 
             <div className="my-1.5 border-t border-gray-100" />
@@ -283,6 +479,13 @@ export function UserAccountMenu() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Available Promo Codes Modal */}
+      <CustomerPromosModal
+        isOpen={showPromosModal}
+        onClose={() => setShowPromosModal(false)}
+        promos={customerPromos}
+      />
     </div>
   );
 }

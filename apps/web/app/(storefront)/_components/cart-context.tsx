@@ -48,7 +48,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
   // Signed in or not (the cart works outside an AuthProvider too, e.g. in tests).
-  const userId = useContext(AuthContext)?.user?.id ?? null;
+  const auth = useContext(AuthContext);
+  const authRef = useRef(auth);
+  authRef.current = auth;
+  const userId = auth?.user?.id ?? null;
   const { products: catalogue } = useCatalogue();
   const catalogueRef = useRef(catalogue);
   catalogueRef.current = catalogue;
@@ -143,6 +146,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       variantId?: string,
       maxAvailable?: number
     ): { ok: boolean; message?: string } => {
+      if (authRef.current?.customer?.is_disabled) {
+        const reason = authRef.current.customer.disabled_reason;
+        const msg = reason
+          ? `Your account has been disabled (${reason}). Items cannot be added to cart.`
+          : "Your account has been disabled. Items cannot be added to cart.";
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("gts_customer_disabled_alert", { detail: { message: msg } }));
+        }
+        return { ok: false, message: msg };
+      }
+
       const defaultSize = size || (product.sizes && product.sizes[0]) || "Standard";
       const defaultColor = color || (product.images && product.images[0]?.label) || "Default";
 

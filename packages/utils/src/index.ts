@@ -43,4 +43,23 @@ export {
   type OrderStatus,
   type PaymentStatus,
 } from "./order-machine";
-export { normalizePromoCode, computePromoDiscount, validatePromoInput, type PromoRow, type PromoResult, type PromoInput, type PromoInputResult } from "./promo";
+export {
+  normalizePromoCode,
+  computePromoDiscount,
+  computePromoDiscountWithScope,
+  validatePromoInput,
+  type PromoRow,
+  type PromoResult,
+  type PromoInput,
+  type PromoInputResult,
+  type CartItemForPromo,
+} from "./promo";
+export {
+  resolveTierPrice,
+  getProductPricingTiers,
+  DEFAULT_WHOLESALE_MIN_QTY,
+  DEFAULT_DISTRIBUTOR_MIN_QTY,
+  type PricingTier,
+  type TierPricingSource,
+  type ResolvedTierPrice,
+} from "./tier-pricing";

@@ -20,7 +20,7 @@ import { usePosCatalogue } from "./use-pos-catalogue";
 import { useCartStockSync } from "./use-cart-stock-sync";
 import { resolveManualDiscount } from "./manual-discount-input";
 import { resolveProductImageUrl } from "./product-image";
-import { parseNairaInput, type FlagReason } from "@gts/utils";
+import { parseNairaInput, resolveTierPrice, type FlagReason } from "@gts/utils";
 import { parseWhatsAppContact } from "./receipt-layout";
 import type { ReceiptData, ReceiptStore } from "./receipt";
 import { loadStoreDetails, toReceiptStore } from "../lib/store-settings-api";
@@ -171,9 +171,20 @@ export default function PosPage() {
 
     setActiveCart((prev) => {
       const existing = prev.find((l) => l.variantId === variantId);
+      const newQty = existing ? Math.min(existing.available, existing.quantity + quantity) : quantity;
+      const resolved = resolveTierPrice(product, newQty);
+      const unitPrice = resolved.unitPrice + (variant.price_modifier || 0);
+
       if (existing) {
         return prev.map((l) =>
-          l.variantId === variantId ? { ...l, quantity: Math.min(l.available, l.quantity + quantity) } : l
+          l.variantId === variantId
+            ? {
+                ...l,
+                quantity: newQty,
+                unitPrice,
+                tierName: resolved.tierLabel,
+              }
+            : l
         );
       }
       return [
@@ -184,8 +195,15 @@ export default function PosPage() {
           productName: product.name,
           size: variant.size,
           color: variant.color,
-          unitPrice: product.base_price + variant.price_modifier,
-          quantity,
+          unitPrice,
+          basePrice: product.base_price + (variant.price_modifier || 0),
+          priceRetailer: product.price_retailer,
+          priceWholesaler: product.price_wholesaler,
+          priceDistributor: product.price_distributor,
+          wholesaleMinQty: product.wholesale_min_qty,
+          distributorMinQty: product.distributor_min_qty,
+          tierName: resolved.tierLabel,
+          quantity: newQty,
           available: variant.available,
           primary_image: product.primary_image ?? null,
           imageUrl: resolveProductImageUrl(product.primary_image?.cloudinary_id) ?? null,
@@ -196,12 +214,53 @@ export default function PosPage() {
 
   function incrementLine(variantId: string) {
     setActiveCart((prev) =>
-      prev.map((l) => (l.variantId === variantId ? { ...l, quantity: Math.min(l.available, l.quantity + 1) } : l))
+      prev.map((l) => {
+        if (l.variantId !== variantId) return l;
+        const newQty = Math.min(l.available, l.quantity + 1);
+        const resolved = resolveTierPrice(
+          {
+            base_price: l.basePrice ?? l.unitPrice,
+            price_retailer: l.priceRetailer,
+            price_wholesaler: l.priceWholesaler,
+            price_distributor: l.priceDistributor,
+            wholesale_min_qty: l.wholesaleMinQty,
+            distributor_min_qty: l.distributorMinQty,
+          },
+          newQty
+        );
+        return {
+          ...l,
+          quantity: newQty,
+          unitPrice: resolved.unitPrice,
+          tierName: resolved.tierLabel,
+        };
+      })
     );
   }
+
   function decrementLine(variantId: string) {
     setActiveCart((prev) =>
-      prev.map((l) => (l.variantId === variantId ? { ...l, quantity: Math.max(1, l.quantity - 1) } : l))
+      prev.map((l) => {
+        if (l.variantId !== variantId) return l;
+        const newQty = Math.max(1, l.quantity - 1);
+        const resolved = resolveTierPrice(
+          {
+            base_price: l.basePrice ?? l.unitPrice,
+            price_retailer: l.priceRetailer,
+            price_wholesaler: l.priceWholesaler,
+            price_distributor: l.priceDistributor,
+            wholesale_min_qty: l.wholesaleMinQty,
+            distributor_min_qty: l.distributorMinQty,
+          },
+          newQty
+        );
+        return {
+          ...l,
+          quantity: newQty,
+          unitPrice: resolved.unitPrice,
+          tierName: resolved.tierLabel,
+        };
+      })
     );
   }
   function removeLine(variantId: string) {

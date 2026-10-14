@@ -13,8 +13,10 @@ import { dbProductToItem, type ApiProduct } from "../../_lib/catalogue";
 import { getCartSessionId } from "../../_lib/server-sync";
 import { useCart } from "../../_components/cart-context";
 import { useWishlist } from "../../_components/wishlist-context";
+import { resolveTierPrice } from "@gts/utils";
 import { useAuth } from "../../_components/auth-context";
 import { useAuthModal } from "../../_components/auth-modal-context";
+import { useStoreInfo } from "../../_lib/store-info";
 import { ProductZoomLightbox } from "../../_components/ui/product-zoom-lightbox";
 import { MarkdownContent } from "../../_components/markdown-content";
 import { NIGERIAN_STATES, NIGERIAN_LOCATIONS } from "../../_data/nigerian-locations";
@@ -130,6 +132,9 @@ export default function ProductDetailPage({
   const [loading, setLoading] = useState<boolean>(true);
   const { addToCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
+  const { customer } = useAuth();
+  const storeInfo = useStoreInfo();
+  const [cartAlert, setCartAlert] = useState<string | null>(null);
 
   // Active dwell time, detail reading, and scroll tracking
   useProductDwellTracker(product?.id);
@@ -140,6 +145,22 @@ export default function ProductDetailPage({
   const [quantity, setQuantity] = useState(1);
   const [addedToCart, setAddedToCart] = useState(false);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
+
+  // Active Tier Pricing Calculation (Declared before early returns to preserve Hook ordering)
+  const activePricing = useMemo(() => {
+    if (!product) return null;
+    return resolveTierPrice(
+      {
+        base_price: product.rawBasePrice ?? Math.round(product.priceNum * 100),
+        price_retailer: product.priceRetailer,
+        price_wholesaler: product.priceWholesaler,
+        price_distributor: product.priceDistributor,
+        wholesale_min_qty: product.wholesaleMinQty,
+        distributor_min_qty: product.distributorMinQty,
+      },
+      quantity
+    );
+  }, [product, quantity]);
 
   const [selectedState, setSelectedState] = useState("Lagos");
   const [selectedArea, setSelectedArea] = useState("LEKKI-AJAH (SANGOTEDO)");
@@ -240,6 +261,11 @@ export default function ProductDetailPage({
             short_description,
             description,
             base_price,
+            price_retailer,
+            price_wholesaler,
+            price_distributor,
+            wholesale_min_qty,
+            distributor_min_qty,
             compare_at_price,
             average_rating,
             review_count,
@@ -259,13 +285,47 @@ export default function ProductDetailPage({
 
         let matched = dbProduct;
 
-        // 2. If not found, try searching by product name keywords
+        // 2. If not found by slug, try matching by SKU, exact name, or slug prefix
         if (!matched && !isUuid) {
-          const keywords = decodedSlug
-            .split("-")
-            .filter((w: string) => w.length > 2)
-            .slice(0, 4)
-            .join("%");
+          const { data: altProduct } = await supabase
+            .from("products")
+            .select(`
+              id,
+              name,
+              slug,
+              sku,
+              brand,
+              sub_category,
+              has_transparent_bg,
+              short_description,
+              description,
+              base_price,
+              price_retailer,
+              price_wholesaler,
+              price_distributor,
+              wholesale_min_qty,
+              distributor_min_qty,
+              compare_at_price,
+              average_rating,
+              review_count,
+              tags,
+              category:categories(name),
+              variants:product_variants(*, inventory(quantity, reserved_quantity)),
+              images:product_images(*)
+            `)
+            .or(`sku.ilike.${decodedSlug},name.ilike.${decodedSlug},slug.ilike.${decodedSlug}-%`)
+            .limit(1)
+            .maybeSingle();
+
+          if (altProduct) {
+            matched = altProduct;
+          }
+        }
+
+        // 3. If not found, try searching by product name keywords
+        if (!matched && !isUuid) {
+          const words = decodedSlug.split("-").filter((w: string) => w.length >= 2);
+          const keywords = words.slice(0, 4).join("%") || decodedSlug;
 
           if (keywords) {
             const { data: fallbackList } = await supabase
@@ -281,6 +341,11 @@ export default function ProductDetailPage({
                 short_description,
                 description,
                 base_price,
+                price_retailer,
+                price_wholesaler,
+                price_distributor,
+                wholesale_min_qty,
+                distributor_min_qty,
                 compare_at_price,
                 average_rating,
                 review_count,
@@ -295,6 +360,23 @@ export default function ProductDetailPage({
             if (fallbackList && fallbackList.length > 0) {
               matched = fallbackList[0];
             }
+          }
+        }
+
+        // 4. If still not found, try our backend API route
+        if (!matched) {
+          try {
+            const apiRes = await fetch(`/api/v1/products/${encodeURIComponent(decodedSlug)}`, {
+              headers: { Accept: "application/json" },
+            });
+            if (apiRes.ok) {
+              const apiJson = await apiRes.json();
+              if (apiJson?.data) {
+                matched = apiJson.data;
+              }
+            }
+          } catch {
+            // ignore network err
           }
         }
 
@@ -438,9 +520,9 @@ export default function ProductDetailPage({
           // Map variant inventory
           const mappedVariants = dbVariants.map((v: any) => {
             const inv = Array.isArray(v.inventory) ? v.inventory[0] : v.inventory;
-            const qty = Number(inv?.quantity ?? v.quantity ?? 0);
+            const qty = Number(inv?.quantity ?? v.quantity ?? v.available ?? 0);
             const reserved = Number(inv?.reserved_quantity ?? 0);
-            const available = Math.max(0, qty - reserved);
+            const available = typeof v.available === "number" ? v.available : Math.max(0, qty - reserved);
             return {
               id: v.id,
               size: v.size || v.variant_size || "Standard",
@@ -492,6 +574,11 @@ export default function ProductDetailPage({
             })(),
             hasTransparentBg: detectedTransparent,
             variants: mappedVariants,
+            priceRetailer: matched.price_retailer ?? matched.base_price,
+            priceWholesaler: matched.price_wholesaler ?? matched.base_price,
+            priceDistributor: matched.price_distributor ?? matched.base_price,
+            wholesaleMinQty: matched.wholesale_min_qty ?? 5,
+            distributorMinQty: matched.distributor_min_qty ?? 20,
             availableStock: totalAvailable,
             inStock: totalAvailable > 0,
           };
@@ -671,8 +758,15 @@ export default function ProductDetailPage({
   const currentAvailableStock = currentVariant ? currentVariant.available : (product.availableStock ?? 0);
   const isOutOfStock = currentAvailableStock <= 0;
 
+
   const handleAddToCart = () => {
     if (isOutOfStock) return;
+    if (customer?.is_disabled) {
+      const phone = storeInfo?.support_phone ? ` at ${storeInfo.support_phone}` : "";
+      setCartAlert(`Your account has been disabled${customer.disabled_reason ? `: "${customer.disabled_reason}"` : ""}. To re-enable your account, please contact customer support${phone}.`);
+      setTimeout(() => setCartAlert(null), 6000);
+      return;
+    }
     const addQty = Math.min(currentAvailableStock, quantity);
     const result = addToCart(
       product,
@@ -686,6 +780,9 @@ export default function ProductDetailPage({
       trackProductCart(product.id);
       setAddedToCart(true);
       setTimeout(() => setAddedToCart(false), 2000);
+    } else if (result.message) {
+      setCartAlert(result.message);
+      setTimeout(() => setCartAlert(null), 6000);
     }
   };
 
@@ -971,14 +1068,22 @@ export default function ProductDetailPage({
             {/* Price Display (Above Ratings on mobile & desktop) */}
             <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
               <span className="font-sans text-2xl sm:text-3xl font-extrabold text-[#010101] tracking-tight">
-                {product.price}
+                ₦{((activePricing?.unitPrice ?? Math.round(product.priceNum * 100)) / 100).toLocaleString()}
               </span>
-              {product.originalPrice && (
+              {activePricing && activePricing.savingsPerUnit > 0 ? (
+                <span className="text-sm sm:text-base text-gray-400 line-through font-mono">
+                  ₦{(product.rawBasePrice ? product.rawBasePrice / 100 : product.priceNum).toLocaleString()}
+                </span>
+              ) : product.originalPrice ? (
                 <span className="text-sm sm:text-base text-gray-400 line-through">
                   {product.originalPrice}
                 </span>
-              )}
-              {(product.badge || (product.discountPercent && product.discountPercent > 0 ? `${product.discountPercent}% OFF` : undefined)) && (
+              ) : null}
+              {activePricing && activePricing.savingsPerUnit > 0 ? (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-emerald-500/15 text-emerald-700 border border-emerald-500/30">
+                  {activePricing.tierLabel} Rate · Save ₦{(activePricing.savingsPerUnit / 100).toLocaleString()}/pc
+                </span>
+              ) : (product.badge || (product.discountPercent && product.discountPercent > 0 ? `${product.discountPercent}% OFF` : undefined)) ? (
                 <div className="relative inline-flex items-center self-center select-none text-[#010101]">
                   <div
                     className="relative flex items-center h-[22px] bg-[#EDCF5D] rounded-[2px] shadow-2xs overflow-hidden"
@@ -1006,7 +1111,7 @@ export default function ProductDetailPage({
                     <span className="w-2.5 h-2.5 rounded-full bg-white dark:bg-[#1A201B] -mr-1.5 shrink-0" />
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* Rating Row + Mobile Native Share Trigger (Below Price) */}
@@ -1080,6 +1185,188 @@ export default function ProductDetailPage({
                   </span>
                 )}
               </div>
+            </div>
+
+            {/* ── Bulk & Wholesale Pricing Ladder (Compact Grey Card with Dividers) ── */}
+            <div className="rounded-2xl bg-gray-100 border border-gray-300 overflow-hidden shadow-2xs">
+              {(() => {
+                const wholesaleMin = product.wholesaleMinQty || 5;
+                const distributorMin = product.distributorMinQty || 20;
+
+                const custPriceNaira = (product.rawBasePrice ? product.rawBasePrice / 100 : product.priceNum);
+                const retPriceNaira = ((product.priceRetailer ?? product.rawBasePrice ?? Math.round(product.priceNum * 100)) / 100);
+                const wholePriceNaira = ((product.priceWholesaler ?? product.rawBasePrice ?? Math.round(product.priceNum * 100)) / 100);
+                const distPriceNaira = ((product.priceDistributor ?? product.rawBasePrice ?? Math.round(product.priceNum * 100)) / 100);
+
+                const isCustActive = activePricing?.tier === "customer" || (!activePricing && quantity === 1);
+                const isRetActive = activePricing?.tier === "retailer";
+                const isWholeActive = activePricing?.tier === "wholesaler";
+                const isDistActive = activePricing?.tier === "distributor";
+
+                const retSavings = custPriceNaira > retPriceNaira ? custPriceNaira - retPriceNaira : 0;
+                const wholeSavings = custPriceNaira > wholePriceNaira ? custPriceNaira - wholePriceNaira : 0;
+                const distSavings = custPriceNaira > distPriceNaira ? custPriceNaira - distPriceNaira : 0;
+
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4">
+                    {/* Tier 1: Customer */}
+                    <button
+                      type="button"
+                      onClick={() => setQuantity(1)}
+                      className={`p-3 sm:p-3.5 text-left transition-colors cursor-pointer flex flex-col justify-between border-r border-b sm:border-b-0 border-gray-300 ${
+                        isCustActive ? "bg-white" : "hover:bg-white/50"
+                      }`}
+                    >
+                      <div>
+                        <div className="mb-1.5">
+                          <span
+                            className={`inline-block text-xs font-black font-mono tracking-tight px-2.5 py-1 rounded-lg transition-colors ${
+                              isCustActive
+                                ? "bg-[#010101] text-white"
+                                : "bg-white text-gray-800 border border-gray-300 shadow-2xs"
+                            }`}
+                          >
+                            1 pc
+                          </span>
+                        </div>
+                        <span className="text-[10px] sm:text-[11px] font-bold text-gray-500 uppercase font-mono tracking-wider block">
+                          Customer
+                        </span>
+                      </div>
+                      <div className="mt-2.5 pt-2 border-t border-gray-200">
+                        <span className="text-sm sm:text-base font-extrabold text-[#010101] block leading-tight">
+                          ₦{custPriceNaira.toLocaleString()}
+                        </span>
+                        <span className="text-[11px] text-gray-500 font-medium block">/ pc</span>
+                        <div className="mt-1 h-[21px]" />
+                      </div>
+                    </button>
+
+                    {/* Tier 2: Retailer */}
+                    <button
+                      type="button"
+                      onClick={() => setQuantity(Math.min(currentAvailableStock, Math.max(2, 1)))}
+                      className={`p-3 sm:p-3.5 text-left transition-colors cursor-pointer flex flex-col justify-between border-b sm:border-b-0 sm:border-r border-gray-300 ${
+                        isRetActive ? "bg-white" : "hover:bg-white/50"
+                      }`}
+                    >
+                      <div>
+                        <div className="mb-1.5">
+                          <span
+                            className={`inline-block text-xs font-black font-mono tracking-tight px-2.5 py-1 rounded-lg transition-colors ${
+                              isRetActive
+                                ? "bg-[#010101] text-white"
+                                : "bg-white text-gray-800 border border-gray-300 shadow-2xs"
+                            }`}
+                          >
+                            1 – {wholesaleMin - 1} pcs
+                          </span>
+                        </div>
+                        <span className="text-[10px] sm:text-[11px] font-bold text-gray-500 uppercase font-mono tracking-wider block">
+                          Retailer
+                        </span>
+                      </div>
+                      <div className="mt-2.5 pt-2 border-t border-gray-200">
+                        <span className="text-sm sm:text-base font-extrabold text-[#010101] block leading-tight">
+                          ₦{retPriceNaira.toLocaleString()}
+                        </span>
+                        <span className="text-[11px] text-gray-500 font-medium block">/ pc</span>
+                        {retSavings > 0 ? (
+                          <div className="mt-1">
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded inline-block">
+                              Save ₦{retSavings.toLocaleString()}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="mt-1 h-[21px]" />
+                        )}
+                      </div>
+                    </button>
+
+                    {/* Tier 3: Wholesaler */}
+                    <button
+                      type="button"
+                      onClick={() => setQuantity(Math.min(currentAvailableStock, wholesaleMin))}
+                      className={`p-3 sm:p-3.5 text-left transition-colors cursor-pointer flex flex-col justify-between border-r border-gray-300 ${
+                        isWholeActive ? "bg-white" : "hover:bg-white/50"
+                      }`}
+                    >
+                      <div>
+                        <div className="mb-1.5">
+                          <span
+                            className={`inline-block text-xs font-black font-mono tracking-tight px-2.5 py-1 rounded-lg transition-colors ${
+                              isWholeActive
+                                ? "bg-amber-600 text-white"
+                                : "bg-amber-100/90 text-amber-900 border border-amber-200/80 shadow-2xs"
+                            }`}
+                          >
+                            {wholesaleMin} – {distributorMin - 1} pcs
+                          </span>
+                        </div>
+                        <span className="text-[10px] sm:text-[11px] font-bold text-amber-700 uppercase font-mono tracking-wider block">
+                          Wholesaler
+                        </span>
+                      </div>
+                      <div className="mt-2.5 pt-2 border-t border-gray-200">
+                        <span className="text-sm sm:text-base font-extrabold text-amber-900 block leading-tight">
+                          ₦{wholePriceNaira.toLocaleString()}
+                        </span>
+                        <span className="text-[11px] text-gray-500 font-medium block">/ pc</span>
+                        {wholeSavings > 0 ? (
+                          <div className="mt-1">
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded inline-block">
+                              Save ₦{wholeSavings.toLocaleString()}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="mt-1 h-[21px]" />
+                        )}
+                      </div>
+                    </button>
+
+                    {/* Tier 4: Distributor */}
+                    <button
+                      type="button"
+                      onClick={() => setQuantity(Math.min(currentAvailableStock, distributorMin))}
+                      className={`p-3 sm:p-3.5 text-left transition-colors cursor-pointer flex flex-col justify-between border-0 ${
+                        isDistActive ? "bg-white" : "hover:bg-white/50"
+                      }`}
+                    >
+                      <div>
+                        <div className="mb-1.5">
+                          <span
+                            className={`inline-block text-xs font-black font-mono tracking-tight px-2.5 py-1 rounded-lg transition-colors ${
+                              isDistActive
+                                ? "bg-emerald-600 text-white"
+                                : "bg-emerald-100/90 text-emerald-900 border border-emerald-200/80 shadow-2xs"
+                            }`}
+                          >
+                            {distributorMin}+ pcs
+                          </span>
+                        </div>
+                        <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 uppercase font-mono tracking-wider block">
+                          Distributor
+                        </span>
+                      </div>
+                      <div className="mt-2.5 pt-2 border-t border-gray-200">
+                        <span className="text-sm sm:text-base font-extrabold text-emerald-900 block leading-tight">
+                          ₦{distPriceNaira.toLocaleString()}
+                        </span>
+                        <span className="text-[11px] text-gray-500 font-medium block">/ pc</span>
+                        {distSavings > 0 ? (
+                          <div className="mt-1">
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded inline-block">
+                              Save ₦{distSavings.toLocaleString()}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="mt-1 h-[21px]" />
+                        )}
+                      </div>
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Short Description (concise summary) */}
@@ -1256,6 +1543,12 @@ export default function ProductDetailPage({
                 </svg>
               </button>
             </div>
+
+            {cartAlert && (
+              <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-700 animate-fadeIn">
+                {cartAlert}
+              </div>
+            )}
 
             {/* ── Promotions Section ── */}
             <div className="pt-3.5 border-t border-gray-200/90 space-y-2.5">
@@ -2127,6 +2420,63 @@ interface DiscussionMessage {
   senderType: "customer" | "staff";
   body: string;
   sentAt: string;
+  status?: "pending" | "sent";
+}
+
+function deduplicateDiscussionMessages(list: DiscussionMessage[]): DiscussionMessage[] {
+  const seen = new Set<string>();
+  const result: DiscussionMessage[] = [];
+  for (const m of list) {
+    if (!seen.has(m.id)) {
+      seen.add(m.id);
+      result.push(m);
+    }
+  }
+  return result;
+}
+
+function reconcileDiscussionMessages(
+  prevList: DiscussionMessage[],
+  incoming: DiscussionMessage
+): DiscussionMessage[] {
+  const exactIndex = prevList.findIndex((m) => m.id === incoming.id);
+  if (exactIndex !== -1) {
+    const updated = [...prevList];
+    const isTemp = incoming.id.startsWith("temp-") || incoming.id.startsWith("optimistic-");
+    updated[exactIndex] = {
+      ...updated[exactIndex],
+      ...incoming,
+      status: isTemp ? (incoming.status || "pending") : "sent",
+    };
+    return deduplicateDiscussionMessages(updated);
+  }
+
+  const isIncomingConfirmed = !incoming.id.startsWith("temp-") && !incoming.id.startsWith("optimistic-");
+  if (isIncomingConfirmed) {
+    const pendingIndex = prevList.findIndex(
+      (m) =>
+        (m.id.startsWith("temp-") || m.id.startsWith("optimistic-") || m.status === "pending") &&
+        m.senderType === incoming.senderType &&
+        m.body.trim() === incoming.body.trim()
+    );
+
+    if (pendingIndex !== -1) {
+      const updated = [...prevList];
+      updated[pendingIndex] = {
+        ...incoming,
+        status: "sent",
+      };
+      return deduplicateDiscussionMessages(updated);
+    }
+  }
+
+  return deduplicateDiscussionMessages([
+    ...prevList,
+    {
+      ...incoming,
+      status: isIncomingConfirmed ? "sent" : (incoming.status || "pending"),
+    },
+  ]);
 }
 
 interface ReviewItem {
@@ -2157,6 +2507,7 @@ function ProductTabs({
 }) {
   const { user, customer } = useAuth();
   const { openAuthModal } = useAuthModal();
+  const storeInfo = useStoreInfo();
 
   const [activeTab, setActiveTab] = useState<"details" | "reviews" | "discussion">("details");
   const [sortOption, setSortOption] = useState("Newest");
@@ -2321,7 +2672,9 @@ function ProductTabs({
         if (res.ok) {
           const json = await res.json();
           if (json.data && json.data.messages) {
-            setDiscussionMessages(json.data.messages);
+            setDiscussionMessages(
+              (json.data.messages || []).map((m: any) => ({ ...m, status: "sent" as const }))
+            );
             if (json.data.id) {
               setDiscussionTicketId(json.data.id);
             }
@@ -2350,18 +2703,14 @@ function ProductTabs({
 
     const handleIncomingMsg = (msg: any) => {
       if (!msg || !msg.id) return;
-      setDiscussionMessages((prev) => {
-        if (prev.some((m) => m.id === msg.id)) return prev;
-        return [
-          ...prev,
-          {
-            id: msg.id,
-            senderType: msg.senderType || msg.sender_type,
-            body: msg.body,
-            sentAt: msg.sentAt || msg.sent_at || new Date().toISOString(),
-          },
-        ];
-      });
+      const normalizedMsg: DiscussionMessage = {
+        id: msg.id,
+        senderType: msg.senderType || msg.sender_type,
+        body: msg.body,
+        sentAt: msg.sentAt || msg.sent_at || new Date().toISOString(),
+        status: msg.status || (msg.id.startsWith("temp-") || msg.id.startsWith("optimistic-") ? "pending" : "sent"),
+      };
+      setDiscussionMessages((prev) => reconcileDiscussionMessages(prev, normalizedMsg));
     };
 
     channel.on("broadcast", { event: "new_message" }, ({ payload }: any) => {
@@ -2395,11 +2744,54 @@ function ProductTabs({
       }
     });
 
+    // Fast background sync fallback when discussion tab is active (2 seconds)
+    const syncInterval = setInterval(async () => {
+      if (document.hidden || !product?.id) return;
+      try {
+        const res = await fetch(`/api/v1/inquiries?productId=${encodeURIComponent(product.id)}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data && json.data.messages) {
+            setDiscussionMessages((prev) => {
+              const serverMsgs: DiscussionMessage[] = (json.data.messages || []).map((m: any) => ({
+                id: m.id,
+                senderType: m.senderType || m.sender_type,
+                body: m.body,
+                sentAt: m.sentAt || m.sent_at,
+                status: "sent" as const,
+              }));
+              const serverIds = new Set(serverMsgs.map((m) => m.id));
+              const recentServerBodies = new Set(
+                serverMsgs
+                  .filter((m) => Date.now() - new Date(m.sentAt).getTime() < 60000)
+                  .map((m) => `${m.senderType}:${m.body.trim()}`)
+              );
+              const pendingOptimistic = prev.filter((m) => {
+                const isTemp = m.id.startsWith("temp-") || m.id.startsWith("optimistic-") || m.status === "pending";
+                if (!isTemp) return false;
+                if (serverIds.has(m.id)) return false;
+                if (recentServerBodies.has(`${m.senderType}:${m.body.trim()}`)) return false;
+                return true;
+              });
+
+              const merged = deduplicateDiscussionMessages([...serverMsgs, ...pendingOptimistic]);
+              const hasChanged =
+                merged.length !== prev.length ||
+                merged.some((m, idx) => prev[idx]?.id !== m.id || prev[idx]?.status !== m.status);
+
+              return hasChanged ? merged : prev;
+            });
+          }
+        }
+      } catch {}
+    }, 2000);
+
     return () => {
+      clearInterval(syncInterval);
       supabase.removeChannel(channel);
       discussionChannelRef.current = null;
     };
-  }, [discussionTicketId]);
+  }, [discussionTicketId, product?.id]);
 
   useEffect(() => {
     if (activeTab === "discussion" && discussionMessages.length > 0) {
@@ -2414,10 +2806,58 @@ function ProductTabs({
       return;
     }
 
+    if (customer?.is_disabled) {
+      const phone = storeInfo?.support_phone ? ` at ${storeInfo.support_phone}` : "";
+      alert(`Your account has been disabled${customer.disabled_reason ? `: "${customer.disabled_reason}"` : ""}. To re-enable your account, please contact customer support${phone}.`);
+      return;
+    }
+
     const text = discussionInput.trim();
     if (!text || isSendingDiscussion || !product?.id) return;
 
+    // 1. Instantly create and render optimistic message (0ms latency)
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const optimisticMsg: DiscussionMessage = {
+      id: tempId,
+      senderType: "customer",
+      body: text,
+      sentAt: new Date().toISOString(),
+      status: "pending",
+    };
+
+    setDiscussionMessages((prev) => reconcileDiscussionMessages(prev, optimisticMsg));
+    setDiscussionInput("");
     setIsSendingDiscussion(true);
+
+    // 2. Immediately broadcast over Realtime WebSocket if channel ready
+    try {
+      discussionChannelRef.current?.send({
+        type: "broadcast",
+        event: "new_message",
+        payload: {
+          id: optimisticMsg.id,
+          senderType: "customer",
+          body: optimisticMsg.body,
+          sentAt: optimisticMsg.sentAt,
+        },
+      });
+    } catch {}
+
+    // 3. Immediately broadcast to admin inquiries channel
+    try {
+      const supabase = createClient() as any;
+      const adminChannel = supabase.channel("admin_inquiries");
+      adminChannel.send({
+        type: "broadcast",
+        event: "new_inquiry_message",
+        payload: {
+          ticketId: discussionTicketId,
+          message: optimisticMsg,
+        },
+      });
+    } catch {}
+
+    // 4. Background persistence to database & server synchronization
     try {
       const res = await fetch("/api/v1/inquiries", {
         method: "POST",
@@ -2431,39 +2871,45 @@ function ProductTabs({
 
       if (res.ok) {
         const json = await res.json();
-        const serverMsgId = json.data?.message?.id || "msg-" + Date.now();
+        const serverMsgId = json.data?.message?.id || tempId;
         const tId = json.data?.ticketId || discussionTicketId;
         if (tId && tId !== discussionTicketId) {
           setDiscussionTicketId(tId);
         }
-        const newMsg: DiscussionMessage = {
+
+        const serverMsg: DiscussionMessage = {
           id: serverMsgId,
           senderType: "customer",
           body: text,
-          sentAt: new Date().toISOString(),
+          sentAt: json.data?.message?.sentAt || optimisticMsg.sentAt,
+          status: "sent",
         };
-        setDiscussionMessages((prev) => {
-          if (prev.some((m) => m.id === newMsg.id)) return prev;
-          return [...prev, newMsg];
-        });
-        setDiscussionInput("");
 
-        // Broadcast immediately over Realtime WebSocket
+        // Reconcile optimistic message with persistent server message
+        setDiscussionMessages((prev) => reconcileDiscussionMessages(prev, serverMsg));
+
+        // Broadcast reconciled message with permanent ID
         try {
           discussionChannelRef.current?.send({
             type: "broadcast",
             event: "new_message",
             payload: {
-              id: newMsg.id,
+              id: serverMsgId,
               senderType: "customer",
-              body: newMsg.body,
-              sentAt: newMsg.sentAt,
+              body: text,
+              sentAt: serverMsg.sentAt,
             },
           });
         } catch {}
+      } else {
+        // Revert on server error
+        setDiscussionMessages((prev) => prev.filter((m) => m.id !== tempId));
+        setDiscussionInput(text);
       }
     } catch (err) {
       console.error("Failed to send discussion message:", err);
+      setDiscussionMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setDiscussionInput(text);
     } finally {
       setIsSendingDiscussion(false);
     }
@@ -3213,6 +3659,26 @@ function ProductTabs({
                             >
                               {msg.body}
                             </div>
+
+                            {/* WhatsApp-style Delivery Status Checkmarks Underneath Message */}
+                            {isCustomer && (
+                              <div className="flex items-center justify-end gap-1 mt-0.5 px-1">
+                                {msg.status === "pending" || msg.id.startsWith("temp-") || msg.id.startsWith("optimistic-") ? (
+                                  <span className="inline-flex items-center text-gray-400" title="Sending...">
+                                    <svg className="w-3.5 h-3.5" viewBox="0 0 18 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M3.5 6.5L7 10L14.5 1.5" />
+                                    </svg>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center text-[#53bdeb]" title="Delivered">
+                                    <svg className="w-3.5 h-3.5" viewBox="0 0 18 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M1 6.5L4.5 10L12 1.5" />
+                                      <path d="M6 6.5L9.5 10L17 1.5" />
+                                    </svg>
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })
@@ -3222,6 +3688,12 @@ function ProductTabs({
 
                   {/* Anchored Bottom Chat Bar in GTS Ash Color */}
                   <div className="pt-3">
+                    {customer?.is_disabled && (
+                      <div className="mb-2 p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 font-medium">
+                        Inquiries disabled: Your account has been disabled{customer.disabled_reason ? ` (${customer.disabled_reason})` : ""}.
+                        {storeInfo?.support_phone && ` Please contact customer support at ${storeInfo.support_phone}.`}
+                      </div>
+                    )}
                     <form
                       onSubmit={handleSendDiscussionMessage}
                       className="bg-[#F2F0EA] border border-gray-300/80 rounded-full p-1.5 pl-4 flex items-center gap-2 shadow-xs transition-all focus-within:border-[#010101] focus-within:ring-1 focus-within:ring-[#010101]/20"
@@ -3230,13 +3702,14 @@ function ProductTabs({
                         type="text"
                         value={discussionInput}
                         onChange={(e) => setDiscussionInput(e.target.value)}
-                        placeholder="Ask a question about this product..."
-                        className="flex-1 bg-transparent text-xs sm:text-sm text-[#010101] placeholder:text-gray-500 focus:outline-none font-sans"
+                        disabled={customer?.is_disabled}
+                        placeholder={customer?.is_disabled ? "Inquiries are disabled for this account..." : "Ask a question about this product..."}
+                        className="flex-1 bg-transparent text-xs sm:text-sm text-[#010101] placeholder:text-gray-500 focus:outline-none font-sans disabled:opacity-50"
                       />
 
                       <button
                         type="submit"
-                        disabled={isSendingDiscussion || !discussionInput.trim()}
+                        disabled={customer?.is_disabled || isSendingDiscussion || !discussionInput.trim()}
                         className="w-10 h-10 rounded-full bg-[#010101] hover:bg-black text-white flex items-center justify-center transition-all disabled:opacity-35 disabled:pointer-events-none cursor-pointer shrink-0 shadow-sm active:scale-95"
                         title="Send Question"
                       >

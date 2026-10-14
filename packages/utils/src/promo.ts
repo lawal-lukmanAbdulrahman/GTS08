@@ -11,6 +11,7 @@ export function normalizePromoCode(input: unknown): string | null {
 }
 
 export interface PromoRow {
+  id?: string;
   code: string;
   discount_type: "percentage" | "fixed_amount";
   discount_value: number;
@@ -20,6 +21,11 @@ export interface PromoRow {
   starts_at: string;
   expires_at: string | null;
   is_active: boolean;
+  target_type?: "all" | "specific_customers";
+  customer_ids?: string[];
+  product_scope?: "all" | "specific_products";
+  product_ids?: string[];
+  max_uses_per_customer?: number | null;
 }
 
 export type PromoResult = { ok: true; discount: number } | { ok: false; reason: "INVALID_PROMO" } | { ok: false; reason: "MIN_ORDER"; shortBy: number };
@@ -42,15 +48,61 @@ export function computePromoDiscount(promo: PromoRow, subtotal: number, now: Dat
   return { ok: true, discount: Math.min(raw, subtotal) };
 }
 
+export interface CartItemForPromo {
+  product_id?: string;
+  price: number;
+  quantity: number;
+}
+
+export function computePromoDiscountWithScope(
+  promo: PromoRow,
+  subtotal: number,
+  items?: CartItemForPromo[],
+  now: Date = new Date()
+): PromoResult {
+  const started = new Date(promo.starts_at).getTime() <= now.getTime();
+  const notExpired = promo.expires_at === null || new Date(promo.expires_at).getTime() >= now.getTime();
+  const hasUses = promo.max_uses === null || promo.used_count < promo.max_uses;
+  if (!promo.is_active || !started || !notExpired || !hasUses || subtotal <= 0) return { ok: false, reason: "INVALID_PROMO" };
+
+  const min = promo.min_order_amount ?? 0;
+  if (subtotal < min) return { ok: false, reason: "MIN_ORDER", shortBy: min - subtotal };
+
+  if (promo.product_scope === "specific_products" && promo.product_ids && promo.product_ids.length > 0 && items && items.length > 0) {
+    const eligibleIds = new Set(promo.product_ids);
+    const eligibleSubtotal = items
+      .filter((it) => it.product_id && eligibleIds.has(it.product_id))
+      .reduce((sum, it) => sum + (it.price * it.quantity), 0);
+
+    if (eligibleSubtotal <= 0) {
+      return { ok: false, reason: "INVALID_PROMO" };
+    }
+
+    const raw = promo.discount_type === "percentage"
+      ? Math.floor((eligibleSubtotal * promo.discount_value) / 100)
+      : Math.min(promo.discount_value, eligibleSubtotal);
+
+    return { ok: true, discount: Math.min(raw, eligibleSubtotal) };
+  }
+
+  const raw = promo.discount_type === "percentage" ? Math.floor((subtotal * promo.discount_value) / 100) : promo.discount_value;
+  return { ok: true, discount: Math.min(raw, subtotal) };
+}
+
 export interface PromoInput {
   code?: string;
   discount_type?: "percentage" | "fixed_amount";
   discount_value?: number;
-  min_order_amount?: number;
+  min_order_amount?: number | null;
   max_uses?: number | null;
   starts_at?: string;
   expires_at?: string | null;
   is_active?: boolean;
+  target_type?: "all" | "specific_customers";
+  customer_ids?: string[];
+  product_scope?: "all" | "specific_products";
+  product_ids?: string[];
+  max_uses_per_customer?: number | null;
 }
 
 export type PromoInputResult = { ok: true; value: PromoInput } | { ok: false; errors: Record<string, string> };
@@ -89,8 +141,13 @@ export function validatePromoInput(input: unknown, mode: "create" | "update"): P
   }
 
   if ("min_order_amount" in b) {
-    if (!isWhole(b.min_order_amount) || b.min_order_amount < 0 || b.min_order_amount > MAX_FIXED_KOBO) errors.min_order_amount = "Enter a whole amount of 0 or more.";
-    else value.min_order_amount = b.min_order_amount;
+    if (b.min_order_amount === null || b.min_order_amount === undefined) {
+      value.min_order_amount = null;
+    } else if (!isWhole(b.min_order_amount) || b.min_order_amount < 0 || b.min_order_amount > MAX_FIXED_KOBO) {
+      errors.min_order_amount = "Enter a whole amount of 0 or more.";
+    } else {
+      value.min_order_amount = b.min_order_amount;
+    }
   }
 
   if ("max_uses" in b) {
@@ -118,6 +175,48 @@ export function validatePromoInput(input: unknown, mode: "create" | "update"): P
   if ("is_active" in b) {
     if (typeof b.is_active !== "boolean") errors.is_active = "Active must be true or false.";
     else value.is_active = b.is_active;
+  }
+
+  if ("target_type" in b) {
+    if (b.target_type !== "all" && b.target_type !== "specific_customers") {
+      errors.target_type = "Choose all or specific customers.";
+    } else {
+      value.target_type = b.target_type;
+    }
+  }
+
+  if ("customer_ids" in b) {
+    if (!Array.isArray(b.customer_ids)) {
+      errors.customer_ids = "customer_ids must be an array of IDs.";
+    } else {
+      value.customer_ids = b.customer_ids.filter((id: unknown): id is string => typeof id === "string" && id.trim().length > 0);
+    }
+  }
+
+  if ("product_scope" in b) {
+    if (b.product_scope !== "all" && b.product_scope !== "specific_products") {
+      errors.product_scope = "Choose all or specific products.";
+    } else {
+      value.product_scope = b.product_scope;
+    }
+  }
+
+  if ("product_ids" in b) {
+    if (!Array.isArray(b.product_ids)) {
+      errors.product_ids = "product_ids must be an array of IDs.";
+    } else {
+      value.product_ids = b.product_ids.filter((id: unknown): id is string => typeof id === "string" && id.trim().length > 0);
+    }
+  }
+
+  if ("max_uses_per_customer" in b) {
+    if (b.max_uses_per_customer === null || b.max_uses_per_customer === undefined) {
+      value.max_uses_per_customer = null;
+    } else if (!isWhole(b.max_uses_per_customer) || b.max_uses_per_customer < 1) {
+      errors.max_uses_per_customer = "Enter a whole number of 1 or more, or leave it unlimited.";
+    } else {
+      value.max_uses_per_customer = b.max_uses_per_customer;
+    }
   }
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };

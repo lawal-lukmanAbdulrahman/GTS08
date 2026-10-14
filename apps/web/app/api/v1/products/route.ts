@@ -8,6 +8,7 @@ import { serverError, dbError } from "../_lib/http";
 import { invalidateStorefrontCaches } from "../_lib/storefront-cache";
 import { publicCache } from "../_lib/public-cache";
 import { logActivity } from "../_lib/activity";
+import { isDbUniqueViolation } from "../_lib/validate";
 
 export async function GET(request: NextRequest) {
   try {
@@ -47,10 +48,16 @@ export async function GET(request: NextRequest) {
         brand,
         sub_category,
         has_transparent_bg,
+        channel,
         short_description,
         description,
         material,
         base_price,
+        price_retailer,
+        price_wholesaler,
+        price_distributor,
+        wholesale_min_qty,
+        distributor_min_qty,
         compare_at_price,
         cost_price,
         status,
@@ -68,6 +75,14 @@ export async function GET(request: NextRequest) {
         { count: "exact" }
       )
       .eq("is_test", isTest);
+
+    const channelFilter = searchParams.get("channel");
+    if (channelFilter && ["pos", "web"].includes(channelFilter)) {
+      query = query.eq("channel", channelFilter);
+    } else if (!includeAllStatus && !isStaff) {
+      // Storefront default: only web products are shown to public shoppers
+      query = query.eq("channel", "web");
+    }
 
     if (!includeAllStatus) {
       query = query.eq("status", "active");
@@ -196,6 +211,11 @@ export async function GET(request: NextRequest) {
           description: p.description,
           material: p.material,
           base_price: p.base_price,
+          price_retailer: p.price_retailer ?? p.base_price,
+          price_wholesaler: p.price_wholesaler ?? p.base_price,
+          price_distributor: p.price_distributor ?? p.base_price,
+          wholesale_min_qty: p.wholesale_min_qty ?? 5,
+          distributor_min_qty: p.distributor_min_qty ?? 20,
           compare_at_price: p.compare_at_price,
           ...(isStaff
             ? {
@@ -205,6 +225,7 @@ export async function GET(request: NextRequest) {
               }
             : {}),
           status: p.status,
+          channel: p.channel || "web",
           primary_image: primaryImg
             ? {
                 cloudinary_id: primaryImg.cloudinary_public_id,
@@ -275,6 +296,11 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       sku,
       brand,
       base_price,
+      price_retailer,
+      price_wholesaler,
+      price_distributor,
+      wholesale_min_qty,
+      distributor_min_qty,
       compare_at_price,
       cost_price,
       category_id,
@@ -318,6 +344,13 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Name and base_price are required", code: "INVALID_INPUT" }, { status: 400 });
     }
 
+    const parsePriceVal = (v: unknown) => (v !== undefined && v !== null && !isNaN(Number(v)) ? Math.max(0, Math.round(Number(v))) : null);
+    const parsedRetailerPrice = parsePriceVal(price_retailer) ?? parsedBasePrice;
+    const parsedWholesalerPrice = parsePriceVal(price_wholesaler) ?? parsedBasePrice;
+    const parsedDistributorPrice = parsePriceVal(price_distributor) ?? parsedBasePrice;
+    const parsedWholesaleMinQty = wholesale_min_qty !== undefined && !isNaN(Number(wholesale_min_qty)) ? Math.max(2, Math.round(Number(wholesale_min_qty))) : 5;
+    const parsedDistributorMinQty = distributor_min_qty !== undefined && !isNaN(Number(distributor_min_qty)) ? Math.max(parsedWholesaleMinQty + 1, Math.round(Number(distributor_min_qty))) : 20;
+
     const finalSlug = sanitisePostStr(slug, 200).toLowerCase().replace(/[^a-z0-9-]/g, "") ||
       (finalName ? finalName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") : `draft-${Date.now()}`);
     const finalSku = sku ? sanitisePostStr(sku, 100) : `GTS-PRD-${Date.now().toString().slice(-6)}`;
@@ -348,21 +381,67 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     const isTest = dataMode === "test";
 
     // Create Product
+    const targetChannel = body.channel === "pos" ? "pos" : "web";
+
+    // Ensure slug uniqueness within current data mode
+    let candidateSlug = finalSlug;
+    let slugAttempts = 0;
+    while (slugAttempts < 100) {
+      const { data: existingSlug } = await serviceClient
+        .from("products")
+        .select("id")
+        .eq("slug", candidateSlug)
+        .eq("is_test", isTest)
+        .maybeSingle();
+
+      if (!existingSlug) break;
+      slugAttempts++;
+      if (slugAttempts === 1 && targetChannel && !candidateSlug.endsWith(`-${targetChannel}`)) {
+        candidateSlug = `${finalSlug}-${targetChannel}`.slice(0, 100);
+      } else {
+        candidateSlug = `${finalSlug}-${slugAttempts + 1}`.slice(0, 100);
+      }
+    }
+    const uniqueSlug = candidateSlug;
+
+    // Ensure SKU uniqueness within current data mode
+    let candidateSku = finalSku;
+    let skuAttempts = 0;
+    while (skuAttempts < 100) {
+      const { data: existingSku } = await serviceClient
+        .from("products")
+        .select("id")
+        .eq("sku", candidateSku)
+        .eq("is_test", isTest)
+        .maybeSingle();
+
+      if (!existingSku) break;
+      skuAttempts++;
+      candidateSku = `${finalSku}-${skuAttempts + 1}`.slice(0, 100);
+    }
+    const uniqueSku = candidateSku;
+
     const cleanDominantColor = body.dominant_color ? String(body.dominant_color).trim().slice(0, 10) : null;
     const prodInsertPayload: any = {
       name: finalName,
-      slug: finalSlug,
-      sku: finalSku,
+      slug: uniqueSlug,
+      sku: uniqueSku,
       brand: cleanBrand || null,
       sub_category: cleanSubCategory || null,
       has_transparent_bg: Boolean(has_transparent_bg),
       base_price: parsedBasePrice ?? 0,
+      price_retailer: parsedRetailerPrice,
+      price_wholesaler: parsedWholesalerPrice,
+      price_distributor: parsedDistributorPrice,
+      wholesale_min_qty: parsedWholesaleMinQty,
+      distributor_min_qty: parsedDistributorMinQty,
       compare_at_price: compare_at_price ? Math.max(0, Math.round(Number(compare_at_price))) : null,
       cost_price: cost_price ? Math.max(0, Math.round(Number(cost_price))) : null,
       category_id: resolvedCategoryId,
       description: description ? String(description).slice(0, 50000) : null,
       short_description: short_description ? String(short_description).slice(0, 500) : (description ? String(description).slice(0, 180) : null),
       status: ["active", "draft", "archived"].includes(status) ? status : "active",
+      channel: targetChannel,
       is_featured: Boolean(is_featured),
       tags: finalTags,
       is_test: isTest,
@@ -376,14 +455,31 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       .select()
       .single();
 
-    if (prodErr && /dominant_color/i.test(prodErr.message)) {
-      delete prodInsertPayload.dominant_color;
+    if (prodErr && /dominant_color|channel/i.test(prodErr.message)) {
+      if (/dominant_color/i.test(prodErr.message)) delete prodInsertPayload.dominant_color;
+      if (/channel/i.test(prodErr.message)) delete prodInsertPayload.channel;
       const retry = await serviceClient.from("products").insert(prodInsertPayload).select().single();
       product = retry.data;
       prodErr = retry.error;
     }
 
+    // Fallback: If a unique constraint on slug is still violated (race condition), retry with unique suffix
+    if (prodErr && isDbUniqueViolation(prodErr) && /slug/i.test(prodErr.message)) {
+      prodInsertPayload.slug = `${uniqueSlug}-${Date.now().toString().slice(-4)}`.slice(0, 100);
+      const retry = await serviceClient.from("products").insert(prodInsertPayload).select().single();
+      if (!retry.error) {
+        product = retry.data;
+        prodErr = null;
+      }
+    }
+
     if (prodErr) {
+      if (isDbUniqueViolation(prodErr)) {
+        return NextResponse.json(
+          { error: "A product with this title or slug already exists.", code: "PRODUCT_EXISTS" },
+          { status: 409 }
+        );
+      }
       return dbError(prodErr, "DATABASE_ERROR", 400);
     }
 
@@ -429,7 +525,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
         size: "Standard",
         color: "Default",
         color_hex: null,
-        sku: `${finalSku}-STD-DEF`,
+        sku: `${uniqueSku}-STD-DEF`,
         image_url: targetHeroImg || null,
         has_transparent_bg: Boolean(has_transparent_bg),
         price_modifier: 0,
@@ -439,7 +535,22 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
     ];
 
     for (const v of effectiveVariants) {
-      const varSku = v.sku ? String(v.sku).trim().slice(0, 150) : `${finalSku}-${v.size || "STD"}-${(v.color || "DEF").slice(0, 3).toUpperCase()}`;
+      const baseVarSku = v.sku ? String(v.sku).trim().slice(0, 150) : `${uniqueSku}-${v.size || "STD"}-${(v.color || "DEF").slice(0, 3).toUpperCase()}`;
+
+      let candidateVarSku = baseVarSku;
+      let varSkuAttempts = 0;
+      while (varSkuAttempts < 50) {
+        const { data: existingVar } = await serviceClient
+          .from("product_variants")
+          .select("id")
+          .eq("sku", candidateVarSku)
+          .eq("is_test", isTest)
+          .maybeSingle();
+
+        if (!existingVar) break;
+        varSkuAttempts++;
+        candidateVarSku = `${baseVarSku}-${varSkuAttempts}`;
+      }
 
       const { data: variantData } = await serviceClient
         .from("product_variants")
@@ -448,11 +559,12 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
           size: v.size ? String(v.size).trim().slice(0, 20) : null,
           color: v.color ? String(v.color).trim().slice(0, 50) : null,
           color_hex: v.color_hex ? String(v.color_hex).slice(0, 7) : null,
-          sku: varSku,
+          sku: candidateVarSku,
           image_url: v.variant_image_url || v.image_url || null,
           has_transparent_bg: Boolean(v.has_transparent_bg),
           price_modifier: v.price_modifier || 0,
           is_active: v.is_active !== false,
+          is_test: isTest,
         })
         .select()
         .single();
@@ -568,6 +680,27 @@ export const PUT = withIdempotency(async function PUT(request: NextRequest) {
     const cleanSubCat = sanitiseStr(body.sub_category, 100);
     if (body.sub_category !== undefined) updatePayload.sub_category = cleanSubCat || null;
     if (base_price !== undefined) updatePayload.base_price = Math.max(0, Math.round(Number(base_price) || 0));
+    if (body.price_retailer !== undefined) {
+      updatePayload.price_retailer = body.price_retailer !== null && !isNaN(Number(body.price_retailer))
+        ? Math.max(0, Math.round(Number(body.price_retailer)))
+        : null;
+    }
+    if (body.price_wholesaler !== undefined) {
+      updatePayload.price_wholesaler = body.price_wholesaler !== null && !isNaN(Number(body.price_wholesaler))
+        ? Math.max(0, Math.round(Number(body.price_wholesaler)))
+        : null;
+    }
+    if (body.price_distributor !== undefined) {
+      updatePayload.price_distributor = body.price_distributor !== null && !isNaN(Number(body.price_distributor))
+        ? Math.max(0, Math.round(Number(body.price_distributor)))
+        : null;
+    }
+    if (body.wholesale_min_qty !== undefined) {
+      updatePayload.wholesale_min_qty = Math.max(2, Math.round(Number(body.wholesale_min_qty) || 5));
+    }
+    if (body.distributor_min_qty !== undefined) {
+      updatePayload.distributor_min_qty = Math.max(3, Math.round(Number(body.distributor_min_qty) || 20));
+    }
     if (compare_at_price !== undefined) updatePayload.compare_at_price = compare_at_price ? Math.max(0, Math.round(Number(compare_at_price))) : null;
     if (cost_price !== undefined) updatePayload.cost_price = cost_price ? Math.max(0, Math.round(Number(cost_price))) : null;
     if (category_id !== undefined) updatePayload.category_id = category_id || null;
@@ -607,6 +740,10 @@ export const PUT = withIdempotency(async function PUT(request: NextRequest) {
       }
     }
 
+    if (body.channel && ["pos", "web"].includes(String(body.channel))) {
+      updatePayload.channel = String(body.channel);
+    }
+
     let { data: updatedProduct, error: updateErr } = await serviceClient
       .from("products")
       .update(updatePayload)
@@ -614,8 +751,9 @@ export const PUT = withIdempotency(async function PUT(request: NextRequest) {
       .select()
       .single();
 
-    if (updateErr && /dominant_color/i.test(updateErr.message)) {
-      delete updatePayload.dominant_color;
+    if (updateErr && /dominant_color|channel/i.test(updateErr.message)) {
+      if (/dominant_color/i.test(updateErr.message)) delete updatePayload.dominant_color;
+      if (/channel/i.test(updateErr.message)) delete updatePayload.channel;
       const retry = await serviceClient.from("products").update(updatePayload).eq("id", id).select().single();
       updatedProduct = retry.data;
       updateErr = retry.error;

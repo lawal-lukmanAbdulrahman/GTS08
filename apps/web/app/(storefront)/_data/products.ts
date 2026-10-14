@@ -46,6 +46,11 @@ export interface ProductItem {
   rawBasePrice?: number;
   discountPercent?: number;
   variants?: ProductVariantItem[];
+  priceRetailer?: number;
+  priceWholesaler?: number;
+  priceDistributor?: number;
+  wholesaleMinQty?: number;
+  distributorMinQty?: number;
   availableStock?: number;
   inStock?: boolean;
 }

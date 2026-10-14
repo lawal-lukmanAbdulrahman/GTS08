@@ -18,7 +18,7 @@ export async function GET(
     // A valid slug is alphanumeric + hyphens (max 200 chars).
     // A valid UUID is the standard 8-4-4-4-12 hex format.
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,198}[a-z0-9]$|^[a-z0-9]$/i;
+    const SLUG_RE = /^[a-z0-9][a-z0-9-_]{0,198}[a-z0-9]$|^[a-z0-9]$/i;
 
     const isUuid = UUID_RE.test(slug);
     const isValidSlug = SLUG_RE.test(slug);
@@ -46,14 +46,35 @@ export async function GET(
     if (isUuid) {
       query = query.eq("id", slug);
     } else {
-      query = query.eq("slug", slug);
+      query = query.or(`slug.ilike.${slug},sku.ilike.${slug}`);
     }
 
-    // The public sees active products only; staff can open a draft to edit it.
+    // The public sees active web products only; staff can open any product to edit it.
     const staff = await optionalStaff(request);
-    if (!staff) query = query.eq("status", "active");
+    if (!staff) query = query.eq("status", "active").or("channel.eq.web,channel.is.null");
 
-    const { data: product, error } = await query.maybeSingle();
+    let { data: product, error } = await query.maybeSingle();
+
+    if (!product && !isUuid) {
+      let fallbackQuery = serviceClient
+        .from("products")
+        .select(
+          `
+          *,
+          category:categories(id, name, slug, parent:parent_id(id, name, slug)),
+          images:product_images(*),
+          variants:product_variants(*, inventory(quantity, reserved_quantity))
+        `
+        )
+        .ilike("name", slug);
+
+      if (!staff) fallbackQuery = fallbackQuery.eq("status", "active").or("channel.eq.web,channel.is.null");
+      const fbResult = await fallbackQuery.maybeSingle();
+      if (fbResult.data) {
+        product = fbResult.data;
+        error = null;
+      }
+    }
 
     if (error || !product) {
       return NextResponse.json(

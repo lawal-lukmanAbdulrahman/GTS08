@@ -19,13 +19,18 @@ function errorsFor(app) {
   let out;
   const isWin = process.platform === "win32";
   try {
-    out = execFileSync(isWin ? "npx.cmd" : "npx", ["eslint", ".", "--format", "json", "--no-error-on-unmatched-pattern"], { cwd: path.join(ROOT, app), maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] }).toString();
+    out = execFileSync(
+      isWin ? "npx.cmd" : "npx",
+      ["eslint", ".", "--format", "json", "--no-error-on-unmatched-pattern"],
+      { cwd: path.join(ROOT, app), maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"], shell: isWin }
+    ).toString();
   } catch (e) {
     out = e.stdout ? e.stdout.toString() : "[]"; // eslint exits 1 when there are errors; the JSON is still on stdout
   }
   const counts = {};
   for (const file of JSON.parse(out || "[]")) {
-    if (file.errorCount > 0) counts[path.relative(ROOT, file.filePath)] = file.errorCount;
+    const rel = path.relative(ROOT, file.filePath).split(path.sep).join("/");
+    if (file.errorCount > 0) counts[rel] = file.errorCount;
   }
   return counts;
 }

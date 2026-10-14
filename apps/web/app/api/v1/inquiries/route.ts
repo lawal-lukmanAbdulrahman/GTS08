@@ -270,6 +270,34 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
 
     const serviceClient = createServiceClient();
 
+    // Check if user account is disabled or deleted
+    const { data: userCheck } = await serviceClient
+      .from("users")
+      .select("is_disabled, disabled_reason, deleted_at")
+      .eq("id", authUser.id)
+      .maybeSingle();
+
+    if (userCheck?.deleted_at) {
+      return NextResponse.json({ error: "Account does not exist.", code: "ACCOUNT_NOT_FOUND" }, { status: 403 });
+    }
+
+    if (userCheck?.is_disabled) {
+      const { data: settings } = await serviceClient
+        .from("settings")
+        .select("support_phone")
+        .eq("id", "00000000-0000-0000-0000-000000000001")
+        .maybeSingle();
+      const phone = settings?.support_phone || "customer support";
+      return NextResponse.json(
+        {
+          error: `Your account is disabled (${userCheck.disabled_reason || "Administrative hold"}). Inquiries are not allowed. Please contact customer support at ${phone}.`,
+          code: "ACCOUNT_DISABLED",
+          supportPhone: phone,
+        },
+        { status: 403 }
+      );
+    }
+
     // 1. Check if user already has an open/in_progress inquiry for this product
     const { data: existingTickets } = await serviceClient
       .from("support_tickets")
@@ -338,28 +366,31 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       };
 
       const channel = serviceClient.channel(`inquiry_${ticketId}`);
-      channel.subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          channel.send({
-            type: "broadcast",
-            event: "new_message",
-            payload: msgPayload,
-          });
-        }
-      });
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          try { serviceClient.removeChannel(channel); } catch {}
+          resolve();
+        }, 500);
 
-      const adminChannel = serviceClient.channel("admin_inquiries");
-      adminChannel.subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          adminChannel.send({
-            type: "broadcast",
-            event: "new_inquiry_message",
-            payload: {
-              ticketId,
-              message: msgPayload,
-            },
-          });
-        }
+        channel.subscribe((status: string) => {
+          if (status === "SUBSCRIBED") {
+            channel
+              .send({
+                type: "broadcast",
+                event: "new_message",
+                payload: msgPayload,
+              })
+              .finally(() => {
+                clearTimeout(timer);
+                try { serviceClient.removeChannel(channel); } catch {}
+                resolve();
+              });
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            clearTimeout(timer);
+            try { serviceClient.removeChannel(channel); } catch {}
+            resolve();
+          }
+        });
       });
     } catch (realtimeErr) {
       console.warn("Failed to broadcast message to realtime channel:", realtimeErr);

@@ -2,6 +2,7 @@
 
 import { API_BASE } from "../../lib/api-base";
 import { useEffect, useState } from "react";
+import CostPriceRequiredModal from "./cost-price-required-modal";
 
 export interface VariantRow {
   size: string;
@@ -23,9 +24,15 @@ export interface ProductFormData {
   category_name: string;
   sub_category: string;
   base_price_naira: string;
+  retailer_price_naira?: string;
+  wholesaler_price_naira?: string;
+  distributor_price_naira?: string;
+  wholesale_min_qty?: number;
+  distributor_min_qty?: number;
   compare_at_naira: string;
   cost_price_naira: string;
   status: "active" | "draft" | "archived";
+  channel?: "pos" | "web";
   is_featured: boolean;
   image_url: string;
   short_description: string;
@@ -64,9 +71,15 @@ export default function ProductFormModal({
   const [slug, setSlug] = useState("");
   const [sku, setSku] = useState("");
   const [brand, setBrand] = useState("GTS");
+  const [channel, setChannel] = useState<"pos" | "web">("pos");
   const [categoryName, setCategoryName] = useState("Fashion");
   const [subCategory, setSubCategory] = useState("Men's Clothing");
   const [basePriceNaira, setBasePriceNaira] = useState("");
+  const [retailerPriceNaira, setRetailerPriceNaira] = useState("");
+  const [wholesalerPriceNaira, setWholesalerPriceNaira] = useState("");
+  const [distributorPriceNaira, setDistributorPriceNaira] = useState("");
+  const [wholesaleMinQty, setWholesaleMinQty] = useState("5");
+  const [distributorMinQty, setDistributorMinQty] = useState("20");
   const [compareAtNaira, setCompareAtNaira] = useState("");
   const [costPriceNaira, setCostPriceNaira] = useState("");
   const [status, setStatus] = useState<"active" | "draft" | "archived">("active");
@@ -85,6 +98,7 @@ export default function ProductFormModal({
 
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [showCostPriceModal, setShowCostPriceModal] = useState(false);
 
   useEffect(() => {
     if (initialData) {
@@ -92,9 +106,15 @@ export default function ProductFormModal({
       setSlug(initialData.slug || "");
       setSku(initialData.sku || "");
       setBrand(initialData.brand || "GTS");
+      setChannel(initialData.channel || "pos");
       setCategoryName(initialData.category_name || "Fashion");
       setSubCategory(initialData.sub_category || "");
       setBasePriceNaira(initialData.base_price_naira || "");
+      setRetailerPriceNaira(initialData.retailer_price_naira || initialData.base_price_naira || "");
+      setWholesalerPriceNaira(initialData.wholesaler_price_naira || initialData.base_price_naira || "");
+      setDistributorPriceNaira(initialData.distributor_price_naira || initialData.base_price_naira || "");
+      setWholesaleMinQty(String(initialData.wholesale_min_qty || 5));
+      setDistributorMinQty(String(initialData.distributor_min_qty || 20));
       setCompareAtNaira(initialData.compare_at_naira || "");
       setCostPriceNaira(initialData.cost_price_naira || "");
       setStatus(initialData.status || "active");
@@ -116,9 +136,15 @@ export default function ProductFormModal({
     setSlug("");
     setSku("");
     setBrand("GTS");
+    setChannel("pos");
     setCategoryName("Fashion");
     setSubCategory("Men's Clothing");
     setBasePriceNaira("");
+    setRetailerPriceNaira("");
+    setWholesalerPriceNaira("");
+    setDistributorPriceNaira("");
+    setWholesaleMinQty("5");
+    setDistributorMinQty("20");
     setCompareAtNaira("");
     setCostPriceNaira("");
     setStatus("active");
@@ -181,16 +207,39 @@ export default function ProductFormModal({
     setVariants(next);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const executeSave = async (overrideCost?: string) => {
     setErrorMsg("");
+
+    const baseNumVal = parseFloat(basePriceNaira) || 0;
+    const retailerNum = parseFloat(retailerPriceNaira) || 0;
+    const wholesalerNum = parseFloat(wholesalerPriceNaira) || 0;
+    const distributorNum = parseFloat(distributorPriceNaira) || 0;
+
+    const currentCostStr = overrideCost !== undefined ? overrideCost : costPriceNaira;
+    const currentCostNum = parseFloat(currentCostStr) || 0;
 
     if (!name.trim()) {
       setErrorMsg("Product name is required.");
       return;
     }
-    if (!basePriceNaira || isNaN(baseNum) || baseNum <= 0) {
-      setErrorMsg("Please enter a valid base price.");
+    if (!basePriceNaira || isNaN(baseNumVal) || baseNumVal <= 0) {
+      setErrorMsg("Please enter a valid Customer (Base) price.");
+      return;
+    }
+    if (!retailerPriceNaira || isNaN(retailerNum) || retailerNum <= 0) {
+      setErrorMsg("Please enter a valid Retailer price (1 - 4 pcs).");
+      return;
+    }
+    if (!wholesalerPriceNaira || isNaN(wholesalerNum) || wholesalerNum <= 0) {
+      setErrorMsg("Please enter a valid Wholesaler price (5+ pcs).");
+      return;
+    }
+    if (!distributorPriceNaira || isNaN(distributorNum) || distributorNum <= 0) {
+      setErrorMsg("Please enter a valid Distributor price (20+ pcs).");
+      return;
+    }
+    if (!currentCostStr || isNaN(currentCostNum) || currentCostNum <= 0) {
+      setShowCostPriceModal(true);
       return;
     }
 
@@ -206,9 +255,15 @@ export default function ProductFormModal({
         slug: slug.trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
         sku: sku.trim(),
         brand: brand.trim(),
-        base_price: Math.round(baseNum * 100), // Kobo
+        channel,
+        base_price: Math.round(baseNumVal * 100), // Kobo
+        price_retailer: Math.round(retailerNum * 100),
+        price_wholesaler: Math.round(wholesalerNum * 100),
+        price_distributor: Math.round(distributorNum * 100),
+        wholesale_min_qty: parseInt(wholesaleMinQty, 10) || 5,
+        distributor_min_qty: parseInt(distributorMinQty, 10) || 20,
         compare_at_price: compareAtNaira ? Math.round(parseFloat(compareAtNaira) * 100) : null,
-        cost_price: costNum ? Math.round(costNum * 100) : null,
+        cost_price: Math.round(currentCostNum * 100),
         status,
         is_featured: isFeatured,
         image_url: imageUrl.trim(),
@@ -243,6 +298,11 @@ export default function ProductFormModal({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    executeSave();
   };
 
   if (!isOpen) return null;
@@ -409,52 +469,188 @@ export default function ProductFormModal({
                 </span>
               </label>
             </div>
+
+            {/* Inventory Destination (POS vs Web) */}
+            <div className="flex items-center gap-3 pt-1">
+              <span className="font-bold text-gray-700 dark:text-gray-300 text-xs">Destination:</span>
+              <button
+                type="button"
+                onClick={() => setChannel("pos")}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  channel === "pos"
+                    ? "bg-[#EDCF5D] text-black font-bold ring-1 ring-[#EDCF5D]"
+                    : "bg-gray-100 dark:bg-[#222222] text-gray-600 dark:text-gray-400"
+                }`}
+              >
+                <span>POS (Walk-in)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setChannel("web")}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  channel === "web"
+                    ? "bg-[#EDCF5D] text-black font-bold ring-1 ring-[#EDCF5D]"
+                    : "bg-gray-100 dark:bg-[#222222] text-gray-600 dark:text-gray-400"
+                }`}
+              >
+                <span>Website (Online)</span>
+              </button>
+            </div>
           </div>
 
           {/* 2. Pricing & Live Margin Calculator */}
           <div className="space-y-3 pt-2 border-t border-gray-200 dark:border-[#262626]">
-            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-[#9E7B00] dark:text-[#EDCF5D]">
-              2. Pricing & Live Profit Engine
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-[#9E7B00] dark:text-[#EDCF5D]">
+                2. Bulk & Tier Pricing Engine
+              </h3>
+              <span className="text-[10px] text-gray-400 font-mono">All 4 Tiers Required</span>
+            </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">
-                  Base Price (₦) *
-                </label>
+            {/* 4-Tier Pricing Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {/* Tier 1: Customer (Base) Price */}
+              <div className="p-2.5 rounded-lg bg-gray-50 dark:bg-[#141414] border border-gray-200 dark:border-[#2A2A2A]">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                    Customer (₦) *
+                  </label>
+                  <span className="text-[9px] text-gray-400 font-mono">1 Item</span>
+                </div>
                 <input
                   type="number"
+                  step="0.01"
                   required
                   value={basePriceNaira}
-                  onChange={(e) => setBasePriceNaira(e.target.value)}
-                  placeholder="32400"
-                  className="w-full px-3 py-2 rounded-lg bg-gray-50 dark:bg-[#141414] border border-gray-200 dark:border-[#2A2A2A] text-gray-900 dark:text-white font-mono font-bold placeholder-gray-400 focus:outline-none focus:border-[#EDCF5D]"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setBasePriceNaira(val);
+                    if (!retailerPriceNaira || retailerPriceNaira === basePriceNaira) setRetailerPriceNaira(val);
+                  }}
+                  placeholder="5000"
+                  className="w-full px-2.5 py-1.5 rounded-md bg-white dark:bg-[#1C1C1C] border border-gray-200 dark:border-[#333] text-gray-900 dark:text-white font-mono font-bold text-xs focus:outline-none focus:border-[#EDCF5D]"
                 />
+                <p className="text-[9px] text-gray-400 mt-1">Single-item retail</p>
               </div>
 
+              {/* Tier 2: Retailer Price */}
+              <div className="p-2.5 rounded-lg bg-gray-50 dark:bg-[#141414] border border-gray-200 dark:border-[#2A2A2A]">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                    Retailer (₦) *
+                  </label>
+                  <span className="text-[9px] text-gray-400 font-mono">1 – 4 pcs</span>
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={retailerPriceNaira}
+                  onChange={(e) => setRetailerPriceNaira(e.target.value)}
+                  placeholder="5000"
+                  className="w-full px-2.5 py-1.5 rounded-md bg-white dark:bg-[#1C1C1C] border border-gray-200 dark:border-[#333] text-gray-900 dark:text-white font-mono font-bold text-xs focus:outline-none focus:border-[#EDCF5D]"
+                />
+                <p className="text-[9px] text-gray-400 mt-1">Small bulk / Retailer</p>
+              </div>
+
+              {/* Tier 3: Wholesaler Price */}
+              <div className="p-2.5 rounded-lg bg-gray-50 dark:bg-[#141414] border border-gray-200 dark:border-[#2A2A2A]">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                    Wholesaler (₦) *
+                  </label>
+                  <span className="text-[9px] text-amber-500 font-bold font-mono">
+                    {wholesaleMinQty || "5"}+ pcs
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={wholesalerPriceNaira}
+                  onChange={(e) => setWholesalerPriceNaira(e.target.value)}
+                  placeholder="4700"
+                  className="w-full px-2.5 py-1.5 rounded-md bg-white dark:bg-[#1C1C1C] border border-gray-200 dark:border-[#333] text-gray-900 dark:text-white font-mono font-bold text-xs focus:outline-none focus:border-[#EDCF5D]"
+                />
+                <p className="text-[9px] text-gray-400 mt-1">Wholesale bulk rate</p>
+              </div>
+
+              {/* Tier 4: Distributor Price */}
+              <div className="p-2.5 rounded-lg bg-gray-50 dark:bg-[#141414] border border-gray-200 dark:border-[#2A2A2A]">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                    Distributor (₦) *
+                  </label>
+                  <span className="text-[9px] text-emerald-500 font-bold font-mono">
+                    {distributorMinQty || "20"}+ pcs
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={distributorPriceNaira}
+                  onChange={(e) => setDistributorPriceNaira(e.target.value)}
+                  placeholder="4000"
+                  className="w-full px-2.5 py-1.5 rounded-md bg-white dark:bg-[#1C1C1C] border border-gray-200 dark:border-[#333] text-gray-900 dark:text-white font-mono font-bold text-xs focus:outline-none focus:border-[#EDCF5D]"
+                />
+                <p className="text-[9px] text-gray-400 mt-1">Direct distributor rate</p>
+              </div>
+            </div>
+
+            {/* Thresholds & Compare/Cost Prices */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
-                <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">
                   Compare At Price (₦)
                 </label>
                 <input
                   type="number"
                   value={compareAtNaira}
                   onChange={(e) => setCompareAtNaira(e.target.value)}
-                  placeholder="64800"
-                  className="w-full px-3 py-2 rounded-lg bg-gray-50 dark:bg-[#141414] border border-gray-200 dark:border-[#2A2A2A] text-gray-900 dark:text-white font-mono placeholder-gray-400 focus:outline-none focus:border-[#EDCF5D]"
+                  placeholder="6500"
+                  className="w-full px-2.5 py-1.5 rounded-md bg-gray-50 dark:bg-[#141414] border border-gray-200 dark:border-[#2A2A2A] text-gray-900 dark:text-white font-mono text-xs placeholder-gray-400 focus:outline-none focus:border-[#EDCF5D]"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">
-                  Cost Price (₦) [Admin Only]
+                <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  Cost Price (₦) [Staff Only]
                 </label>
                 <input
                   type="number"
                   value={costPriceNaira}
                   onChange={(e) => setCostPriceNaira(e.target.value)}
-                  placeholder="13600"
-                  className="w-full px-3 py-2 rounded-lg bg-gray-50 dark:bg-[#141414] border border-gray-200 dark:border-[#2A2A2A] text-gray-900 dark:text-white font-mono placeholder-gray-400 focus:outline-none focus:border-[#EDCF5D]"
+                  placeholder="3500"
+                  className="w-full px-2.5 py-1.5 rounded-md bg-gray-50 dark:bg-[#141414] border border-gray-200 dark:border-[#2A2A2A] text-gray-900 dark:text-white font-mono text-xs placeholder-gray-400 focus:outline-none focus:border-[#EDCF5D]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  Wholesale Min (Qty)
+                </label>
+                <input
+                  type="number"
+                  min="2"
+                  value={wholesaleMinQty}
+                  onChange={(e) => setWholesaleMinQty(e.target.value)}
+                  placeholder="5"
+                  className="w-full px-2.5 py-1.5 rounded-md bg-gray-50 dark:bg-[#141414] border border-gray-200 dark:border-[#2A2A2A] text-gray-900 dark:text-white font-mono text-xs placeholder-gray-400 focus:outline-none focus:border-[#EDCF5D]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  Distributor Min (Qty)
+                </label>
+                <input
+                  type="number"
+                  min="3"
+                  value={distributorMinQty}
+                  onChange={(e) => setDistributorMinQty(e.target.value)}
+                  placeholder="20"
+                  className="w-full px-2.5 py-1.5 rounded-md bg-gray-50 dark:bg-[#141414] border border-gray-200 dark:border-[#2A2A2A] text-gray-900 dark:text-white font-mono text-xs placeholder-gray-400 focus:outline-none focus:border-[#EDCF5D]"
                 />
               </div>
             </div>
@@ -678,6 +874,16 @@ export default function ProductFormModal({
           </button>
         </div>
       </div>
+
+      <CostPriceRequiredModal
+        isOpen={showCostPriceModal}
+        initialValue={costPriceNaira}
+        onClose={() => setShowCostPriceModal(false)}
+        onApplyCostPrice={(val) => {
+          setCostPriceNaira(val);
+          executeSave(val);
+        }}
+      />
     </div>
   );
 }

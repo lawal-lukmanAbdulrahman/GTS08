@@ -14,7 +14,7 @@ const notFound = () => NextResponse.json({ error: "Promo code not found.", code:
 async function load(id: string) {
   const { data, error } = await createServiceClient().from("promos").select(PROMO_COLUMNS).eq("id", id).maybeSingle();
   if (error) throw new Error(error.message);
-  return data as { id: string; code: string; used_count: number } | null;
+  return data as any;
 }
 
 export async function GET(request: NextRequest, { params }: Context) {
@@ -23,8 +23,79 @@ export async function GET(request: NextRequest, { params }: Context) {
   try {
     const { id } = await params;
     if (!isUuid(id)) return notFound();
-    const promo = await load(id);
-    return promo ? NextResponse.json({ data: promo }) : notFound();
+    const client = createServiceClient();
+    const { data: promo, error } = await client.from("promos").select(PROMO_COLUMNS).eq("id", id).maybeSingle();
+    if (error) return serverError(new Error(error.message));
+    if (!promo) return notFound();
+
+    // Load usage history
+    const { data: uses } = await client
+      .from("promo_code_uses")
+      .select("id, promo_id, order_id, customer_id, customer_email, customer_name, discount_applied_kobo, used_at")
+      .eq("promo_id", id)
+      .order("used_at", { ascending: false });
+
+    // Load associated products
+    let products: any[] = [];
+    if (promo.product_ids && Array.isArray(promo.product_ids) && promo.product_ids.length > 0) {
+      const { data: prods } = await client
+        .from("products")
+        .select("id, name, slug, base_price, cost_price, status, images:product_images(cloudinary_public_id, is_primary)")
+        .in("id", promo.product_ids);
+
+      products = (prods || []).map((p: any) => {
+        const primaryImg = p.images?.find((img: any) => img.is_primary) || p.images?.[0];
+        return {
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+          base_price: p.base_price,
+          cost_price: p.cost_price,
+          status: p.status,
+          image_url: primaryImg?.cloudinary_public_id || "/products/denim_jacket.png",
+        };
+      });
+    }
+
+    // Load targeted customers from users table and customers table
+    let targetedCustomers: any[] = [];
+    if (promo.customer_ids && Array.isArray(promo.customer_ids) && promo.customer_ids.length > 0) {
+      const { data: userCusts } = await client
+        .from("users")
+        .select("id, full_name, email, phone")
+        .in("id", promo.customer_ids);
+
+      const foundUserIds = new Set((userCusts || []).map((u: any) => u.id));
+      const missingIds = promo.customer_ids.filter((id: string) => !foundUserIds.has(id));
+
+      let dbCusts: any[] = [];
+      if (missingIds.length > 0) {
+        const { data: custRows } = await client
+          .from("customers")
+          .select("id, user_id, full_name, email, phone")
+          .in("id", missingIds);
+        dbCusts = custRows || [];
+      }
+
+      const allFound = [...(userCusts || []), ...dbCusts];
+      targetedCustomers = allFound.map((c: any) => ({
+        id: c.id,
+        first_name: c.full_name ? c.full_name.split(" ")[0] : null,
+        last_name: c.full_name && c.full_name.split(" ").length > 1 ? c.full_name.split(" ").slice(1).join(" ") : null,
+        full_name: c.full_name || c.email,
+        email: c.email,
+        phone: c.phone || null,
+      }));
+    }
+
+    return NextResponse.json({
+      data: {
+        ...promo,
+        uses: uses || [],
+        products,
+        targeted_customers: targetedCustomers,
+      },
+    });
   } catch (err) {
     return serverError(err);
   }
