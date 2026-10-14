@@ -22,17 +22,14 @@ vi.mock("../app/api/v1/pos/_lib/inventory", () => ({
 }));
 
 // Route Handlers
-import { NextRequest, NextResponse } from "next/server";
-import { GET as getProducts, POST as postProducts, PUT as putProducts, DELETE as deleteProducts } from "../app/api/v1/products/route";
+import { NextRequest } from "next/server";
+import { POST as postProducts, PUT as putProducts, DELETE as deleteProducts } from "../app/api/v1/products/route";
 import { GET as getCategories, POST as postCategories } from "../app/api/v1/categories/route";
 import { PUT as putInventory } from "../app/api/v1/inventory/[id]/route";
-import { GET as getPromos, POST as postPromos } from "../app/api/v1/promos/route";
-import { GET as getAvailablePromos } from "../app/api/v1/promos/available/route";
-import { POST as validatePromo } from "../app/api/v1/promos/validate/route";
-import { GET as getPickupStations, POST as postPickupStations } from "../app/api/v1/pickup-stations/route";
+import { POST as postPromos } from "../app/api/v1/promos/route";
+import { POST as postPickupStations } from "../app/api/v1/pickup-stations/route";
 import { GET as getAdminCustomers } from "../app/api/v1/admin/customers/route";
 import { POST as disableCustomer } from "../app/api/v1/admin/customers/[id]/disable/route";
-import { GET as getOrders } from "../app/api/v1/orders/route";
 import { GET as getPosOrders, POST as postPosOrders } from "../app/api/v1/pos/orders/route";
 import { PATCH as patchSettings } from "../app/api/v1/settings/route";
 import { GET as getStaffList, POST as postStaff } from "../app/api/v1/users/staff/route";

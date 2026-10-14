@@ -83,8 +83,8 @@ export default function CreateProductPage() {
   const [retailerPriceNaira, setRetailerPriceNaira] = useState("");
   const [wholesalerPriceNaira, setWholesalerPriceNaira] = useState("");
   const [distributorPriceNaira, setDistributorPriceNaira] = useState("");
-  const [wholesaleMinQty, setWholesaleMinQty] = useState("5");
-  const [distributorMinQty, setDistributorMinQty] = useState("20");
+  const [wholesaleMinQty, _setWholesaleMinQty] = useState("5");
+  const [distributorMinQty, _setDistributorMinQty] = useState("20");
   const [compareAtNaira, setCompareAtNaira] = useState("");
   const [costPriceNaira, setCostPriceNaira] = useState("");
   const [status, setStatus] = useState<"active" | "draft" | "archived">("active");

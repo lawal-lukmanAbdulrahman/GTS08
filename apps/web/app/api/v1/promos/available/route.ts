@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    let productMap: Record<string, { id: string; name: string; image_url: string; base_price: number }> = {};
+    const productMap: Record<string, { id: string; name: string; image_url: string; base_price: number }> = {};
     if (allProductIds.size > 0) {
       const { data: products } = await client
         .from("products")

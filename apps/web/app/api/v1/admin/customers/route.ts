@@ -193,7 +193,6 @@ export async function GET(request: NextRequest) {
 
     // 3. Fetch orders for all matching customers to calculate spent and profit
     const customerIds = customerList.map((c) => c.customerId).filter(Boolean) as string[];
-    const userEmails = customerList.map((c) => c.email).filter(Boolean) as string[];
 
     // Fetch orders
     const ordersQuery = serviceClient
