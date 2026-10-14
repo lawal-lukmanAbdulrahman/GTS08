@@ -85,4 +85,36 @@ describe("Products list", () => {
     expect(screen.getByText("Delete Product Confirmation")).toBeInTheDocument();
     expect(screen.getByText(/Are you sure you want to permanently delete/)).toBeInTheDocument();
   });
+
+  it("opens bulk delete confirmation modal when collective delete button is clicked in toolbar", async () => {
+    serve([
+      product({ id: "p1", name: "Classic Tuxedo" }),
+      product({ id: "p2", name: "Silk Tie" }),
+    ]);
+    render(<ProductsPage />);
+
+    await screen.findByText("Classic Tuxedo");
+    await screen.findByText("Silk Tie");
+
+    // Select the first product
+    fireEvent.click(screen.getByText("Classic Tuxedo"));
+    expect(await screen.findByText("1 Selected")).toBeInTheDocument();
+
+    // The collective delete button in toolbar
+    const deleteSelectedBtn = screen.getByTitle("Delete Selected");
+    expect(deleteSelectedBtn).toBeInTheDocument();
+
+    // Click collective delete
+    fireEvent.click(deleteSelectedBtn);
+
+    // Confirmation dialog should be displayed
+    expect(screen.getByText("Delete Selected Products Confirmation")).toBeInTheDocument();
+    expect(screen.getByText(/Are you sure you want to permanently delete/)).toBeInTheDocument();
+    expect(screen.getByText(/1 selected product/)).toBeInTheDocument();
+
+    // Clicking Cancel closes the modal
+    const cancelBtn = screen.getByRole("button", { name: "Cancel" });
+    fireEvent.click(cancelBtn);
+    expect(screen.queryByText("Delete Selected Products Confirmation")).not.toBeInTheDocument();
+  });
 });

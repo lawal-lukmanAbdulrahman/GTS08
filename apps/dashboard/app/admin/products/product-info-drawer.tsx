@@ -239,6 +239,15 @@ export default function ProductInfoDrawer({
               >
                 {product.status}
               </span>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                  product.channel === "pos"
+                    ? "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+                    : "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+                }`}
+              >
+                {product.channel === "pos" ? "POS (Walk-in)" : "Website (Online)"}
+              </span>
               <span className="text-xs font-mono text-gray-400 dark:text-gray-500">
                 SKU: {product.sku || product.slug}
               </span>
@@ -344,6 +353,50 @@ export default function ProductInfoDrawer({
                         {formatNaira(product.compare_at_price)}
                       </span>
                     )}
+                  </div>
+
+                  {/* 4-Tier Wholesale Pricing Ladder */}
+                  <div className="mt-2 p-3 rounded-xl bg-gray-50 dark:bg-[#1C1C1C] border border-gray-200 dark:border-[#2A2A2A] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#9E7B00] dark:text-[#EDCF5D]">
+                        Bulk & Wholesale Pricing Tiers
+                      </span>
+                      <span className="text-[9px] font-mono text-gray-400">POS & Online</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="p-2 rounded-lg bg-white dark:bg-[#141414] border border-gray-100 dark:border-[#242424]">
+                        <span className="text-[9px] font-mono text-gray-400 block">Customer</span>
+                        <span className="text-xs font-bold text-gray-900 dark:text-white block mt-0.5">
+                          {formatNaira(product.base_price)}
+                        </span>
+                        <span className="text-[9px] text-gray-400">1 unit</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-white dark:bg-[#141414] border border-gray-100 dark:border-[#242424]">
+                        <span className="text-[9px] font-mono text-gray-400 block">Retailer</span>
+                        <span className="text-xs font-bold text-gray-900 dark:text-white block mt-0.5">
+                          {formatNaira(product.price_retailer ?? product.base_price)}
+                        </span>
+                        <span className="text-[9px] text-gray-400">1 – 4 pcs</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30">
+                        <span className="text-[9px] font-mono text-amber-600 dark:text-amber-400 font-bold block">Wholesaler</span>
+                        <span className="text-xs font-bold text-amber-700 dark:text-amber-300 block mt-0.5">
+                          {formatNaira(product.price_wholesaler ?? product.base_price)}
+                        </span>
+                        <span className="text-[9px] text-amber-600/80 dark:text-amber-400/80">
+                          {product.wholesale_min_qty || 5}+ pcs
+                        </span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-800/30">
+                        <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-bold block">Distributor</span>
+                        <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 block mt-0.5">
+                          {formatNaira(product.price_distributor ?? product.base_price)}
+                        </span>
+                        <span className="text-[9px] text-emerald-600/80 dark:text-emerald-400/80">
+                          {product.distributor_min_qty || 20}+ pcs
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Storefront Star Rating Row */}

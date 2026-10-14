@@ -7,24 +7,24 @@
     "ctaLabel": "Visit Collection",
     "ctaLink": "/shop",
     "isActive": true,
-    "updatedAt": "2026-09-29T16:46:44.725Z",
+    "updatedAt": "2026-10-14T00:00:59.632+00:00",
     "status": "active",
-    "createdAt": "2026-09-28T11:30:10.317Z",
+    "createdAt": "2026-10-14T12:33:00.809Z",
     "rebroadcastedAt": "2026-09-27T13:46:54.783Z",
     "analytics": {
-      "impressions": 2,
+      "impressions": 4,
       "uniqueVisitors": 1,
-      "avgAttentionSeconds": 203.4,
+      "avgAttentionSeconds": 174.9,
       "clicks": 0,
       "ctrPct": 0,
-      "dismissals": 3,
-      "desktopPct": 33,
-      "mobilePct": 67,
+      "dismissals": 4,
+      "desktopPct": 75,
+      "mobilePct": 25,
       "retentionBreakdown": {
         "under2s": 0,
-        "twoTo5s": 33,
-        "fiveTo10s": 33,
-        "over10s": 33
+        "twoTo5s": 25,
+        "fiveTo10s": 25,
+        "over10s": 50
       }
     }
   }

@@ -4,6 +4,7 @@ import { createServiceClient } from "@gts/database";
 import { DELIVERY_FEE_KOBO, resolveCartLines } from "../../_lib/checkout-cart";
 import { variantAvailable } from "../../pos/_lib/stock-status";
 import { serverError } from "../../_lib/http";
+import { resolveTierPrice } from "@gts/utils";
 
 interface VariantRow {
   id: string;
@@ -12,7 +13,20 @@ interface VariantRow {
   price_modifier: number;
   is_active: boolean;
   inventory: { quantity: number; reserved_quantity: number } | null;
-  product: { id: string; name: string; slug: string; base_price: number; status: string; primary_image?: unknown } | null;
+  product: {
+    id: string;
+    name: string;
+    slug: string;
+    base_price: number;
+    price_retailer?: number | null;
+    price_wholesaler?: number | null;
+    price_distributor?: number | null;
+    wholesale_min_qty?: number;
+    distributor_min_qty?: number;
+    status: string;
+    channel?: string;
+    primary_image?: unknown;
+  } | null;
 }
 
 /**
@@ -39,14 +53,14 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await client
       .from("product_variants")
-      .select("id, size, color, price_modifier, is_active, inventory(quantity, reserved_quantity), product:products(id, name, slug, base_price, status)")
+      .select("id, size, color, price_modifier, is_active, inventory(quantity, reserved_quantity), product:products(id, name, slug, base_price, price_retailer, price_wholesaler, price_distributor, wholesale_min_qty, distributor_min_qty, status, channel)")
       .in("id", resolved.items.map((i) => i.variant_id));
     if (error) return serverError(new Error(error.message));
 
     const byId = new Map(((data || []) as unknown as VariantRow[]).map((v) => [v.id, v]));
     const gone = resolved.items.filter((i) => {
       const v = byId.get(i.variant_id);
-      return !v || !v.is_active || !v.product || v.product.status !== "active";
+      return !v || !v.is_active || !v.product || v.product.status !== "active" || (v.product.channel && v.product.channel !== "web");
     });
     if (gone.length > 0) {
       return NextResponse.json(
@@ -58,7 +72,8 @@ export async function POST(request: NextRequest) {
     let subtotal = 0;
     const lines = resolved.items.map((i) => {
       const v = byId.get(i.variant_id)!;
-      const unitPrice = v.product!.base_price + v.price_modifier;
+      const tiered = resolveTierPrice(v.product!, i.quantity);
+      const unitPrice = tiered.unitPrice + v.price_modifier;
       const available = v.inventory ? variantAvailable(v.inventory) : 0;
       subtotal += unitPrice * i.quantity;
       return {

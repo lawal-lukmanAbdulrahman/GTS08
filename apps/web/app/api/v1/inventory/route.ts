@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
     const lowStockOnly = searchParams.get("low_stock") === "true";
     const categorySlug = searchParams.get("category");
     const brand = searchParams.get("brand");
+    const channel = searchParams.get("channel");
 
     const serviceClient = createServiceClient();
 
@@ -54,6 +55,7 @@ export async function GET(request: NextRequest) {
             cost_price,
             brand,
             status,
+            channel,
             category:categories(id, name, slug),
             images:product_images(id, cloudinary_public_id, alt_text, is_primary, sort_order, variant_id)
           )
@@ -77,6 +79,9 @@ export async function GET(request: NextRequest) {
           return false;
         }
         if (brand && inv.variant?.product?.brand?.toLowerCase() !== brand.toLowerCase()) {
+          return false;
+        }
+        if (channel && inv.variant?.product?.channel !== channel) {
           return false;
         }
         return true;
@@ -137,6 +142,7 @@ export async function GET(request: NextRequest) {
           product_name: product?.name || "Unknown Product",
           product_slug: product?.slug || "",
           product_status: product?.status || "active",
+          channel: product?.channel || "web",
           brand: product?.brand || "GTS",
           category_name: product?.category?.name || "General",
           category_slug: product?.category?.slug || "general",

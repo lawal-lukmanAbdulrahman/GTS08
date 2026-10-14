@@ -19,11 +19,17 @@ export interface ProductItem {
   sku?: string;
   brand?: string;
   base_price: number;
+  price_retailer?: number;
+  price_wholesaler?: number;
+  price_distributor?: number;
+  wholesale_min_qty?: number;
+  distributor_min_qty?: number;
   compare_at_price?: number;
   cost_price?: number;
   profit_kobo?: number;
   margin_pct?: number;
   status: "active" | "draft" | "archived";
+  channel?: "pos" | "web";
   total_sold: number;
   in_stock: boolean;
   has_low_stock: boolean;
@@ -58,6 +64,7 @@ export default function AdminProductsPage() {
   const [brandFilter, setBrandFilter] = useState("ALL");
   const [stockFilter, setStockFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [channelFilter, setChannelFilter] = useState("ALL");
   const [minPrice, setMinPrice] = useState<string>("");
   const [maxPrice, setMaxPrice] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("newest");
@@ -84,6 +91,8 @@ export default function AdminProductsPage() {
   const [infoProductItem, setInfoProductItem] = useState<ProductItem | null>(null);
   const [deletingProductItem, setDeletingProductItem] = useState<ProductItem | null>(null);
   const [deleteCountdown, setDeleteCountdown] = useState<number>(3);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState<boolean>(false);
+  const [bulkDeleteCountdown, setBulkDeleteCountdown] = useState<number>(3);
 
   // Drafts & Outage Recovery State
   const [_recoveredDraftCount, setRecoveredDraftCount] = useState<number>(0);
@@ -121,6 +130,18 @@ export default function AdminProductsPage() {
     };
   }, [deletingProductItem, deleteCountdown]);
 
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (showBulkDeleteModal && bulkDeleteCountdown > 0) {
+      timer = setInterval(() => {
+        setBulkDeleteCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [showBulkDeleteModal, bulkDeleteCountdown]);
+
   // Click outside to close filter popover
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -156,7 +177,7 @@ export default function AdminProductsPage() {
   // Reset to page 1 whenever filters or search terms change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, categoryFilter, brandFilter, stockFilter, statusFilter, minPrice, maxPrice, sortBy, featuredOnly]);
+  }, [searchQuery, categoryFilter, brandFilter, stockFilter, statusFilter, channelFilter, minPrice, maxPrice, sortBy, featuredOnly]);
 
   const handleSelectAll = () => {
     const pageProductIds = paginatedProducts.map((p) => p.id);
@@ -259,6 +280,11 @@ export default function AdminProductsPage() {
       brand: "GTS",
       category_name: p.category?.name || "Fashion",
       base_price_naira: (p.base_price / 100).toString(),
+      retailer_price_naira: p.price_retailer ? (p.price_retailer / 100).toString() : (p.base_price / 100).toString(),
+      wholesaler_price_naira: p.price_wholesaler ? (p.price_wholesaler / 100).toString() : (p.base_price / 100).toString(),
+      distributor_price_naira: p.price_distributor ? (p.price_distributor / 100).toString() : (p.base_price / 100).toString(),
+      wholesale_min_qty: p.wholesale_min_qty ?? 5,
+      distributor_min_qty: p.distributor_min_qty ?? 20,
       compare_at_naira: p.compare_at_price ? (p.compare_at_price / 100).toString() : "",
       cost_price_naira: p.cost_price ? (p.cost_price / 100).toString() : "",
       status: p.status,
@@ -334,8 +360,18 @@ export default function AdminProductsPage() {
     }
   };
 
-  const handleBulkDelete = async () => {
+  const handleOpenBulkDeleteModal = () => {
     if (selectedProducts.length === 0) return;
+    setShowBulkDeleteModal(true);
+    setBulkDeleteCountdown(3);
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    if (selectedProducts.length === 0) {
+      setShowBulkDeleteModal(false);
+      return;
+    }
+    setShowBulkDeleteModal(false);
     const idsToDelete = [...selectedProducts];
     const prevProducts = [...products];
     setProducts((prev) => prev.filter((p) => !idsToDelete.includes(p.id)));
@@ -356,6 +392,8 @@ export default function AdminProductsPage() {
       alert("Failed to delete selected products. Please check your network connection.");
     }
   };
+
+  const handleBulkDelete = handleOpenBulkDeleteModal;
 
   const handleBulkExport = () => {
     if (selectedProducts.length === 0) return;
@@ -468,6 +506,10 @@ export default function AdminProductsPage() {
           ? p.status !== "draft"
           : p.status === statusFilter;
 
+      const matchesChannel =
+        channelFilter === "ALL" ||
+        (channelFilter === "pos" ? p.channel === "pos" : p.channel !== "pos");
+
       const productNairaPrice = p.base_price > 100000 ? p.base_price / 100 : p.base_price;
       const matchesMinPrice = !minPrice || productNairaPrice >= Number(minPrice);
       const matchesMaxPrice = !maxPrice || productNairaPrice <= Number(maxPrice);
@@ -480,6 +522,7 @@ export default function AdminProductsPage() {
         matchesBrand &&
         matchesStock &&
         matchesStatus &&
+        matchesChannel &&
         matchesMinPrice &&
         matchesMaxPrice &&
         matchesFeatured
@@ -1010,6 +1053,22 @@ export default function AdminProductsPage() {
               </svg>
             </div>
 
+            {/* Channel Select Filter (All Channels, POS, Web) */}
+            <div className="relative">
+              <select
+                value={channelFilter}
+                onChange={(e) => setChannelFilter(e.target.value)}
+                className="appearance-none pl-3.5 pr-8 py-1.5 rounded-xl bg-white dark:bg-[#222222] border border-gray-200 dark:border-[#333333] text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-[#2B2B2B] transition-all cursor-pointer focus:outline-none shadow-2xs"
+              >
+                <option value="ALL">All Channels</option>
+                <option value="pos">POS (Walk-in)</option>
+                <option value="web">Web (Online)</option>
+              </select>
+              <svg className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </div>
+
             {/* Bulk Selection Action Icon Buttons (Appears when checkboxes are selected) */}
             {selectedProducts.length > 0 && (
               <div className="flex items-center gap-2 pl-2.5 border-l border-gray-200 dark:border-[#333333] transition-all">
@@ -1052,7 +1111,10 @@ export default function AdminProductsPage() {
                 {/* Delete Icon Button */}
                 <div className="relative group">
                   <button
+                    type="button"
                     onClick={handleBulkDelete}
+                    title="Delete Selected"
+                    aria-label="Delete Selected"
                     className="w-8 h-8 rounded-xl bg-white dark:bg-[#222222] border border-gray-200 dark:border-[#333333] text-gray-700 dark:text-gray-200 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-50 dark:hover:bg-[#2B2B2B] shadow-2xs transition-all cursor-pointer flex items-center justify-center"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
@@ -1186,19 +1248,31 @@ export default function AdminProductsPage() {
                           </div>
                         </td>
 
-                        {/* Status (Rounded Pill Badge) */}
+                        {/* Status (Rounded Pill Badge) & Channel Badge */}
                         <td className="px-3 py-3">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
-                              p.status === "active"
-                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                                : p.status === "draft"
-                                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                                : "bg-gray-200 dark:bg-[#333333] text-gray-600 dark:text-gray-400"
-                            }`}
-                          >
-                            {p.status === "active" ? "Active" : p.status === "draft" ? "Draft" : "Archived"}
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                                p.status === "active"
+                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                                  : p.status === "draft"
+                                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                                  : "bg-gray-200 dark:bg-[#333333] text-gray-600 dark:text-gray-400"
+                              }`}
+                            >
+                              {p.status === "active" ? "Active" : p.status === "draft" ? "Draft" : "Archived"}
+                            </span>
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                p.channel === "pos"
+                                  ? "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+                                  : "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+                              }`}
+                              title={p.channel === "pos" ? "Point of Sale (Walk-in Store)" : "Website (Online Store)"}
+                            >
+                              {p.channel === "pos" ? "POS" : "Web"}
+                            </span>
+                          </div>
                         </td>
 
                         {/* Date Updated */}
@@ -1483,6 +1557,61 @@ export default function AdminProductsPage() {
                 }}
               >
                 {deleteCountdown > 0 ? `Delete in (${deleteCountdown}s)` : "Delete Product"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ────── DESTRUCTIVE BULK DELETE DIALOG WITH COUNTDOWN TIMER ────── */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#181818] border border-gray-200 dark:border-[#262626] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-6 animate-fadeIn font-sans">
+            {/* Header / Red Warning Icon without circle */}
+            <div className="flex items-start gap-3.5">
+              <svg className="w-6 h-6 text-red-600 dark:text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              <div className="space-y-1.5">
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                  Delete Selected Products Confirmation
+                </h3>
+                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+                  Are you sure you want to permanently delete <strong className="text-gray-900 dark:text-white font-bold">{selectedProducts.length} selected {selectedProducts.length === 1 ? "product" : "products"}</strong>? This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-[#282828] dark:hover:bg-[#333333] text-xs font-semibold text-gray-700 dark:text-gray-200 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={bulkDeleteCountdown > 0}
+                onClick={handleConfirmBulkDelete}
+                style={{
+                  backgroundColor: bulkDeleteCountdown > 0 ? "rgba(220, 38, 38, 0.2)" : "#dc2626",
+                  color: bulkDeleteCountdown > 0 ? "rgba(248, 113, 113, 0.6)" : "#ffffff",
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 ${
+                  bulkDeleteCountdown > 0
+                    ? "border border-red-500/20 cursor-not-allowed"
+                    : "cursor-pointer active:scale-95"
+                }`}
+                onMouseEnter={(e) => {
+                  if (bulkDeleteCountdown === 0) e.currentTarget.style.backgroundColor = "#b91c1c";
+                }}
+                onMouseLeave={(e) => {
+                  if (bulkDeleteCountdown === 0) e.currentTarget.style.backgroundColor = "#dc2626";
+                }}
+              >
+                {bulkDeleteCountdown > 0 ? `Delete in (${bulkDeleteCountdown}s)` : `Delete ${selectedProducts.length} Products`}
               </button>
             </div>
           </div>

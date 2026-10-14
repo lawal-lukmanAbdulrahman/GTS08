@@ -79,6 +79,7 @@ export async function GET() {
           `)
           .eq("status", "active")
           .eq("has_transparent_bg", true)
+          .eq("channel", "web")
           .eq("is_test", isTest);
 
         if (queryErr && /dominant_color/i.test(queryErr.message)) {
@@ -93,6 +94,7 @@ export async function GET() {
             `)
             .eq("status", "active")
             .eq("has_transparent_bg", true)
+            .eq("channel", "web")
             .eq("is_test", isTest);
           autoProducts = fallbackProducts ?? [];
         } else {

@@ -21,6 +21,11 @@ interface RawProduct {
   name: string;
   slug: string;
   base_price: number;
+  price_retailer?: number | null;
+  price_wholesaler?: number | null;
+  price_distributor?: number | null;
+  wholesale_min_qty?: number | null;
+  distributor_min_qty?: number | null;
   has_transparent_bg?: boolean | null;
   category: { id: string; name: string; slug: string } | null;
   images: Array<{ cloudinary_public_id: string; alt_text: string | null; is_primary: boolean }> | null;
@@ -38,6 +43,11 @@ function mapProduct(product: RawProduct) {
     name: product.name,
     slug: product.slug,
     base_price: product.base_price,
+    price_retailer: product.price_retailer ?? product.base_price,
+    price_wholesaler: product.price_wholesaler ?? product.base_price,
+    price_distributor: product.price_distributor ?? product.base_price,
+    wholesale_min_qty: product.wholesale_min_qty ?? 5,
+    distributor_min_qty: product.distributor_min_qty ?? 20,
     has_transparent_bg: Boolean(product.has_transparent_bg),
     category: product.category,
     primary_image: primaryImage
@@ -100,7 +110,7 @@ export async function GET(request: NextRequest) {
 
   // Build the base select query with all relations needed for POS
   const selectFields = `
-    id, name, slug, base_price, has_transparent_bg,
+    id, name, slug, base_price, price_retailer, price_wholesaler, price_distributor, wholesale_min_qty, distributor_min_qty, has_transparent_bg,
     category:categories(id, name, slug),
     images:product_images(cloudinary_public_id, alt_text, is_primary),
     variants:product_variants(id, size, color, color_hex, sku, price_modifier, is_active,
@@ -126,6 +136,7 @@ export async function GET(request: NextRequest) {
         .from("products")
         .select(selectFields, { count: "exact" })
         .eq("status", "active")
+        .eq("channel", "pos")
         .textSearch("fts", prefixQuery, { type: "websearch" });
       if (categoryIds) ftsQuery = ftsQuery.in("category_id", categoryIds);
       const ftsResult = await ftsQuery
@@ -146,6 +157,7 @@ export async function GET(request: NextRequest) {
         .from("products")
         .select(selectFields, { count: "exact" })
         .eq("status", "active")
+        .eq("channel", "pos")
         .or(`name.ilike.%${q}%,sku.ilike.%${q}%`);
 
       if (categoryIds) fallbackQuery = fallbackQuery.in("category_id", categoryIds);
@@ -163,7 +175,8 @@ export async function GET(request: NextRequest) {
     let query = serviceClient
       .from("products")
       .select(selectFields, { count: "exact" })
-      .eq("status", "active");
+      .eq("status", "active")
+      .eq("channel", "pos");
 
     if (categoryIds) query = query.in("category_id", categoryIds);
 

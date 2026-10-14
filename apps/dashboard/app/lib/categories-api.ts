@@ -19,6 +19,12 @@ const UNREACHABLE = "Couldn't reach the server. Check your connection and try ag
 async function send<T>(path: string, init?: RequestInit): Promise<Result<T>> {
   try {
     const res = await authFetch(`${API_BASE}${path}`, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });
+    if (res.status === 401) {
+      return { ok: false, message: "Your login session has expired. Please sign in again." };
+    }
+    if (res.status === 403) {
+      return { ok: false, message: "You don't have permission to manage categories. Staff members need 'Manage products' permission." };
+    }
     const body = await res.json().catch(() => null);
     if (!res.ok) return { ok: false, message: body?.error || "Something went wrong. Please try again.", fieldErrors: body?.details };
     return { ok: true, data: body?.data as T };
@@ -30,8 +36,21 @@ async function send<T>(path: string, init?: RequestInit): Promise<Result<T>> {
 /** Every category, hidden ones included (needs the manage-products grant). */
 export const listCategories = () => send<AdminCategory[]>("/categories?all=true");
 
-export const createCategory = (v: { name: string; parent_id: string | null; description: string }) =>
-  send<AdminCategory>("/categories", { method: "POST", body: JSON.stringify({ name: v.name.trim(), parent_id: v.parent_id, description: v.description.trim() || null }) });
+export const createCategory = (v: {
+  name: string;
+  parent_id?: string | null;
+  description?: string | null;
+  sub_categories?: string[];
+}) =>
+  send<AdminCategory & { sub_categories?: string[] }>("/categories", {
+    method: "POST",
+    body: JSON.stringify({
+      name: v.name.trim(),
+      parent_id: v.parent_id ?? null,
+      description: v.description?.trim() || null,
+      sub_categories: v.sub_categories,
+    }),
+  });
 
 export const updateCategory = (id: string, patch: Partial<Pick<AdminCategory, "name" | "description" | "parent_id" | "is_active" | "banner_cloudinary_id">>) =>
   send<AdminCategory>(`/categories/${id}`, { method: "PATCH", body: JSON.stringify(patch) });

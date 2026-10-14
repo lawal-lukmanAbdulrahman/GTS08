@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizePromoCode, computePromoDiscount, validatePromoInput } from "@gts/utils";
+import { normalizePromoCode, computePromoDiscount, computePromoDiscountWithScope, validatePromoInput } from "@gts/utils";
 
 const NOW = new Date("2026-09-20T10:00:00Z");
 const promo = (over: Record<string, unknown> = {}) => ({ code: "WELCOME10", discount_type: "percentage" as const, discount_value: 10, min_order_amount: 0, max_uses: null, used_count: 0, starts_at: "2026-09-01T00:00:00Z", expires_at: null, is_active: true, ...over });
@@ -69,4 +69,75 @@ describe("validatePromoInput", () => {
   it("treats an unlimited or open-ended field as null", () => {
     expect(ok({ ...base, max_uses: null, expires_at: null })).toMatchObject({ max_uses: null, expires_at: null });
   });
+  it("validates targeting and scope fields", () => {
+    expect(ok({
+      ...base,
+      target_type: "specific_customers",
+      customer_ids: ["cust-1", "cust-2"],
+      product_scope: "specific_products",
+      product_ids: ["prod-a", "prod-b"],
+      max_uses_per_customer: 2,
+    })).toMatchObject({
+      target_type: "specific_customers",
+      customer_ids: ["cust-1", "cust-2"],
+      product_scope: "specific_products",
+      product_ids: ["prod-a", "prod-b"],
+      max_uses_per_customer: 2,
+    });
+
+    expect(errs({ ...base, target_type: "invalid_type" })?.target_type).toBeTruthy();
+    expect(errs({ ...base, product_scope: "invalid_scope" })?.product_scope).toBeTruthy();
+    expect(errs({ ...base, max_uses_per_customer: 0 })?.max_uses_per_customer).toBeTruthy();
+    expect(errs({ ...base, customer_ids: "not-an-array" })?.customer_ids).toBeTruthy();
+  });
 });
+
+describe("computePromoDiscountWithScope", () => {
+  const items = [
+    { product_id: "prod-1", price: 10000, quantity: 2 }, // 20,000 kobo
+    { product_id: "prod-2", price: 5000, quantity: 1 },  // 5,000 kobo
+  ];
+  const subtotal = 25000;
+
+  it("applies discount across the entire cart when product_scope is all", () => {
+    const res = computePromoDiscountWithScope(
+      promo({ product_scope: "all", discount_type: "percentage", discount_value: 20 }),
+      subtotal,
+      items,
+      NOW
+    );
+    expect(res).toEqual({ ok: true, discount: 5000 });
+  });
+
+  it("restricts discount calculation to only matching products when product_scope is specific_products", () => {
+    const res = computePromoDiscountWithScope(
+      promo({
+        product_scope: "specific_products",
+        product_ids: ["prod-1"],
+        discount_type: "percentage",
+        discount_value: 20,
+      }),
+      subtotal,
+      items,
+      NOW
+    );
+    // prod-1 is 20,000 kobo, 20% of 20,000 = 4,000 kobo
+    expect(res).toEqual({ ok: true, discount: 4000 });
+  });
+
+  it("returns INVALID_PROMO if none of the specific products are in the cart", () => {
+    const res = computePromoDiscountWithScope(
+      promo({
+        product_scope: "specific_products",
+        product_ids: ["prod-999"],
+        discount_type: "percentage",
+        discount_value: 20,
+      }),
+      subtotal,
+      items,
+      NOW
+    );
+    expect(res).toEqual({ ok: false, reason: "INVALID_PROMO" });
+  });
+});
+

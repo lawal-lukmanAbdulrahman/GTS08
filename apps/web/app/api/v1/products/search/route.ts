@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
             { count: "exact" }
           )
           .eq("status", "active")
+          .eq("channel", "web")
           .textSearch("fts", prefixQuery, { type: "websearch" })
           .range(offset, offset + limit - 1);
 
@@ -69,6 +70,7 @@ export async function GET(request: NextRequest) {
           { count: "exact" }
         )
         .eq("status", "active")
+        .eq("channel", "web")
         .or(`name.ilike.%${q}%,description.ilike.%${q}%,short_description.ilike.%${q}%,material.ilike.%${q}%`)
         .range(offset, offset + limit - 1);
 

@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { createServiceClient } from "@gts/database";
 import { requirePosAccess } from "../_lib/access";
 import { sanitizeEmail } from "../../auth/utils";
-import { checkManualDiscount, computeCartTotals, startOfWATDay, type PosCartLine, validateOrderItems } from "@gts/utils";
+import { checkManualDiscount, computeCartTotals, resolveTierPrice, startOfWATDay, type PosCartLine, validateOrderItems } from "@gts/utils";
 import { checkStockSufficiency } from "../_lib/stock-sufficiency";
 import { variantAvailable } from "../_lib/stock-status";
 import { adjustAll, rollback, type InventoryChange } from "../_lib/inventory";
@@ -71,7 +71,18 @@ interface VariantRow {
   price_modifier: number;
   is_active?: boolean;
   inventory: { quantity: number; reserved_quantity: number } | null;
-  product: { id: string; name: string; base_price: number; status?: string };
+  product: {
+    id: string;
+    name: string;
+    base_price: number;
+    price_retailer?: number | null;
+    price_wholesaler?: number | null;
+    price_distributor?: number | null;
+    wholesale_min_qty?: number;
+    distributor_min_qty?: number;
+    status?: string;
+    channel?: string;
+  };
 }
 
 function stockFailureResponse(
@@ -144,7 +155,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
       `
       id, size, color, sku, price_modifier, is_active,
       inventory(quantity, reserved_quantity),
-      product:products(id, name, base_price, status)
+      product:products(id, name, base_price, price_retailer, price_wholesaler, price_distributor, wholesale_min_qty, distributor_min_qty, status, channel)
       `
     )
     .in("id", variantIds);
@@ -166,7 +177,7 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
 
   const unavailable = items.find((i) => {
     const v = variantById.get(i.variant_id);
-    return !v || v.is_active === false || (v.product && v.product.status && v.product.status !== "active");
+    return !v || v.is_active === false || (v.product && v.product.status && v.product.status !== "active") || (v.product && v.product.channel && v.product.channel !== "pos");
   });
   if (unavailable) {
     return NextResponse.json(
@@ -197,7 +208,8 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
 
   const cartLines: PosCartLine[] = items.map((i) => {
     const v = variantById.get(i.variant_id)!;
-    return { unitPrice: v.product.base_price + v.price_modifier, quantity: i.quantity };
+    const tiered = resolveTierPrice(v.product, i.quantity);
+    return { unitPrice: tiered.unitPrice + v.price_modifier, quantity: i.quantity };
   });
   // The discount is decided here, never taken on trust from the client, and
   // before any stock is touched so a refusal leaves nothing to undo.
@@ -292,7 +304,8 @@ export const POST = withIdempotency(async function POST(request: NextRequest) {
 
   const orderItemsPayload = items.map((i) => {
     const v = variantById.get(i.variant_id)!;
-    const unitPrice = v.product.base_price + v.price_modifier;
+    const tiered = resolveTierPrice(v.product, i.quantity);
+    const unitPrice = tiered.unitPrice + v.price_modifier;
     return {
       order_id: createdOrder.id,
       variant_id: i.variant_id,

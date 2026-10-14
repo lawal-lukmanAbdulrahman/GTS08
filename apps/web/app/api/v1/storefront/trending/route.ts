@@ -88,6 +88,7 @@ export async function GET(request: NextRequest) {
               variants:product_variants(id, size, color, color_hex, is_active, inventory(quantity, reserved_quantity))
             `)
             .eq("status", "active")
+            .eq("channel", "web")
             .eq("is_test", isTest)
             .limit(200),
         ]);

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLive } from "../lib/use-live";
 import { apiCall } from "../lib/staff-api";
 import { isAdminInquiryUnread } from "../../lib/notifications";
+import NotificationDrawer from "./notification-drawer";
 
 export interface LiveCounts {
   orders_to_ship: number;
@@ -62,6 +63,7 @@ export function NotificationBell() {
   const summary = useLive<LiveSummary>("/live/summary", { intervalMs: 10_000 });
   const inquiries = useLive<Array<{ id: string; lastSenderType: string; lastMessageAt?: string }>>("/inquiries?all=true", { intervalMs: 15_000 });
   const [open, setOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -156,8 +158,31 @@ export function NotificationBell() {
             )}
             </>
           )}
+          {/* Dedicated Right Panel Drawer Trigger */}
+          <div className="p-2.5 bg-gray-50/80 dark:bg-[#1A1A1A] border-t border-gray-100 dark:border-[#242424] text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setDrawerOpen(true);
+              }}
+              className="w-full py-2 px-3 rounded-[6px] text-xs font-bold text-[#010101] dark:text-white hover:bg-gray-200/60 dark:hover:bg-[#2A2A2A] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>See more notifications in panel</span>
+              <span aria-hidden="true">→</span>
+            </button>
+          </div>
         </div>
       )}
+
+      {/* Resilient Right Slide-over Notification Panel */}
+      <NotificationDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        summaryCounts={summary.data?.counts}
+        unreadInquiries={unread}
+        onRefreshParent={summary.refresh}
+      />
     </div>
   );
 }

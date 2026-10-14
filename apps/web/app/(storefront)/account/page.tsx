@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "../_components/auth-context";
 import { useAuthModal } from "../_components/auth-modal-context";
+import { useStoreInfo } from "../_lib/store-info";
 import { Footer } from "../_components/landing/footer";
 import { createClient } from "@gts/database/client";
 import {
@@ -89,6 +90,13 @@ function cleanNoEmojis(text?: string | null): string {
     .trim();
 }
 
+function cleanNoEmojisPreservingNewlines(text?: string | null): string {
+  if (!text) return "";
+  return text
+    .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "")
+    .trim();
+}
+
 function formatInboxDate(isoDate?: string | null): string {
   if (!isoDate) return "";
   try {
@@ -118,6 +126,7 @@ function AccountContent() {
     addresses: "Address Book",
     profile: "Account Management",
     reviews: "Pending Reviews",
+    promos: "My Promo Codes",
   };
 
   const subTitleMap: Record<string, string> = {
@@ -132,6 +141,7 @@ function AccountContent() {
 
   const { user, customer, savedAddresses, isLoading, signOut, addSavedAddress, deleteSavedAddress, refreshCustomer } = useAuth();
   const { openAuthModal } = useAuthModal();
+  const store = useStoreInfo();
 
   const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
@@ -244,6 +254,24 @@ function AccountContent() {
   const [smsAlerts, setSmsAlerts] = useState(true);
   const [promoDeals, setPromoDeals] = useState(true);
 
+  // Customer Promo Codes state
+  const [customerPromos, setCustomerPromos] = useState<Array<{
+    id: string;
+    code: string;
+    discount_type: "percentage" | "fixed_amount";
+    discount_value: number;
+    min_order_amount: number | null;
+    expires_at: string | null;
+    product_scope: "all" | "specific_products";
+    product_ids?: string[];
+    max_uses_per_customer?: number | null;
+    products?: Array<{ id: string; name: string; image_url: string; base_price: number }>;
+  }>>([]);
+  const [promosLoading, setPromosLoading] = useState(false);
+  const [promosFilter, setPromosFilter] = useState<"all" | "storewide" | "specific">("all");
+  const [copiedPromoCode, setCopiedPromoCode] = useState<string | null>(null);
+  const [selectedPromo, setSelectedPromo] = useState<typeof customerPromos[0] | null>(null);
+
   // Sidebar accordion states
   const [isProfileAccordionOpen, setIsProfileAccordionOpen] = useState(true);
   const [isSecurityAccordionOpen, setIsSecurityAccordionOpen] = useState(true);
@@ -274,7 +302,15 @@ function AccountContent() {
   // Inbox & Replies state
   interface InboxItem {
     id: string;
-    type: "inquiry" | "review_reply" | "order_advance";
+    type: "inquiry" | "review_reply" | "order_advance" | "account_notice";
+    accountNoticeType?: "account_disabled" | "account_enabled" | "account_reinstated" | string;
+    metadata?: {
+      reason?: string;
+      supportPhone?: string;
+      status?: "disabled" | "active" | "reinstated" | string;
+      image?: string;
+      [key: string]: any;
+    };
     reference?: string;
     orderNumber?: string;
     orderStatus?: string;
@@ -298,7 +334,7 @@ function AccountContent() {
     lastSenderIsStaff?: boolean;
     messageCount?: number;
     senderName?: string;
-    targetTab: "discussion" | "reviews" | "tracking";
+    targetTab?: "discussion" | "reviews" | "tracking" | "support";
     isRead?: boolean;
     isArchived?: boolean;
     isDeleted?: boolean;
@@ -662,7 +698,32 @@ function AccountContent() {
             isDeleted: !!n.isDeleted,
           }));
 
-        const combined = [...inquiries, ...reviewNotifs, ...orderNotifs].sort(
+        let customerAccountNotifs: InboxItem[] = [];
+        try {
+          const resNotifs = await fetch("/api/v1/notifications/customer");
+          if (resNotifs.ok) {
+            const jsonNotifs = await resNotifs.json();
+            if (Array.isArray(jsonNotifs.data)) {
+              customerAccountNotifs = jsonNotifs.data.map((n: any) => ({
+                id: n.id,
+                type: "account_notice" as const,
+                accountNoticeType: n.type,
+                metadata: n.metadata,
+                productId: "",
+                productName: n.title,
+                productSlug: "",
+                subject: n.title,
+                lastMessage: n.message,
+                lastMessageAt: n.created_at,
+                lastSenderType: "staff" as const,
+                targetTab: "support" as const,
+                isRead: !!n.is_read,
+              }));
+            }
+          }
+        } catch {}
+
+        const combined = [...inquiries, ...reviewNotifs, ...orderNotifs, ...customerAccountNotifs].sort(
           (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
         );
 
@@ -714,6 +775,22 @@ function AccountContent() {
       }
     );
 
+    inboxChannel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "customer_notifications",
+      },
+      () => {
+        loadInbox(true);
+      }
+    );
+
+    inboxChannel.on("broadcast", { event: "account_status_changed" }, () => {
+      loadInbox(true);
+    });
+
     inboxChannel.on("broadcast", { event: "new_inquiry_message" }, () => {
       loadInbox(true);
     });
@@ -738,6 +815,41 @@ function AccountContent() {
         window.removeEventListener("gts_notification_received", handleNotificationsUpdated);
       }
     };
+  }, [customer?.id, user?.id]);
+
+  // ── Fetch Customer Available Promo Codes ──
+  useEffect(() => {
+    const custId = customer?.id || "";
+    const userId = user?.id || "";
+    const query = new URLSearchParams();
+    if (custId) query.set("customerId", custId);
+    if (userId) query.set("userId", userId);
+    const custQuery = query.toString() ? `?${query.toString()}` : "";
+
+    try {
+      const origin = typeof window !== "undefined" && window.location?.origin ? window.location.origin : "";
+      const url = origin ? `${origin}/api/v1/promos/available${custQuery}` : `/api/v1/promos/available${custQuery}`;
+      const token = typeof window !== "undefined" ? localStorage.getItem("gts_customer_token") : null;
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      setPromosLoading(true);
+      const p = fetch(url, { headers, credentials: "include" });
+      if (p && typeof p.then === "function") {
+        p.then((res) => (res && typeof res.json === "function" ? res.json() : null))
+          .then((json) => {
+            if (json && Array.isArray(json.data)) {
+              setCustomerPromos(json.data);
+            }
+          })
+          .catch((err) => console.error("Failed to load customer promos:", err))
+          .finally(() => setPromosLoading(false));
+      } else {
+        setPromosLoading(false);
+      }
+    } catch {
+      setPromosLoading(false);
+    }
   }, [customer?.id, user?.id]);
 
   const activeInboxItems = inboxItems.filter((it) => !it.isDeleted && !it.isArchived);
@@ -778,10 +890,21 @@ function AccountContent() {
     setActiveInboxMenuId(null);
     const activeUserKey = user?.id || customer?.id;
     markCustomerNotificationRead(item.id, activeUserKey);
+    if (item.type === "account_notice") {
+      fetch("/api/v1/notifications/customer", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: item.id }),
+      }).catch(() => {});
+    }
     setInboxItems((prev) =>
       prev.map((it) => (it.id === item.id ? { ...it, isRead: true } : it))
     );
     setSelectedInboxItem({ ...item, isRead: true });
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("gts_notifications_updated"));
+      window.dispatchEvent(new CustomEvent("gts_inbox_read"));
+    }
   };
 
   // Fetch Customer Orders from API & Subscribe via WebSockets (Realtime)
@@ -1491,6 +1614,24 @@ function AccountContent() {
     <div className="min-h-screen bg-white text-[#010101] font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-8 pb-4 sm:pb-24">
 
+        {customer?.is_disabled && (
+          <div role="alert" className="mb-6 rounded-2xl border border-red-300 bg-red-50 p-4 sm:p-5 text-red-900 shadow-xs flex items-start gap-3">
+            <svg className="w-5 h-5 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+            <div>
+              <h3 className="font-bold text-sm">Account Disabled</h3>
+              <p className="text-xs text-red-700 mt-1 leading-relaxed">
+                Your account has been disabled{customer.disabled_reason ? `: "${customer.disabled_reason}"` : ""}.
+                To re-enable your account, please contact customer support
+                {store?.support_phone ? (
+                  <> at <a href={`tel:${store.support_phone}`} className="font-bold underline">{store.support_phone}</a></>
+                ) : "."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ── MOBILE ACCOUNT OVERVIEW HUB (GTS Brand UI) ── */}
         {!tabParam && (
           <div className="lg:hidden space-y-4 pb-4">
@@ -1591,6 +1732,29 @@ function AccountContent() {
                     <span className="text-sm font-medium text-gray-800">Wishlist</span>
                   </div>
                   <span className="text-gray-400 text-base">›</span>
+                </button>
+
+                {/* Promo Codes */}
+                <button
+                  type="button"
+                  onClick={() => router.push("/account?tab=promos")}
+                  className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <svg className="w-5 h-5 text-gray-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
+                    </svg>
+                    <span className="text-sm font-medium text-gray-800">Promo Codes</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {customerPromos.length > 0 && (
+                      <span className="bg-[#010101] text-white text-xs font-extrabold px-2 py-0.5 rounded-full">
+                        {customerPromos.length}
+                      </span>
+                    )}
+                    <span className="text-gray-400 text-base">›</span>
+                  </div>
                 </button>
 
                 {/* Saved Addresses */}
@@ -1810,6 +1974,35 @@ function AccountContent() {
               <span>Wishlist</span>
             </button>
 
+            {/* Promo Codes */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("promos");
+                router.push("/account?tab=promos");
+              }}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                activeTab === "promos"
+                  ? "bg-[#010101] text-white shadow-xs font-bold"
+                  : "text-gray-700 hover:bg-white hover:text-[#010101]"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
+                </svg>
+                <span>Promo Codes</span>
+              </div>
+              {customerPromos.length > 0 && (
+                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                  activeTab === "promos" ? "bg-white/20 text-white" : "bg-[#010101] text-white"
+                }`}>
+                  {customerPromos.length}
+                </span>
+              )}
+            </button>
+
             {/* Saved Addresses */}
             <button
               type="button"
@@ -2025,7 +2218,64 @@ function AccountContent() {
                     );
                   })()}
 
-
+                  {/* Card 3: Promo Codes & Vouchers */}
+                  <div className="rounded-md border border-gray-200 bg-white p-4 space-y-3 shadow-2xs">
+                    <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                      <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
+                        <span>Promo Codes</span>
+                        {customerPromos.length > 0 && (
+                          <span className="bg-[#010101] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            {customerPromos.length}
+                          </span>
+                        )}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab("promos");
+                          router.push("/account?tab=promos");
+                        }}
+                        className="text-gray-400 hover:text-[#010101] transition-colors p-1 cursor-pointer"
+                        title="View All Vouchers"
+                        aria-label="View All Vouchers"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="text-xs space-y-2 text-gray-600">
+                      {customerPromos.length > 0 ? (
+                        <>
+                          <p className="font-semibold text-gray-800">
+                            You have {customerPromos.length} active promotional {customerPromos.length === 1 ? "voucher" : "vouchers"} available!
+                          </p>
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {customerPromos.slice(0, 3).map((p) => (
+                              <span
+                                key={p.code}
+                                className="font-mono font-bold text-[11px] px-2 py-1 bg-amber-500/10 text-amber-800 border border-amber-500/20 rounded-md"
+                              >
+                                {p.code} ({p.discount_type === "percentage" ? `${p.discount_value}%` : `₦${(p.discount_value / 100).toLocaleString()}`})
+                              </span>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-gray-400 italic">No promo codes active right now.</p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab("promos");
+                          router.push("/account?tab=promos");
+                        }}
+                        className="text-xs font-bold text-[#010101] underline decoration-[#EDCF5D] decoration-2 underline-offset-4 cursor-pointer pt-1 block"
+                      >
+                        View My Promo Codes →
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -4703,145 +4953,303 @@ function AccountContent() {
                       </div>
                     </div>
 
-                    {/* Message Header Details */}
-                    <div>
-                      <h3 className="text-base sm:text-xl font-bold text-[#010101]">
-                        {cleanNoEmojis(selectedInboxItem.subject || selectedInboxItem.productName)}
-                      </h3>
-                      <div className="flex items-center gap-3 text-xs text-gray-500 mt-1 flex-wrap">
-                        <span>
-                          {new Date(selectedInboxItem.lastMessageAt).toLocaleDateString("en-NG", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                        {selectedInboxItem.orderNumber && (
-                          <>
-                            <span>•</span>
-                            <span className="font-mono">Order n° {selectedInboxItem.orderNumber}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
+                    {selectedInboxItem.type === "account_notice" ? (
+                      /* ── EXECUTIVE ACCOUNT STATUS NOTICE CARD ── */
+                      <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-xs">
+                        {/* Hero Banner with Image & Status Overlay */}
+                        <div className="relative h-44 sm:h-56 w-full bg-slate-900 overflow-hidden">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={
+                              selectedInboxItem.metadata?.image ||
+                              (selectedInboxItem.accountNoticeType === "account_disabled"
+                                ? "https://res.cloudinary.com/drstfd8gs/image/upload/f_auto,q_auto/v1791960379/gts/notifications/red-account-disabled.jpg"
+                                : "https://res.cloudinary.com/drstfd8gs/image/upload/f_auto,q_auto/v1791960377/gts/notifications/green-account-enabled.jpg")
+                            }
+                            alt="GTS Operations"
+                            className="w-full h-full object-cover opacity-80"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
 
-                    {/* Detail Card matching Image 2 style */}
-                    <div className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6 space-y-6">
-                      {/* Message Content */}
-                      <div className="text-xs sm:text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
-                        {cleanNoEmojis(selectedInboxItem.lastMessage)}
-                      </div>
+                          <div className="absolute bottom-4 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6 text-white space-y-2">
+                            <h2 className="text-lg sm:text-2xl font-black text-white leading-tight">
+                              {cleanNoEmojis(selectedInboxItem.subject)}
+                            </h2>
 
-                      {/* Code and QR Code section */}
-                      {(selectedInboxItem.pickupPin || modalQrCodeUrl) && (
-                        <div className="p-4 sm:p-5 rounded-xl bg-gray-50 border border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-6">
-                          <div className="space-y-2 text-center sm:text-left flex-1">
-                            <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                              Collection Code
-                            </span>
-                            <div className="flex items-center justify-center sm:justify-start gap-3">
-                              <span className="font-mono text-2xl sm:text-3xl font-black tracking-widest text-[#010101]">
-                                {formatPickupPin(selectedInboxItem.pickupPin || "")}
-                              </span>
-                              {selectedInboxItem.pickupPin && (
+                            <p className="text-xs text-gray-300">
+                              Issued: {new Date(selectedInboxItem.lastMessageAt).toLocaleDateString("en-NG", {
+                                day: "numeric",
+                                month: "long",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Content Section */}
+                        <div className="p-5 sm:p-8 space-y-6">
+                          {/* Administrative Reason / Decision Callout Box */}
+                          {selectedInboxItem.metadata?.reason && (
+                            <div
+                              className={`p-4 sm:p-5 rounded-2xl border ${
+                                selectedInboxItem.accountNoticeType === "account_disabled"
+                                  ? "bg-rose-50/70 border-rose-200 text-rose-950"
+                                  : "bg-emerald-50/70 border-emerald-200 text-emerald-950"
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div
+                                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                                    selectedInboxItem.accountNoticeType === "account_disabled"
+                                      ? "bg-rose-100 text-rose-700"
+                                      : "bg-emerald-100 text-emerald-700"
+                                  }`}
+                                >
+                                  {selectedInboxItem.accountNoticeType === "account_disabled" ? (
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285zM12 15.75h.007v.008H12v-.008z" />
+                                    </svg>
+                                  ) : (
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1 space-y-1">
+                                  <span className="text-[11px] font-bold uppercase tracking-wider block opacity-75">
+                                    {selectedInboxItem.accountNoticeType === "account_disabled"
+                                      ? "Administrative Restriction Reason"
+                                      : "Administrative Resolution Note"}
+                                  </span>
+                                  <p className="text-sm sm:text-base font-semibold leading-snug">
+                                    &ldquo;{selectedInboxItem.metadata.reason}&rdquo;
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Main Formatted Letter Body */}
+                          <div className="text-gray-800 space-y-3 leading-relaxed text-xs sm:text-sm whitespace-pre-wrap font-normal">
+                            {cleanNoEmojisPreservingNewlines(selectedInboxItem.lastMessage)}
+                          </div>
+
+                          {/* Customer Support Hotline Card */}
+                          <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/40 border border-[#EDCF5D]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="flex items-center gap-3.5">
+                              <div className="w-10 h-10 rounded-xl bg-[#EDCF5D] text-black flex items-center justify-center shrink-0 shadow-2xs">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                                </svg>
+                              </div>
+                              <div>
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block">
+                                  GTS Customer Support Assistance
+                                </span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-mono text-sm sm:text-base font-bold text-gray-900">
+                                    {selectedInboxItem.metadata?.supportPhone || "+234 800 000 0000"}
+                                  </span>
+                                  <span className="text-[11px] text-gray-400">• Mon–Sat, 8am–6pm (WAT)</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {selectedInboxItem.metadata?.supportPhone && (
+                              <a
+                                href={`tel:${selectedInboxItem.metadata.supportPhone}`}
+                                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#010101] text-white hover:bg-[#EDCF5D] hover:text-black font-bold text-xs transition-colors cursor-pointer shrink-0 shadow-xs"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                                </svg>
+                                <span>Call Customer Support</span>
+                              </a>
+                            )}
+                          </div>
+
+                          {/* Action Footer */}
+                          <div className="pt-4 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
+                            <div className="flex items-center gap-2.5 flex-wrap">
+                              <Link
+                                href="/"
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#010101] text-white hover:bg-[#EDCF5D] hover:text-black font-bold text-xs transition-colors cursor-pointer"
+                              >
+                                <span>Browse Products</span>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                                </svg>
+                              </Link>
+
+                              {selectedInboxItem.accountNoticeType !== "account_disabled" && (
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    navigator.clipboard.writeText(selectedInboxItem.pickupPin!);
-                                    setCopiedModalPin(true);
-                                    setTimeout(() => setCopiedModalPin(false), 2000);
+                                    setSelectedInboxItem(null);
+                                    setActiveTab("orders");
                                   }}
-                                  className="text-xs px-2.5 py-1 rounded-md border border-gray-300 font-bold hover:bg-white text-gray-700 cursor-pointer transition-colors"
+                                  className="px-4 py-2 rounded-xl border border-gray-300 hover:border-black text-gray-800 font-bold text-xs transition-colors cursor-pointer"
                                 >
-                                  {copiedModalPin ? "Copied" : "Copy Code"}
+                                  View Order History
                                 </button>
                               )}
                             </div>
-                            <p className="text-xs text-gray-500">
-                              Present this 6-digit code at the store pickup counter to verify and collect your order.
-                            </p>
-                            {selectedInboxItem.pickupDeadline && (
-                              <p className="text-xs text-amber-800 font-medium pt-0.5">
-                                Collect before: {new Date(selectedInboxItem.pickupDeadline).toLocaleDateString("en-NG", {
-                                  weekday: "short",
-                                  day: "numeric",
-                                  month: "short",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </p>
-                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedInboxItem(null)}
+                              className="text-xs font-semibold text-gray-600 hover:text-black hover:underline cursor-pointer"
+                            >
+                              Back to Inbox
+                            </button>
                           </div>
-
-                          {modalQrCodeUrl && (
-                            <div className="text-center shrink-0">
-                              <div className="bg-white p-2.5 rounded-xl border border-gray-200 w-36 h-36 mx-auto flex items-center justify-center shadow-2xs">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={modalQrCodeUrl}
-                                  alt="Collection QR Code"
-                                  className="w-full h-full object-contain"
-                                />
-                              </div>
-                              <span className="font-mono text-[10px] text-gray-400 uppercase tracking-wider block mt-1.5">
-                                QR Code Pass
-                              </span>
-                            </div>
-                          )}
                         </div>
-                      )}
-
-                      {/* Pickup Station Information */}
-                      {selectedInboxItem.pickupStationName && (
-                        <div className="pt-3 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                          <div>
-                            <span className="font-bold text-gray-900 block">Pickup Station</span>
-                            <p className="text-gray-600 font-medium">{selectedInboxItem.pickupStationName}</p>
-                            {selectedInboxItem.pickupStationAddress && (
-                              <p className="text-gray-500">{selectedInboxItem.pickupStationAddress}</p>
-                            )}
-                          </div>
-                          {selectedInboxItem.pickupHours && (
-                            <div className="sm:text-right">
-                              <span className="font-bold text-gray-900 block">Operating Hours</span>
-                              <p className="text-gray-600 font-medium">{selectedInboxItem.pickupHours}</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Action Buttons */}
-                      <div className="pt-4 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
-                        {selectedInboxItem.orderNumber ? (
-                          <Link
-                            href={`/track?order_number=${encodeURIComponent(selectedInboxItem.orderNumber)}`}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#010101] text-white hover:bg-[#EDCF5D] hover:text-black font-bold text-xs transition-colors cursor-pointer"
-                          >
-                            <span>Track Order</span>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                            </svg>
-                          </Link>
-                        ) : selectedInboxItem.productSlug ? (
-                          <Link
-                            href={`/product/${selectedInboxItem.productSlug}?tab=discussion#discussion`}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#010101] text-white hover:bg-gray-800 font-bold text-xs transition-colors cursor-pointer"
-                          >
-                            <span>View Discussion</span>
-                          </Link>
-                        ) : null}
-
-                        <button
-                          type="button"
-                          onClick={() => setSelectedInboxItem(null)}
-                          className="text-xs font-semibold text-gray-600 hover:text-black hover:underline cursor-pointer"
-                        >
-                          Back to Inbox
-                        </button>
                       </div>
-                    </div>
+                    ) : (
+                      <>
+                        {/* Message Header Details */}
+                        <div>
+                          <h3 className="text-base sm:text-xl font-bold text-[#010101]">
+                            {cleanNoEmojis(selectedInboxItem.subject || selectedInboxItem.productName)}
+                          </h3>
+                          <div className="flex items-center gap-3 text-xs text-gray-500 mt-1 flex-wrap">
+                            <span>
+                              {new Date(selectedInboxItem.lastMessageAt).toLocaleDateString("en-NG", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                            {selectedInboxItem.orderNumber && (
+                              <>
+                                <span>•</span>
+                                <span className="font-mono">Order n° {selectedInboxItem.orderNumber}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Detail Card matching Image 2 style */}
+                        <div className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6 space-y-6">
+                          {/* Message Content */}
+                          <div className="text-xs sm:text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                            {cleanNoEmojisPreservingNewlines(selectedInboxItem.lastMessage)}
+                          </div>
+
+                          {/* Code and QR Code section */}
+                          {(selectedInboxItem.pickupPin || modalQrCodeUrl) && (
+                            <div className="p-4 sm:p-5 rounded-xl bg-gray-50 border border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-6">
+                              <div className="space-y-2 text-center sm:text-left flex-1">
+                                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                  Collection Code
+                                </span>
+                                <div className="flex items-center justify-center sm:justify-start gap-3">
+                                  <span className="font-mono text-2xl sm:text-3xl font-black tracking-widest text-[#010101]">
+                                    {formatPickupPin(selectedInboxItem.pickupPin || "")}
+                                  </span>
+                                  {selectedInboxItem.pickupPin && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(selectedInboxItem.pickupPin!);
+                                        setCopiedModalPin(true);
+                                        setTimeout(() => setCopiedModalPin(false), 2000);
+                                      }}
+                                      className="text-xs px-2.5 py-1 rounded-md border border-gray-300 font-bold hover:bg-white text-gray-700 cursor-pointer transition-colors"
+                                    >
+                                      {copiedModalPin ? "Copied" : "Copy Code"}
+                                    </button>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-500">
+                                  Present this 6-digit code at the store pickup counter to verify and collect your order.
+                                </p>
+                                {selectedInboxItem.pickupDeadline && (
+                                  <p className="text-xs text-amber-800 font-medium pt-0.5">
+                                    Collect before: {new Date(selectedInboxItem.pickupDeadline).toLocaleDateString("en-NG", {
+                                      weekday: "short",
+                                      day: "numeric",
+                                      month: "short",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </p>
+                                )}
+                              </div>
+
+                              {modalQrCodeUrl && (
+                                <div className="text-center shrink-0">
+                                  <div className="bg-white p-2.5 rounded-xl border border-gray-200 w-36 h-36 mx-auto flex items-center justify-center shadow-2xs">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={modalQrCodeUrl}
+                                      alt="Collection QR Code"
+                                      className="w-full h-full object-contain"
+                                    />
+                                  </div>
+                                  <span className="font-mono text-[10px] text-gray-400 uppercase tracking-wider block mt-1.5">
+                                    QR Code Pass
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Pickup Station Information */}
+                          {selectedInboxItem.pickupStationName && (
+                            <div className="pt-3 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                              <div>
+                                <span className="font-bold text-gray-900 block">Pickup Station</span>
+                                <p className="text-gray-600 font-medium">{selectedInboxItem.pickupStationName}</p>
+                                {selectedInboxItem.pickupStationAddress && (
+                                  <p className="text-gray-500">{selectedInboxItem.pickupStationAddress}</p>
+                                )}
+                              </div>
+                              {selectedInboxItem.pickupHours && (
+                                <div className="sm:text-right">
+                                  <span className="font-bold text-gray-900 block">Operating Hours</span>
+                                  <p className="text-gray-600 font-medium">{selectedInboxItem.pickupHours}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Action Buttons */}
+                          <div className="pt-4 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
+                            {selectedInboxItem.orderNumber ? (
+                              <Link
+                                href={`/track?order_number=${encodeURIComponent(selectedInboxItem.orderNumber)}`}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#010101] text-white hover:bg-[#EDCF5D] hover:text-black font-bold text-xs transition-colors cursor-pointer"
+                              >
+                                <span>Track Order</span>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                                </svg>
+                              </Link>
+                            ) : selectedInboxItem.productSlug ? (
+                              <Link
+                                href={`/product/${selectedInboxItem.productSlug}?tab=discussion#discussion`}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#010101] text-white hover:bg-gray-800 font-bold text-xs transition-colors cursor-pointer"
+                              >
+                                <span>View Discussion</span>
+                              </Link>
+                            ) : null}
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedInboxItem(null)}
+                              className="text-xs font-semibold text-gray-600 hover:text-black hover:underline cursor-pointer"
+                            >
+                              Back to Inbox
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ) : (
                   /* ── INBOX LIST VIEW ── */
@@ -4923,6 +5331,14 @@ function AccountContent() {
                             const cleanTitle = cleanNoEmojis(item.subject || item.productName);
                             const cleanSnippet = cleanNoEmojis(item.lastMessage || "");
 
+                            const isNotice = item.type === "account_notice";
+                            const noticeImg =
+                              item.metadata?.image ||
+                              (item.accountNoticeType === "account_disabled"
+                                ? "https://res.cloudinary.com/drstfd8gs/image/upload/f_auto,q_auto/v1791960379/gts/notifications/red-account-disabled.jpg"
+                                : "https://res.cloudinary.com/drstfd8gs/image/upload/f_auto,q_auto/v1791960377/gts/notifications/green-account-enabled.jpg");
+                            const thumbImg = isNotice ? noticeImg : item.productImage;
+
                             return (
                               <div
                                 key={item.id}
@@ -4933,87 +5349,121 @@ function AccountContent() {
                                     : "bg-white border-gray-200 hover:border-gray-300"
                                 }`}
                               >
-                                {/* Top line: title on left, date + menu on right */}
-                                <div className="flex items-start justify-between gap-3 mb-1.5">
-                                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    {!item.isRead && (
-                                      <span
-                                        className="w-2 h-2 rounded-full bg-[#EDCF5D] ring-2 ring-[#EDCF5D]/30 shrink-0"
-                                        title="Unread"
+                                <div className="flex items-start gap-3 sm:gap-4">
+                                  {/* Thumbnail Image */}
+                                  {thumbImg && (
+                                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden shrink-0 border border-gray-200 bg-gray-100 relative">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src={thumbImg}
+                                        alt={cleanTitle}
+                                        className="w-full h-full object-cover"
                                       />
-                                    )}
-                                    <h4
-                                      className={`text-xs sm:text-sm leading-snug line-clamp-1 ${
-                                        !item.isRead ? "font-bold text-[#010101]" : "font-semibold text-gray-900"
-                                      }`}
-                                    >
-                                      {cleanTitle}
-                                    </h4>
-                                  </div>
-
-                                  {/* Right side: date + 3-dots action menu */}
-                                  <div
-                                    className="flex items-center gap-2 shrink-0 pt-0.5"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <span className="font-mono text-[11px] sm:text-xs text-gray-400 whitespace-nowrap">
-                                      {formatInboxDate(item.lastMessageAt)}
-                                    </span>
-
-                                    <div className="relative">
-                                      <button
-                                        type="button"
-                                        onClick={() => setActiveInboxMenuId(isMenuOpen ? null : item.id)}
-                                        className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 transition-colors cursor-pointer"
-                                        aria-label="Options"
-                                      >
-                                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                                          <circle cx="12" cy="5" r="2" />
-                                          <circle cx="12" cy="12" r="2" />
-                                          <circle cx="12" cy="19" r="2" />
-                                        </svg>
-                                      </button>
-
-                                      {isMenuOpen && (
-                                        <div
-                                          className={`absolute right-0 ${
-                                            idx === currentInboxList.length - 1 && currentInboxList.length > 1
-                                              ? "bottom-8"
-                                              : "top-8"
-                                          } w-36 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-40 animate-in fade-in zoom-in-95 duration-100`}
-                                        >
-                                          <button
-                                            type="button"
-                                            onClick={() => handleOpenItem(item)}
-                                            className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
-                                          >
-                                            Open
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => handleArchiveItem(item.id, e)}
-                                            className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
-                                          >
-                                            {item.isArchived ? "Unarchive" : "Archive"}
-                                          </button>
-                                          <div className="border-t border-gray-100 my-1" />
-                                          <button
-                                            type="button"
-                                            onClick={(e) => handleDeleteItem(item.id, e)}
-                                            className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer"
-                                          >
-                                            Delete
-                                          </button>
-                                        </div>
-                                      )}
+                                      {isNotice && <div className="absolute inset-0 bg-black/10" />}
                                     </div>
+                                  )}
+
+                                  <div className="flex-1 min-w-0">
+                                    {/* Top line: title & status on left, date + menu on right */}
+                                    <div className="flex items-start justify-between gap-3 mb-1.5">
+                                      <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+                                        {!item.isRead && (
+                                          <span
+                                            className="w-2 h-2 rounded-full bg-[#EDCF5D] ring-2 ring-[#EDCF5D]/30 shrink-0"
+                                            title="Unread"
+                                          />
+                                        )}
+                                        {isNotice && (
+                                          <span
+                                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 ${
+                                              item.accountNoticeType === "account_disabled"
+                                                ? "bg-rose-100 text-rose-700 border border-rose-200"
+                                                : item.accountNoticeType === "account_reinstated"
+                                                ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                                : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                            }`}
+                                          >
+                                            {item.accountNoticeType === "account_disabled"
+                                              ? "Security Notice"
+                                              : item.accountNoticeType === "account_reinstated"
+                                              ? "Reinstated"
+                                              : "Restored"}
+                                          </span>
+                                        )}
+                                        <h4
+                                          className={`text-xs sm:text-sm leading-snug line-clamp-1 ${
+                                            !item.isRead ? "font-bold text-[#010101]" : "font-semibold text-gray-900"
+                                          }`}
+                                        >
+                                          {cleanTitle}
+                                        </h4>
+                                      </div>
+
+                                      {/* Right side: date + 3-dots action menu */}
+                                      <div
+                                        className="flex items-center gap-2 shrink-0 pt-0.5"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <span className="font-mono text-[11px] sm:text-xs text-gray-400 whitespace-nowrap">
+                                          {formatInboxDate(item.lastMessageAt)}
+                                        </span>
+
+                                        <div className="relative">
+                                          <button
+                                            type="button"
+                                            onClick={() => setActiveInboxMenuId(isMenuOpen ? null : item.id)}
+                                            className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 transition-colors cursor-pointer"
+                                            aria-label="Options"
+                                          >
+                                            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                              <circle cx="12" cy="5" r="2" />
+                                              <circle cx="12" cy="12" r="2" />
+                                              <circle cx="12" cy="19" r="2" />
+                                            </svg>
+                                          </button>
+
+                                          {isMenuOpen && (
+                                            <div
+                                              className={`absolute right-0 ${
+                                                idx === currentInboxList.length - 1 && currentInboxList.length > 1
+                                                  ? "bottom-8"
+                                                  : "top-8"
+                                              } w-36 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-40 animate-in fade-in zoom-in-95 duration-100`}
+                                            >
+                                              <button
+                                                type="button"
+                                                onClick={() => handleOpenItem(item)}
+                                                className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
+                                              >
+                                                Open
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => handleArchiveItem(item.id, e)}
+                                                className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer"
+                                              >
+                                                {item.isArchived ? "Unarchive" : "Archive"}
+                                              </button>
+                                              <div className="border-t border-gray-100 my-1" />
+                                              <button
+                                                type="button"
+                                                onClick={(e) => handleDeleteItem(item.id, e)}
+                                                className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer"
+                                              >
+                                                Delete
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Message content snippet below title */}
+                                    <p className="text-xs sm:text-sm text-gray-500 line-clamp-2 leading-relaxed">
+                                      {cleanSnippet}
+                                    </p>
                                   </div>
                                 </div>
-
-                                {/* Message content snippet below title */}
-                                <p className="text-xs sm:text-sm text-gray-500 line-clamp-2 leading-relaxed">
-                                  {cleanSnippet}
-                                </p>
                               </div>
                             );
                           })}
@@ -5061,6 +5511,416 @@ function AccountContent() {
                   </Link>
                 </div>
               </div>
+            )}
+
+            {/* TAB 7: PROMO CODES */}
+            {activeTab === "promos" && (
+              selectedPromo ? (
+                /* ── DEDICATED PROMO DETAILS SUB-PAGE ── */
+                <div className="space-y-6">
+                  {/* Header / Back Navigation */}
+                  <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPromo(null)}
+                      className="p-1 -ml-1 text-gray-700 hover:text-[#010101] rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+                      aria-label="Back to Promo Codes"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                      </svg>
+                    </button>
+                    <div>
+                      <h2 className="font-bold text-base sm:text-lg text-[#010101]">Voucher Details</h2>
+                      <p className="text-xs text-gray-500">Terms, limitations, and eligible product catalog</p>
+                    </div>
+                  </div>
+
+                  {/* Main Voucher Card */}
+                  <div className="p-6 rounded-2xl bg-gradient-to-br from-[#FAF9F5] to-white border border-gray-200/90 shadow-2xs space-y-5">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div>
+                        <span className="text-3xl sm:text-4xl font-black text-[#010101] tracking-tight block">
+                          {selectedPromo.discount_type === "percentage"
+                            ? `${selectedPromo.discount_value}% OFF`
+                            : `₦${(selectedPromo.discount_value / 100).toLocaleString()} OFF`}
+                        </span>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {selectedPromo.product_scope === "all"
+                            ? "Applicable across the entire store catalogue."
+                            : `Valid exclusively on ${selectedPromo.products?.length || selectedPromo.product_ids?.length || 0} designated product(s).`}
+                        </p>
+                      </div>
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        Active Voucher
+                      </span>
+                    </div>
+
+                    {/* Promo Code Box with 1-Click Copy */}
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-white border border-gray-200 shadow-2xs">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">Coupon Code</span>
+                        <span className="font-mono font-black text-lg sm:text-xl text-[#010101] tracking-wider truncate block">
+                          {selectedPromo.code}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (typeof navigator !== "undefined" && navigator.clipboard) {
+                            navigator.clipboard.writeText(selectedPromo.code);
+                            setCopiedPromoCode(selectedPromo.code);
+                            setTimeout(() => setCopiedPromoCode(null), 2000);
+                          }
+                        }}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          copiedPromoCode === selectedPromo.code
+                            ? "bg-emerald-500 text-white shadow-2xs"
+                            : "bg-[#010101] text-white hover:bg-[#EDCF5D] hover:text-[#010101]"
+                        }`}
+                      >
+                        {copiedPromoCode === selectedPromo.code ? "✓ Copied" : "Copy Code"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Voucher Rules & Limits Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="p-4 rounded-2xl bg-gray-50/70 border border-gray-100 space-y-1">
+                      <span className="text-gray-400 font-medium">Minimum Spend</span>
+                      <p className="font-bold text-sm text-[#010101]">
+                        {selectedPromo.min_order_amount && selectedPromo.min_order_amount > 0
+                          ? `₦${(selectedPromo.min_order_amount / 100).toLocaleString()}`
+                          : "No minimum spend required"}
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-gray-50/70 border border-gray-100 space-y-1">
+                      <span className="text-gray-400 font-medium">Usage Limit</span>
+                      <p className="font-bold text-sm text-[#010101]">
+                        {selectedPromo.max_uses_per_customer
+                          ? `${selectedPromo.max_uses_per_customer} use per customer account`
+                          : "Unlimited uses"}
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-gray-50/70 border border-gray-100 space-y-1">
+                      <span className="text-gray-400 font-medium">Product Scope</span>
+                      <p className="font-bold text-sm text-[#010101]">
+                        {selectedPromo.product_scope === "all"
+                          ? "Storewide (All Products)"
+                          : `${selectedPromo.products?.length || selectedPromo.product_ids?.length || 0} Specific Product(s)`}
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-gray-50/70 border border-gray-100 space-y-1">
+                      <span className="text-gray-400 font-medium">Valid Until</span>
+                      <p className="font-bold text-sm text-[#010101]">
+                        {selectedPromo.expires_at
+                          ? new Date(selectedPromo.expires_at).toLocaleDateString("en-NG", {
+                              day: "numeric",
+                              month: "long",
+                              year: "numeric",
+                            })
+                          : "No expiration date"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Eligible Products Section (Elaborate Grid) */}
+                  {selectedPromo.product_scope === "specific_products" && (
+                    <div className="space-y-3 pt-2">
+                      <div>
+                        <h3 className="font-bold text-sm sm:text-base text-[#010101]">
+                          Eligible Products ({selectedPromo.products?.length || 0})
+                        </h3>
+                        <p className="text-xs text-gray-500">
+                          This discount applies strictly to the items listed below:
+                        </p>
+                      </div>
+
+                      {(!selectedPromo.products || selectedPromo.products.length === 0) ? (
+                        <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-100 text-xs text-gray-500">
+                          Products are being loaded...
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          {selectedPromo.products.map((prod) => (
+                            <Link
+                              key={prod.id}
+                              href={`/product/${prod.id}`}
+                              className="p-3 rounded-2xl border border-gray-100 hover:border-black bg-white hover:shadow-xs transition-all flex items-center gap-3 group/prod"
+                            >
+                              <div className="w-14 h-14 rounded-xl overflow-hidden bg-gray-50 shrink-0 border border-gray-100">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={prod.image_url || "/placeholder.png"}
+                                  alt={prod.name}
+                                  className="w-full h-full object-cover group-hover/prod:scale-105 transition-transform"
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <h4 className="text-xs font-bold text-gray-900 truncate group-hover/prod:text-[#8D730C]">
+                                  {prod.name}
+                                </h4>
+                                <p className="text-xs font-semibold text-gray-500 mt-0.5">
+                                  ₦{(prod.base_price / 100).toLocaleString()}
+                                </p>
+                                <span className="text-[10px] text-[#010101] font-bold underline mt-1 inline-block">
+                                  View Item →
+                                </span>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Redemption Instructions */}
+                  <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/80 text-xs space-y-1.5">
+                    <h4 className="font-bold text-amber-900">How to redeem this voucher:</h4>
+                    <ul className="text-amber-800/90 list-disc list-inside space-y-1">
+                      <li>Copy your coupon code above or click "Apply in Cart" below.</li>
+                      <li>Ensure your bag contains eligible items fulfilling minimum spend terms.</li>
+                      <li>The discount will automatically be deducted from your checkout total.</li>
+                    </ul>
+                  </div>
+
+                  {/* Actions Footer */}
+                  <div className="pt-2 flex items-center justify-between gap-3 flex-wrap border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPromo(null)}
+                      className="px-5 py-2.5 rounded-full border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                    >
+                      ← Back to All Promo Codes
+                    </button>
+                    <Link
+                      href="/cart"
+                      className="px-6 py-2.5 rounded-full bg-[#010101] text-white text-xs font-bold hover:bg-[#EDCF5D] hover:text-[#010101] transition-all cursor-pointer shadow-sm active:scale-95"
+                    >
+                      Apply in Cart →
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Mobile Back Button & Header */}
+                  <div className="flex items-center gap-3 pb-3 border-b border-gray-100 lg:hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("overview");
+                        router.push("/account");
+                      }}
+                      className="p-1 -ml-1 text-gray-700 hover:text-[#010101] rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+                      aria-label="Back to Account"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                      </svg>
+                    </button>
+                    <div>
+                      <h2 className="font-bold text-base sm:text-lg text-[#010101]">My Promo Codes</h2>
+                    </div>
+                  </div>
+
+                  {/* Desktop Header */}
+                  <div className="hidden lg:flex items-center justify-between pb-3 border-b border-gray-100">
+                    <div>
+                      <h2 className="font-bold text-lg sm:text-xl text-[#010101]">My Promo Codes</h2>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Exclusive promotional discounts and personalized vouchers ready to apply at checkout.
+                      </p>
+                    </div>
+                    <div className="text-xs font-semibold text-gray-500">
+                      {customerPromos.length} {customerPromos.length === 1 ? "voucher" : "vouchers"} available
+                    </div>
+                  </div>
+
+                  {/* Sub-Tabs: ALL | STOREWIDE | SPECIFIC PRODUCTS */}
+                  <div className="grid grid-cols-3 border-b border-gray-200 bg-white">
+                    <button
+                      type="button"
+                      onClick={() => setPromosFilter("all")}
+                      className={`py-3 text-center text-xs sm:text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer border-b-2 ${
+                        promosFilter === "all"
+                          ? "text-[#010101] border-[#EDCF5D]"
+                          : "text-gray-400 border-transparent hover:text-gray-700"
+                      }`}
+                    >
+                      All ({customerPromos.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPromosFilter("storewide")}
+                      className={`py-3 text-center text-xs sm:text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer border-b-2 ${
+                        promosFilter === "storewide"
+                          ? "text-[#010101] border-[#EDCF5D]"
+                          : "text-gray-400 border-transparent hover:text-gray-700"
+                      }`}
+                    >
+                      Storewide ({customerPromos.filter((p) => p.product_scope === "all").length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPromosFilter("specific")}
+                      className={`py-3 text-center text-xs sm:text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer border-b-2 ${
+                        promosFilter === "specific"
+                          ? "text-[#010101] border-[#EDCF5D]"
+                          : "text-gray-400 border-transparent hover:text-gray-700"
+                      }`}
+                    >
+                      Specific ({customerPromos.filter((p) => p.product_scope === "specific_products").length})
+                    </button>
+                  </div>
+
+                  {/* Content States */}
+                  {promosLoading ? (
+                    <div className="py-16 text-center">
+                      <div className="w-8 h-8 border-3 border-black border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                      <p className="text-xs font-semibold text-gray-500">Loading your promo codes...</p>
+                    </div>
+                  ) : (() => {
+                    const filteredList = customerPromos.filter((p) => {
+                      if (promosFilter === "storewide") return p.product_scope === "all";
+                      if (promosFilter === "specific") return p.product_scope === "specific_products";
+                      return true;
+                    });
+
+                    if (filteredList.length === 0) {
+                      return (
+                        <div className="py-12 px-4 text-center max-w-md mx-auto">
+                          <div className="w-16 h-16 rounded-full bg-[#EDCF5D]/20 text-[#010101] flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
+                            </svg>
+                          </div>
+                          <h3 className="font-bold text-base text-[#010101] mb-1">
+                            {promosFilter === "all"
+                              ? "No Promo Codes Available"
+                              : promosFilter === "storewide"
+                              ? "No Storewide Promo Codes"
+                              : "No Product-Specific Codes"}
+                          </h3>
+                          <p className="text-xs sm:text-sm text-gray-500 max-w-sm mx-auto mb-6">
+                            You do not have any active promotional discount codes in this category right now. Stay tuned for special seasonal campaigns and promotions!
+                          </p>
+                          <Link
+                            href="/search"
+                            className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#010101] text-white font-bold text-xs sm:text-sm hover:bg-[#EDCF5D] hover:text-[#010101] transition-all shadow-md cursor-pointer"
+                          >
+                            Explore Products
+                          </Link>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {filteredList.map((promo) => {
+                          const now = Date.now();
+                          const daysRemaining = promo.expires_at
+                            ? Math.max(0, Math.ceil((new Date(promo.expires_at).getTime() - now) / (1000 * 60 * 60 * 24)))
+                            : null;
+                          const isCopied = copiedPromoCode === promo.code;
+
+                          return (
+                            <div
+                              key={promo.id || promo.code}
+                              onClick={() => setSelectedPromo(promo)}
+                              className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs hover:shadow-md hover:border-[#010101] transition-all p-5 flex flex-col justify-between cursor-pointer group"
+                            >
+                              <div className="space-y-4">
+                                {/* Top Row: Discount Value + Details Arrow */}
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-xl sm:text-2xl font-black text-[#010101] tracking-tight">
+                                    {promo.discount_type === "percentage"
+                                      ? `${promo.discount_value}% OFF`
+                                      : `₦${(promo.discount_value / 100).toLocaleString()} OFF`}
+                                  </span>
+                                  <span className="text-xs font-bold text-gray-400 group-hover:text-[#010101] transition-colors flex items-center gap-1">
+                                    Details
+                                    <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                    </svg>
+                                  </span>
+                                </div>
+
+                                {/* Promo Code Monospace Box with 1-Click Copy */}
+                                <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-200">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-gray-400 text-xs">Code:</span>
+                                    <span className="font-mono font-black text-sm sm:text-base text-[#010101] tracking-wider truncate">
+                                      {promo.code}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (typeof navigator !== "undefined" && navigator.clipboard) {
+                                        navigator.clipboard.writeText(promo.code);
+                                        setCopiedPromoCode(promo.code);
+                                        setTimeout(() => setCopiedPromoCode(null), 2000);
+                                      }
+                                    }}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                      isCopied
+                                        ? "bg-emerald-500 text-white shadow-2xs"
+                                        : "bg-[#010101] text-white hover:bg-[#EDCF5D] hover:text-[#010101]"
+                                    }`}
+                                  >
+                                    {isCopied ? "✓ Copied" : "Copy"}
+                                  </button>
+                                </div>
+
+                                {/* Promo Details & Limitations */}
+                                <div className="space-y-1.5 text-xs text-gray-500 pt-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-gray-400">Min. spend:</span>
+                                    <span className="font-semibold text-gray-800">
+                                      {promo.min_order_amount && promo.min_order_amount > 0
+                                        ? `₦${(promo.min_order_amount / 100).toLocaleString()}`
+                                        : "No minimum spend"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-gray-400">Usage limit:</span>
+                                    <span className="font-semibold text-gray-800">
+                                      {promo.max_uses_per_customer
+                                        ? `${promo.max_uses_per_customer} use per person`
+                                        : "Unlimited uses"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-gray-400">Expires:</span>
+                                    <span className="font-semibold text-gray-800">
+                                      {promo.expires_at
+                                        ? new Date(promo.expires_at).toLocaleDateString("en-NG", {
+                                            day: "numeric",
+                                            month: "short",
+                                            year: "numeric",
+                                          })
+                                        : "No expiration date"}
+                                    </span>
+                                    {daysRemaining !== null && (
+                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                        daysRemaining <= 3 ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"
+                                      }`}>
+                                        {daysRemaining === 0 ? "Expires today" : `${daysRemaining}d left`}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )
             )}
           </div>
         </div>

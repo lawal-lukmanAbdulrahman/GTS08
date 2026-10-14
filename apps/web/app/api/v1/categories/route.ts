@@ -90,8 +90,36 @@ export async function POST(request: NextRequest) {
       if (isDbUniqueViolation(error)) return NextResponse.json({ error: "A category with that name or slug already exists.", code: "CATEGORY_EXISTS" }, { status: 409 });
       return serverError(new Error(error.message));
     }
-    await logActivity(client, { actorId: access.user.id, action: "category.create", targetType: "category", targetId: (data as { id: string }).id, ip: clientIp(request) });
-    return NextResponse.json({ data }, { status: 201 });
+
+    const createdCategory = data as { id: string; name: string; slug: string };
+    const createdSubs: string[] = [];
+
+    const rawSubs: string[] = Array.isArray(b.sub_categories)
+      ? (b.sub_categories as unknown[]).map((s) => String(s || "").trim()).filter(Boolean)
+      : typeof b.sub_categories === "string"
+      ? (b.sub_categories as string).split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+
+    if (rawSubs.length > 0) {
+      for (let i = 0; i < rawSubs.length; i++) {
+        const subName = rawSubs[i]!;
+        const baseSubSlug = toSlug(subName) || `sub-${i + 1}`;
+        const subSlug = `${createdCategory.slug}-${baseSubSlug}`.slice(0, 100);
+        const { error: subErr } = await client.from("categories").insert({
+          name: subName,
+          slug: subSlug,
+          parent_id: createdCategory.id,
+          sort_order: i,
+          is_active: true,
+        });
+        if (!subErr) {
+          createdSubs.push(subName);
+        }
+      }
+    }
+
+    await logActivity(client, { actorId: access.user.id, action: "category.create", targetType: "category", targetId: createdCategory.id, ip: clientIp(request) });
+    return NextResponse.json({ data: { ...createdCategory, sub_categories: createdSubs } }, { status: 201 });
   } catch (err) {
     return serverError(err);
   }

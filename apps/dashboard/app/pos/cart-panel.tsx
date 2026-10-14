@@ -142,7 +142,17 @@ export default function CartPanel({
                     >
                       +
                     </button>
-                    <span className="text-xs sm:text-sm font-semibold ml-1 text-gray-900 dark:text-white">{formatKobo(lineTotal)}</span>
+                    <span className="text-xs sm:text-sm font-semibold ml-1 text-gray-900 dark:text-white">
+                      {formatKobo(lineTotal)}
+                    </span>
+                    <span className="text-[10px] text-gray-500 font-mono">
+                      (@ {formatKobo(line.unitPrice)})
+                    </span>
+                    {line.tierName && line.tierName !== "Customer" && line.tierName !== "customer" && (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold font-mono bg-[#EDCF5D]/20 text-[#9E7B00] dark:text-[#EDCF5D] border border-[#EDCF5D]/40">
+                        {line.tierName}
+                      </span>
+                    )}
                   </div>
                 </div>
 

@@ -1,6 +1,6 @@
 import { formatWAT, getOrderPickupPin } from "@gts/utils";
 import { sendEmail, type SendResult } from "./send";
-import { pickupOrderEmail, customerWelcomeEmail, passwordResetEmail, accountAccessEmail, ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, type StoreInfo } from "./templates";
+import { pickupOrderEmail, customerWelcomeEmail, passwordResetEmail, accountAccessEmail, customerReinstatedEmail, ticketReceivedEmail, ticketReplyEmail, orderStatusEmail, flagUpdatedEmail, orderPaidEmail, passwordChangedEmail, posReceiptEmail, staffWelcomeEmail, type StoreInfo } from "./templates";
 
 type Client = { from(table: string): any; channel?: (name: string, ...args: any[]) => any };
 
@@ -443,5 +443,24 @@ export function notifyAccessChanged(client: Client, userId: string, blocked: boo
     if (!user?.email) return;
     const store = await storeInfo(client);
     await sendEmail({ to: user.email, ...accountAccessEmail({ store, name: user.full_name || "there", blocked, signInUrl: blocked ? undefined : `${dashboardUrl()}/login` }) });
+  }, undefined);
+}
+
+export function notifyCustomerReinstated(
+  client: Client,
+  o: { email: string; name: string; reason?: string }
+): Promise<void> {
+  return safely(async () => {
+    if (!o.email) return;
+    const store = await storeInfo(client);
+    await sendEmail({
+      to: o.email,
+      ...customerReinstatedEmail({
+        store,
+        name: o.name || "there",
+        reason: o.reason,
+        signInUrl: `${storefrontUrl()}/account`,
+      }),
+    });
   }, undefined);
 }

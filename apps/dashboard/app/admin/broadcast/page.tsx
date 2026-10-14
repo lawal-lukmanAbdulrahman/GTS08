@@ -68,6 +68,8 @@ export default function AdminBroadcastPage() {
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [deletingBroadcastItem, setDeletingBroadcastItem] = useState<BroadcastItem | null>(null);
   const [deleteCountdown, setDeleteCountdown] = useState<number>(3);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState<boolean>(false);
+  const [bulkDeleteCountdown, setBulkDeleteCountdown] = useState<number>(3);
 
   // Drawer state
   const [selectedBroadcast, setSelectedBroadcast] = useState<BroadcastItem | null>(null);
@@ -566,6 +568,18 @@ export default function AdminBroadcastPage() {
     };
   }, [deletingBroadcastItem, deleteCountdown]);
 
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (showBulkDeleteModal && bulkDeleteCountdown > 0) {
+      timer = setInterval(() => {
+        setBulkDeleteCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [showBulkDeleteModal, bulkDeleteCountdown]);
+
   const handleOpenDeleteDialog = (item: BroadcastItem) => {
     setOpenActionMenuId(null);
     setMenuPosition(null);
@@ -595,8 +609,18 @@ export default function AdminBroadcastPage() {
     setDeletingBroadcastItem(null);
   };
 
-  const handleBulkDelete = async () => {
+  const handleOpenBulkDeleteModal = () => {
     if (selectedBroadcastIds.length === 0) return;
+    setShowBulkDeleteModal(true);
+    setBulkDeleteCountdown(3);
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    if (selectedBroadcastIds.length === 0) {
+      setShowBulkDeleteModal(false);
+      return;
+    }
+    setShowBulkDeleteModal(false);
     const idsToDelete = [...selectedBroadcastIds];
     const token = typeof window !== "undefined" ? localStorage.getItem("gts_token") : null;
     for (const id of idsToDelete) {
@@ -611,7 +635,10 @@ export default function AdminBroadcastPage() {
     setBroadcasts(updated);
     setLocalBroadcastItems(updated);
     setSelectedBroadcastIds([]);
+    showToast(`Permanently deleted ${idsToDelete.length} ${idsToDelete.length === 1 ? "broadcast" : "broadcasts"}.`, "success");
   };
+
+  const handleBulkDelete = handleOpenBulkDeleteModal;
 
   // Close floating menu on outside click
   useEffect(() => {
@@ -1463,6 +1490,59 @@ export default function AdminBroadcastPage() {
                 }}
               >
                 {deleteCountdown > 0 ? `Delete in (${deleteCountdown}s)` : "Delete Broadcast"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ────── DESTRUCTIVE BULK DELETE DIALOG WITH COUNTDOWN TIMER ────── */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#181818] border border-gray-200 dark:border-[#262626] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-6 animate-fadeIn font-sans">
+            <div className="flex items-start gap-3.5">
+              <svg className="w-6 h-6 text-red-600 dark:text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              <div className="space-y-1.5">
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                  Delete Selected Broadcasts Confirmation
+                </h3>
+                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+                  Are you sure you want to permanently delete <strong className="text-gray-900 dark:text-white font-bold">{selectedBroadcastIds.length} selected {selectedBroadcastIds.length === 1 ? "broadcast" : "broadcasts"}</strong>? This will remove the campaigns and their recorded analytics permanently.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-[#282828] dark:hover:bg-[#333333] text-xs font-semibold text-gray-700 dark:text-gray-200 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={bulkDeleteCountdown > 0}
+                onClick={handleConfirmBulkDelete}
+                style={{
+                  backgroundColor: bulkDeleteCountdown > 0 ? "rgba(220, 38, 38, 0.2)" : "#dc2626",
+                  color: bulkDeleteCountdown > 0 ? "rgba(248, 113, 113, 0.6)" : "#ffffff",
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 ${
+                  bulkDeleteCountdown > 0
+                    ? "border border-red-500/20 cursor-not-allowed"
+                    : "cursor-pointer active:scale-95"
+                }`}
+                onMouseEnter={(e) => {
+                  if (bulkDeleteCountdown === 0) e.currentTarget.style.backgroundColor = "#b91c1c";
+                }}
+                onMouseLeave={(e) => {
+                  if (bulkDeleteCountdown === 0) e.currentTarget.style.backgroundColor = "#dc2626";
+                }}
+              >
+                {bulkDeleteCountdown > 0 ? `Delete in (${bulkDeleteCountdown}s)` : `Delete ${selectedBroadcastIds.length} Broadcasts`}
               </button>
             </div>
           </div>
